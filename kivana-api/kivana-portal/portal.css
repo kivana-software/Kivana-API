@@ -556,6 +556,24 @@ body {
   font-size: 0.85rem;
 }
 
+.portalBottomFooterLinks {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.4rem;
+}
+
+.portalBottomFooterLinks a {
+  color: rgba(229, 231, 235, 0.72);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.portalBottomFooterLinks a:hover {
+  color: rgba(229, 231, 235, 0.92);
+}
+
 .auth-back {
   appearance: none;
   background: transparent;
@@ -1490,6 +1508,11 @@ body {
 
 .footer a:hover {
   color: var(--text);
+}
+
+.footerSep {
+  margin: 0 0.5rem;
+  color: rgba(229, 231, 235, 0.35);
 }
 
 .billingToggle {
