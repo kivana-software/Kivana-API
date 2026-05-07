@@ -2,7 +2,10 @@ const els = {
   viewAuth: document.getElementById('viewAuth'),
   viewDashboard: document.getElementById('viewDashboard'),
   viewAccount: document.getElementById('viewAccount'),
-  navUserEmail: document.getElementById('navUserEmail'),
+  navUser: document.getElementById('navUser'),
+  navUserAvatar: document.getElementById('navUserAvatar'),
+  navUserName: document.getElementById('navUserName'),
+  navUserPlan: document.getElementById('navUserPlan'),
   btnSignOut: document.getElementById('btnSignOut'),
   btnNavPlans: document.getElementById('btnNavPlans'),
   btnNavAccount: document.getElementById('btnNavAccount'),
@@ -274,7 +277,7 @@ function applyNav() {
   if (els.osToggle) els.osToggle.classList.toggle('hidden', !showMarketing)
   if (els.marketingSections) els.marketingSections.classList.toggle('hidden', !showMarketing)
   if (els.marketingFooter) els.marketingFooter.classList.toggle('hidden', !showMarketing)
-  els.navUserEmail.classList.toggle('hidden', !authed)
+  if (els.navUser) els.navUser.classList.toggle('hidden', !authed)
   els.btnSignOut.classList.toggle('hidden', !authed)
   els.btnNavPlans.classList.toggle('hidden', !authed)
   els.btnNavAccount.classList.toggle('hidden', !authed)
@@ -283,6 +286,56 @@ function applyNav() {
   if (els.mobileMenuPublicActions) els.mobileMenuPublicActions.classList.toggle('hidden', authed)
   if (els.mobileMenuAuthed) els.mobileMenuAuthed.classList.toggle('hidden', !authed)
   if (els.mobileMenuAuthedActions) els.mobileMenuAuthedActions.classList.toggle('hidden', !authed)
+}
+
+function normalizePlanLabel(entitlement) {
+  if (!entitlement) return 'No plan'
+  const status = String(entitlement.status || '').trim().toLowerCase()
+  const planCode = String(entitlement.planCode || '').trim().toLowerCase()
+  const planName = String(entitlement.planName || '').trim()
+  if (planCode === 'basic') return 'Trial'
+  if (planName) return planName
+  if (planCode) return planCode
+  return status === 'active' ? 'Active' : 'No plan'
+}
+
+function computeUserLabel(me, profile) {
+  const displayName = profile && profile.displayName ? String(profile.displayName || '').trim() : ''
+  if (displayName) return displayName
+  const email = me && me.email ? String(me.email || '').trim() : ''
+  if (!email) return ''
+  const at = email.indexOf('@')
+  if (at > 0) return email.slice(0, at)
+  return email
+}
+
+function applyNavIdentity() {
+  if (!els.navUserName || !els.navUserPlan) return
+
+  if (!currentMe) {
+    els.navUserName.textContent = ''
+    els.navUserPlan.textContent = ''
+    if (els.navUserAvatar) {
+      els.navUserAvatar.classList.add('hidden')
+      els.navUserAvatar.removeAttribute('src')
+    }
+    return
+  }
+
+  const prof = loadProfileMerged(currentMe)
+  els.navUserName.textContent = computeUserLabel(currentMe, prof)
+  els.navUserPlan.textContent = normalizePlanLabel(currentEntitlement)
+
+  if (els.navUserAvatar) {
+    const avatarDataUrl = prof && prof.avatarDataUrl ? String(prof.avatarDataUrl || '').trim() : ''
+    if (avatarDataUrl) {
+      els.navUserAvatar.src = avatarDataUrl
+      els.navUserAvatar.classList.remove('hidden')
+    } else {
+      els.navUserAvatar.classList.add('hidden')
+      els.navUserAvatar.removeAttribute('src')
+    }
+  }
 }
 
 function toggleAuthMode(e) {
@@ -457,8 +510,8 @@ function updatePricingUI() {
 async function syncSessionData() {
   currentMe = await loadMe()
   currentEntitlement = await loadEntitlement()
-  els.navUserEmail.textContent = currentMe.email || ''
   applyCurrentPlanUI()
+  applyNavIdentity()
 }
 
 function fillAccountProfile() {

@@ -33,7 +33,13 @@
         <button class="nav-menu-btn" id="btnMenu" type="button" aria-label="Open menu" aria-expanded="false">☰</button>
         <button id="btnNavPlans" class="btn btn-secondary hidden">Plans</button>
         <button id="btnNavAccount" class="btn btn-secondary hidden">Account</button>
-        <span id="navUserEmail" class="hidden"></span>
+        <div id="navUser" class="nav-user hidden" aria-label="Signed in user">
+          <img id="navUserAvatar" class="nav-user-avatar hidden" alt="User avatar" />
+          <div class="nav-user-meta">
+            <div id="navUserName" class="nav-user-name"></div>
+            <div id="navUserPlan" class="nav-user-plan"></div>
+          </div>
+        </div>
         <button id="btnSignOut" class="btn btn-secondary hidden">Sign out</button>
       </div>
     </div>

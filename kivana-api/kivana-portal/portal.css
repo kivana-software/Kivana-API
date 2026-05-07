@@ -113,6 +113,53 @@ body {
   justify-content: flex-end;
 }
 
+.nav-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.02);
+}
+
+.nav-user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  display: block;
+}
+
+.nav-user-meta {
+  display: grid;
+  gap: 0.05rem;
+  line-height: 1.1;
+}
+
+.nav-user-name {
+  font-weight: 900;
+  font-size: 0.9rem;
+  letter-spacing: -0.01em;
+  color: rgba(229,231,235,0.96);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-user-plan {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: rgba(229,231,235,0.62);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .os-toggle {
   display: inline-flex;
   border-radius: 999px;
