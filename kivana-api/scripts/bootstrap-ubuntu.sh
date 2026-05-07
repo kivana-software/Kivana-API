@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/Litas-dev/Kivana-server.git}"
+REPO_URL="${REPO_URL:-https://github.com/kivana-software/Kivana-API.git}"
 BASE_DIR="${BASE_DIR:-/opt/kivana}"
-REPO_DIR="${REPO_DIR:-$BASE_DIR/Kivana-server}"
+if [ -z "${REPO_DIR+x}" ]; then
+  if [ -d "$BASE_DIR/Kivana-server/.git" ]; then
+    REPO_DIR="$BASE_DIR/Kivana-server"
+  else
+    REPO_DIR="$BASE_DIR/Kivana-API"
+  fi
+fi
 API_DIR="$REPO_DIR/kivana-api"
 
 apt-get update -y

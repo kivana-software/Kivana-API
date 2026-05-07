@@ -7,7 +7,7 @@
 After a fresh server install, run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Litas-dev/Kivana-server/main/kivana-api/scripts/setup-wizard.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kivana-software/Kivana-API/main/kivana-api/scripts/setup-wizard.sh | bash
 ```
 
 This writes `.env`, starts Docker, waits for health, then prints the Portal/Admin URLs and can create the first admin user.
@@ -30,8 +30,8 @@ apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin do
 ```bash
 mkdir -p /opt/kivana
 cd /opt/kivana
-git clone https://github.com/Litas-dev/Kivana-server.git
-cd Kivana-server/kivana-api
+git clone https://github.com/kivana-software/Kivana-API.git
+cd Kivana-API/kivana-api
 ```
 
 3) Create `.env`:
@@ -85,7 +85,13 @@ curl -fsS -X POST \
 ## Update (pull + rebuild)
 
 ```bash
-cd /opt/kivana/Kivana-server/kivana-api
+cd /opt/kivana/Kivana-API/kivana-api
 git pull
 docker compose up -d --build
 ```
+
+## Portal notes
+
+- The portal is served from the API container at `/portal/`.
+- After updating, make sure you rebuilt the container (`docker compose up -d --build`), otherwise the old portal files may still be inside the running image.
+- Marketing/landing mode (if you ever want it) is available at: `/portal/?marketing=1`

@@ -20,9 +20,9 @@ if [ "${EUID:-0}" -ne 0 ]; then
   exit 1
 fi
 
-REPO_URL_DEFAULT="https://github.com/Litas-dev/Kivana-server.git"
+REPO_URL_DEFAULT="https://github.com/kivana-software/Kivana-API.git"
 BASE_DIR_DEFAULT="/opt/kivana"
-REPO_DIR_DEFAULT="${BASE_DIR_DEFAULT}/Kivana-server"
+REPO_DIR_DEFAULT="${BASE_DIR_DEFAULT}/Kivana-API"
 API_DIR_DEFAULT="${REPO_DIR_DEFAULT}/kivana-api"
 
 REPO_URL="$REPO_URL_DEFAULT"
@@ -145,7 +145,11 @@ if [ -z "$ADMIN_TOKEN" ]; then
   success "Generated admin token."
 fi
 
-REPO_DIR="${BASE_DIR}/Kivana-server"
+if [ -d "${BASE_DIR}/Kivana-server/.git" ]; then
+  REPO_DIR="${BASE_DIR}/Kivana-server"
+else
+  REPO_DIR="${BASE_DIR}/Kivana-API"
+fi
 API_DIR="${REPO_DIR}/kivana-api"
 
 if ! command -v git >/dev/null 2>&1; then
