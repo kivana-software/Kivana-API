@@ -66,6 +66,20 @@ body {
   font-weight: 700;
   color: var(--primary);
   letter-spacing: -0.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.logoImg {
+  width: 28px;
+  height: 28px;
+  display: block;
+  object-fit: contain;
+}
+
+.logoText {
+  color: var(--primary);
 }
 
 .nav-links {
@@ -525,9 +539,14 @@ body {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.10);
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
-  font-weight: 800;
-  color: var(--primary);
-  letter-spacing: -0.3px;
+  padding: 8px;
+}
+
+.authMarkImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .authBrandText {
