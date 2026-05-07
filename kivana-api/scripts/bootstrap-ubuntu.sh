@@ -4,7 +4,9 @@ set -euo pipefail
 REPO_URL="${REPO_URL:-https://github.com/kivana-software/Kivana-API.git}"
 BASE_DIR="${BASE_DIR:-/opt/kivana}"
 if [ -z "${REPO_DIR+x}" ]; then
-  if [ -d "$BASE_DIR/Kivana-server/.git" ]; then
+  if [ -d "$BASE_DIR/Kivana-API/.git" ]; then
+    REPO_DIR="$BASE_DIR/Kivana-API"
+  elif [ -d "$BASE_DIR/Kivana-server/.git" ]; then
     REPO_DIR="$BASE_DIR/Kivana-server"
   else
     REPO_DIR="$BASE_DIR/Kivana-API"
@@ -26,6 +28,33 @@ mkdir -p "$BASE_DIR"
 if [ ! -d "$REPO_DIR/.git" ]; then
   git clone "$REPO_URL" "$REPO_DIR"
 fi
+
+cd "$REPO_DIR"
+current_origin="$(git remote get-url origin 2>/dev/null || true)"
+if [ -z "$current_origin" ]; then
+  git remote add origin "$REPO_URL"
+elif [ "$current_origin" != "$REPO_URL" ]; then
+  git remote set-url origin "$REPO_URL"
+fi
+
+git fetch origin --prune
+BRANCH="main"
+if git show-ref --verify --quiet refs/remotes/origin/main; then
+  BRANCH="main"
+elif git show-ref --verify --quiet refs/remotes/origin/master; then
+  BRANCH="master"
+else
+  BRANCH="$(git remote show origin 2>/dev/null | awk '/HEAD branch/ {print $NF}' | tail -n1)"
+  BRANCH="${BRANCH:-main}"
+fi
+
+if git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
+  git checkout "$BRANCH" >/dev/null 2>&1
+else
+  git checkout -b "$BRANCH" "origin/$BRANCH" >/dev/null 2>&1 || git checkout "$BRANCH" >/dev/null 2>&1
+fi
+
+git pull --rebase origin "$BRANCH"
 
 cd "$API_DIR"
 if [ ! -f .env ]; then

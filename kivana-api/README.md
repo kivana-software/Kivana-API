@@ -90,6 +90,40 @@ git pull
 docker compose up -d --build
 ```
 
+## Troubleshooting: still seeing the old Portal
+
+If `/portal/` still looks like the old website after an update, it’s almost always one of these:
+
+1) You updated the wrong folder (legacy installs used `/opt/kivana/Kivana-server`).
+2) The container image wasn’t rebuilt (the portal files are baked into the image).
+3) Your browser cached the old static files.
+
+### Check which repo you actually deployed
+
+```bash
+cd /opt/kivana
+ls -la
+cd /opt/kivana/Kivana-API 2>/dev/null || cd /opt/kivana/Kivana-server
+git remote -v
+```
+
+You should see `kivana-software/Kivana-API` as the `origin` URL.
+
+### Fix a legacy install in /opt/kivana/Kivana-server (no data wipe)
+
+```bash
+cd /opt/kivana/Kivana-server
+git remote set-url origin https://github.com/kivana-software/Kivana-API.git
+git fetch origin --prune
+git checkout main || git checkout master
+git pull --rebase
+cd kivana-api
+docker compose up -d --build
+```
+
+Then hard-refresh the portal page (or open in an incognito/private window):
+`http://SERVER_IP/portal/`
+
 ## Portal notes
 
 - The portal is served from the API container at `/portal/`.
