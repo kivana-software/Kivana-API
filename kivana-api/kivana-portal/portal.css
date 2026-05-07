@@ -30,6 +30,23 @@ body {
 .hidden { display: none !important; }
 .w-full { width: 100%; }
 
+.portalMode .nav-main {
+  display: none;
+}
+
+.portalMode .os-toggle {
+  display: none;
+}
+
+.portalMode #marketingSections,
+.portalMode #marketingFooter {
+  display: none;
+}
+
+.portalMode .auth-back {
+  display: none;
+}
+
 /* Navbar */
 #navbar {
   display: flex;
@@ -358,6 +375,64 @@ body {
   background: rgba(11, 19, 34, 0.92);
   border-radius: 12px;
   box-shadow: 0 22px 60px rgba(0,0,0,0.45);
+}
+
+.portalNotice {
+  margin-bottom: 1rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid rgba(163, 230, 53, 0.22);
+  background: rgba(163, 230, 53, 0.08);
+  color: var(--text);
+  border-radius: 10px;
+  font-size: 0.9rem;
+}
+
+.authBrand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.authMark {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
+  font-weight: 800;
+  color: var(--primary);
+  letter-spacing: -0.3px;
+}
+
+.authBrandText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.authBrandName {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.authBrandCaption {
+  margin-top: 2px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.portalBottomFooter {
+  margin: 2.25rem auto 2.5rem;
+  padding: 0 1rem;
+  text-align: center;
+  color: rgba(229, 231, 235, 0.55);
+  font-size: 0.85rem;
 }
 
 .auth-back {

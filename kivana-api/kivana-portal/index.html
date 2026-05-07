@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
-<body>
+<body class="portalMode">
   <div id="app">
     <div id="navbar">
       <div class="logo">Kivana</div>
@@ -71,11 +71,21 @@
     </div>
 
     <!-- Auth View (Login / Signup) -->
-    <div id="viewAuth" class="view hidden">
+    <div id="viewAuth" class="view active">
       <div class="card auth-card">
         <button class="auth-back" id="btnBackToWebsite" type="button">← Back to website</button>
+        <div class="portalNotice" id="portalNotice">
+          Building something new — we’re improving how Kivana works.
+        </div>
+        <div class="authBrand">
+          <div class="authMark" aria-hidden="true">K</div>
+          <div class="authBrandText">
+            <div class="authBrandName">Kivana</div>
+            <div class="authBrandCaption">Account portal</div>
+          </div>
+        </div>
         <h2 id="authTitle">Sign in to Kivana</h2>
-        <p id="authSubtitle" class="text-muted">Manage your Personal Finance app subscription.</p>
+        <p id="authSubtitle" class="text-muted">Sign in to manage your account and subscription.</p>
         
         <form id="authForm">
           <div class="input-group">
@@ -100,7 +110,7 @@
     </div>
 
     <!-- Dashboard View (Plan Selection) -->
-    <div id="viewDashboard" class="view active">
+    <div id="viewDashboard" class="view hidden">
       <div class="dashboard-header">
         <div id="marketingSections">
           <div class="hero hero-solo">
@@ -383,6 +393,10 @@
           <div id="accountStatus" class="status-msg"></div>
         </div>
       </div>
+    </div>
+
+    <div class="portalBottomFooter">
+      kivana.eu • All rights reserved © 2026
     </div>
   </div>
 

@@ -96,6 +96,8 @@ let billingCycle = 'yearly'
 let currentMe = null
 let currentEntitlement = null
 let pendingPlanSelection = null
+const marketingMode = new URLSearchParams(window.location.search).get('marketing') === '1'
+if (marketingMode) document.body.classList.remove('portalMode')
 
 function getAccessToken() {
   return localStorage.getItem('kivanaPortal/accessToken') || ''
@@ -263,14 +265,15 @@ function applyNav() {
   const authed = isAuthed()
   if (els.btnSignIn) els.btnSignIn.classList.toggle('hidden', authed)
   if (els.btnSignUp) els.btnSignUp.classList.toggle('hidden', authed)
-  if (els.navFeatures) els.navFeatures.classList.toggle('hidden', authed)
-  if (els.navPricing) els.navPricing.classList.toggle('hidden', authed)
-  if (els.navAccountants) els.navAccountants.classList.toggle('hidden', authed)
-  if (els.navSecurity) els.navSecurity.classList.toggle('hidden', authed)
-  if (els.navResources) els.navResources.classList.toggle('hidden', authed)
-  if (els.osToggle) els.osToggle.classList.toggle('hidden', authed)
-  if (els.marketingSections) els.marketingSections.classList.toggle('hidden', authed)
-  if (els.marketingFooter) els.marketingFooter.classList.toggle('hidden', authed)
+  const showMarketing = marketingMode && !authed
+  if (els.navFeatures) els.navFeatures.classList.toggle('hidden', !showMarketing)
+  if (els.navPricing) els.navPricing.classList.toggle('hidden', !showMarketing)
+  if (els.navAccountants) els.navAccountants.classList.toggle('hidden', !showMarketing)
+  if (els.navSecurity) els.navSecurity.classList.toggle('hidden', !showMarketing)
+  if (els.navResources) els.navResources.classList.toggle('hidden', !showMarketing)
+  if (els.osToggle) els.osToggle.classList.toggle('hidden', !showMarketing)
+  if (els.marketingSections) els.marketingSections.classList.toggle('hidden', !showMarketing)
+  if (els.marketingFooter) els.marketingFooter.classList.toggle('hidden', !showMarketing)
   els.navUserEmail.classList.toggle('hidden', !authed)
   els.btnSignOut.classList.toggle('hidden', !authed)
   els.btnNavPlans.classList.toggle('hidden', !authed)
@@ -467,6 +470,12 @@ function fillAccountProfile() {
 }
 
 async function showDashboard() {
+  if (!isAuthed() && !marketingMode) {
+    pendingPlanSelection = null
+    setAuthMode(true)
+    await showAuth()
+    return
+  }
   showOnly('dashboard')
   els.dashboardStatus.textContent = ''
   if (isAuthed()) {
@@ -662,7 +671,7 @@ if (els.btnSignIn) els.btnSignIn.addEventListener('click', () => {
 if (els.btnSignUp) els.btnSignUp.addEventListener('click', startFree)
 
 async function goToPublicSection(id) {
-  if (isAuthed()) return
+  if (isAuthed() || !marketingMode) return
   pendingPlanSelection = null
   await showDashboard()
   if (window.location.hash !== `#${id}`) window.location.hash = id
@@ -773,7 +782,7 @@ if (els.btnDownloadPrimary) els.btnDownloadPrimary.addEventListener('click', () 
 if (els.btnDownloadSecondary) els.btnDownloadSecondary.addEventListener('click', () => void handleDownloadClick())
 
 async function applyHashNav() {
-  if (isAuthed()) return
+  if (isAuthed() || !marketingMode) return
   const id = String(window.location.hash || '').replace(/^#/, '').trim()
   if (!id) return
   const normalized = id === 'features' ? 'how'
@@ -825,7 +834,7 @@ if (els.avatarFile) {
   setBillingCycle('yearly')
   setSelectedOs('mac')
   applyNav()
-  if (els.footerYear) els.footerYear.textContent = String(new Date().getFullYear())
+  if (els.footerYear) els.footerYear.textContent = '2026'
   if (getAccessToken()) {
     try {
       await refreshAccessToken()
@@ -835,6 +844,11 @@ if (els.avatarFile) {
       clearTokens()
     }
   }
-  await showDashboard()
-  await applyHashNav()
+  if (marketingMode) {
+    await showDashboard()
+    await applyHashNav()
+  } else {
+    setAuthMode(true)
+    await showAuth()
+  }
 })()
