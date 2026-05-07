@@ -355,7 +355,7 @@ async function loadEntitlement() {
 }
 
 function setBusy(isBusy) {
-  document.querySelectorAll('.plans-grid button, .billingToggleBtn').forEach((b) => {
+  document.querySelectorAll('[data-plan], .billingToggleBtn').forEach((b) => {
     b.disabled = !!isBusy
   })
   if (els.btnManagePlans) els.btnManagePlans.disabled = !!isBusy
@@ -388,7 +388,7 @@ function applyCurrentPlanUI() {
     els.currentPlanBanner.classList.add('hidden')
   }
 
-  document.querySelectorAll('.plan-card').forEach((c) => c.classList.remove('is-current'))
+  document.querySelectorAll('.planRow').forEach((c) => c.classList.remove('is-current'))
   document.querySelectorAll('[data-plan]').forEach((btn) => {
     btn.disabled = false
   })
@@ -400,8 +400,8 @@ function applyCurrentPlanUI() {
     if (activeBtn) {
       activeBtn.disabled = true
       activeBtn.textContent = 'Current plan'
-      const card = activeBtn.closest('.plan-card')
-      if (card) card.classList.add('is-current')
+      const row = activeBtn.closest('.planRow')
+      if (row) row.classList.add('is-current')
     }
   }
 

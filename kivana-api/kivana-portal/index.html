@@ -72,39 +72,57 @@
 
     <!-- Auth View (Login / Signup) -->
     <div id="viewAuth" class="view active">
-      <div class="card auth-card">
-        <button class="auth-back" id="btnBackToWebsite" type="button">← Back to website</button>
-        <div class="portalNotice" id="portalNotice">
-          Building something new — we’re improving how Kivana works.
-        </div>
-        <div class="authBrand">
-          <div class="authMark" aria-hidden="true">K</div>
-          <div class="authBrandText">
-            <div class="authBrandName">Kivana</div>
-            <div class="authBrandCaption">Account portal</div>
+      <div class="authShell">
+        <div class="authGrid">
+          <div class="authAside">
+            <button class="auth-back" id="btnBackToWebsite" type="button">← Back to website</button>
+            <div class="authAsideTop">
+              <div class="authBrand">
+                <div class="authMark" aria-hidden="true">K</div>
+                <div class="authBrandText">
+                  <div class="authBrandName">Kivana</div>
+                  <div class="authBrandCaption">Account portal</div>
+                </div>
+              </div>
+              <div class="portalNotice" id="portalNotice">
+                Building something new. We’re improving how Kivana works.
+              </div>
+              <div class="authAsideMeta">
+                Manage your plan, profile, and access — all in one place.
+              </div>
+              <div class="authAsideList" role="list">
+                <div class="authAsideItem" role="listitem">Secure sign in</div>
+                <div class="authAsideItem" role="listitem">Plan selection</div>
+                <div class="authAsideItem" role="listitem">Profile settings</div>
+              </div>
+            </div>
           </div>
-        </div>
-        <h2 id="authTitle">Sign in to Kivana</h2>
-        <p id="authSubtitle" class="text-muted">Sign in to manage your account and subscription.</p>
-        
-        <form id="authForm">
-          <div class="input-group">
-            <label for="email">Email address</label>
-            <input type="email" id="email" required />
-          </div>
-          <div class="input-group">
-            <label for="password">Password</label>
-            <input type="password" id="password" required />
-          </div>
-          
-          <div id="authError" class="error-msg"></div>
-          
-          <button type="submit" class="btn btn-primary w-full" id="btnSubmitAuth">Sign in</button>
-        </form>
+          <div class="authMain">
+            <div class="authPanel">
+              <h2 id="authTitle">Sign in to Kivana</h2>
+              <p id="authSubtitle" class="text-muted">Sign in to manage your account and subscription.</p>
 
-        <div class="auth-toggle">
-          <span id="authToggleText">Don't have an account?</span>
-          <a href="#" id="linkToggleAuth">Create one</a>
+              <form id="authForm">
+                <div class="input-group">
+                  <label for="email">Email address</label>
+                  <input type="email" id="email" required />
+                </div>
+                <div class="input-group">
+                  <label for="password">Password</label>
+                  <input type="password" id="password" required />
+                </div>
+
+                <div id="authError" class="error-msg"></div>
+
+                <button type="submit" class="btn btn-primary w-full" id="btnSubmitAuth">Sign in</button>
+              </form>
+
+              <div class="auth-toggle">
+                <span id="authToggleText">Don't have an account?</span>
+                <a href="#" id="linkToggleAuth">Create one</a>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -237,96 +255,85 @@
           </section>
         </div>
 
-        <section class="section" id="pricing">
-          <div class="section-title">Pricing</div>
-          <div class="section-subtitle">Start with a 14-day free trial. Upgrade only when you need more.</div>
-          <div class="pricing-points">
-            <span class="pricing-point">14-day free trial</span>
-            <span class="pricing-point">Upgrade only when needed</span>
-            <span class="pricing-point">Accountant-ready exports</span>
+        <section class="plansShell section" id="pricing" aria-label="Plans and pricing">
+          <div class="plansHeader">
+            <div>
+              <div class="section-title">Plans</div>
+              <div class="section-subtitle">Start with a 14-day free trial. Upgrade only when you need more.</div>
+            </div>
+            <div class="billingToggle" role="group" aria-label="Billing cycle">
+              <button type="button" class="billingToggleBtn active" id="btnBillingYearly" data-cycle="yearly">Yearly</button>
+              <button type="button" class="billingToggleBtn" id="btnBillingMonthly" data-cycle="monthly">Monthly</button>
+            </div>
           </div>
-          <div class="billingToggle" role="group" aria-label="Billing cycle">
-            <button type="button" class="billingToggleBtn active" id="btnBillingYearly" data-cycle="yearly">Yearly</button>
-            <button type="button" class="billingToggleBtn" id="btnBillingMonthly" data-cycle="monthly">Monthly</button>
+
+          <div class="current-plan-banner hidden" id="currentPlanBanner">
+            Your current plan: <strong id="lblCurrentPlan">...</strong>
           </div>
+
+          <div class="planTable" role="list">
+            <div class="planRow" role="listitem">
+              <div class="planRowMain">
+                <div class="planName">Trial</div>
+                <div class="planMeta">14 days • €0</div>
+                <div class="planDesc">Try personal finance and simple accounting. Upgrade after your trial ends.</div>
+                <div class="planIncludes">Track income and expenses • Store invoices and statements • Export an accountant-ready pack</div>
+              </div>
+              <div class="planRowAction">
+                <button class="btn btn-secondary w-full" data-plan="basic" id="btnPlanBasic">Start 14-day trial</button>
+              </div>
+            </div>
+
+            <div class="planRow" role="listitem">
+              <div class="planRowMain">
+                <div class="planName">Ordinary</div>
+                <div class="planMeta">
+                  <span class="priceMain" id="stdMainPrice">€165</span><span class="priceUnit" id="stdMainUnit">/yr</span>
+                  <span class="planMetaSep">•</span>
+                  <span id="stdSubPrice">€15/mo</span>
+                </div>
+                <div class="planDesc">More control when your workflow grows.</div>
+                <div class="planNote" id="stdNote">Save 1 month with annual billing. €165 / year (1 month free).</div>
+                <div class="planIncludes">Everything in Trial • Better reports and backup tools • Upgrade any time</div>
+              </div>
+              <div class="planRowAction">
+                <button class="btn btn-primary w-full" data-plan="standard" id="btnPlanStandard">Get Ordinary (Yearly)</button>
+              </div>
+            </div>
+
+            <div class="planRow planRowFeatured" role="listitem">
+              <div class="planRowMain">
+                <div class="planName">Pro</div>
+                <div class="planMeta">
+                  <span class="priceMain" id="proMainPrice">€539</span><span class="priceUnit" id="proMainUnit">/yr</span>
+                  <span class="planMetaSep">•</span>
+                  <span id="proSubPrice">€49/mo</span>
+                </div>
+                <div class="planDesc">Best for power users and advanced workflows.</div>
+                <div class="planNote" id="proNote">Save 1 month with annual billing. €539 / year (1 month free).</div>
+                <div class="planIncludes">Everything in Ordinary • Advanced workflows and exports • Priority support</div>
+              </div>
+              <div class="planRowAction">
+                <button class="btn btn-primary w-full" data-plan="pro" id="btnPlanPro">Get Pro (Yearly)</button>
+              </div>
+            </div>
+
+            <div class="planRow planRowService" role="listitem">
+              <div class="planRowMain">
+                <div class="planName">Accountant</div>
+                <div class="planMeta">On demand</div>
+                <div class="planDesc">Professional help when you need it.</div>
+                <div class="planIncludes">Export pack + review • Fast support when needed • No subscription required</div>
+              </div>
+              <div class="planRowAction">
+                <button class="btn btn-secondary w-full" id="btnAccountantService">Create account</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="dashboardStatus" class="status-msg"></div>
         </section>
       </div>
-
-      <div class="plans-grid">
-        <div class="plan-card">
-          <div class="plan-header">
-            <h3>Trial</h3>
-            <div class="plan-for">14 days</div>
-            <div class="price">€0</div>
-            <p class="plan-desc">Try personal finance and simple accounting. Upgrade after your trial ends.</p>
-          </div>
-          <ul class="features">
-            <li>Track income and expenses</li>
-            <li>Store invoices and statements</li>
-            <li>Export an accountant-ready pack</li>
-          </ul>
-          <button class="btn btn-plan w-full" data-plan="basic" id="btnPlanBasic">Start 14-day trial</button>
-        </div>
-
-        <div class="plan-card">
-          <div class="plan-header">
-            <h3>Ordinary</h3>
-            <div class="plan-for">Personal use</div>
-            <div class="price">
-              <span class="priceMain" id="stdMainPrice">€165</span><span class="priceUnit" id="stdMainUnit">/yr</span>
-            </div>
-            <div class="subPrice" id="stdSubPrice">€15/mo</div>
-            <p class="plan-note" id="stdNote">Save 1 month with annual billing. €165 / year (1 month free).</p>
-            <p class="plan-desc">More control when your workflow grows.</p>
-          </div>
-          <ul class="features">
-            <li>Everything in Trial</li>
-            <li>Better reports and backup tools</li>
-            <li>Upgrade any time</li>
-          </ul>
-          <button class="btn btn-primary w-full" data-plan="standard" id="btnPlanStandard">Get Ordinary (Yearly)</button>
-        </div>
-
-        <div class="plan-card highlight">
-          <div class="badge">Most Popular</div>
-          <div class="plan-header">
-            <h3>Pro</h3>
-            <div class="plan-for">Best value</div>
-            <div class="price">
-              <span class="priceMain" id="proMainPrice">€539</span><span class="priceUnit" id="proMainUnit">/yr</span>
-            </div>
-            <div class="subPrice" id="proSubPrice">€49/mo</div>
-            <p class="plan-note" id="proNote">Save 1 month with annual billing. €539 / year (1 month free).</p>
-            <p class="plan-desc">Best for power users and advanced workflows.</p>
-          </div>
-          <ul class="features">
-            <li>Everything in Ordinary</li>
-            <li>Advanced workflows and exports</li>
-            <li>Priority support</li>
-          </ul>
-          <button class="btn btn-primary w-full" data-plan="pro" id="btnPlanPro">Get Pro (Yearly)</button>
-        </div>
-
-        <div class="plan-card plan-card-service">
-          <div class="plan-header">
-            <h3>Accountant</h3>
-            <div class="plan-for">Full support</div>
-            <div class="price">On demand</div>
-            <p class="plan-desc">Professional help when you need it.</p>
-          </div>
-          <ul class="features">
-            <li>Export pack + review</li>
-            <li>Fast support when needed</li>
-            <li>No subscription required</li>
-          </ul>
-          <button class="btn btn-secondary w-full" id="btnAccountantService">Create account</button>
-        </div>
-      </div>
-
-      <div class="current-plan-banner hidden" id="currentPlanBanner">
-        Your current plan: <strong id="lblCurrentPlan">...</strong>
-      </div>
-      <div id="dashboardStatus" class="status-msg"></div>
 
       <div id="marketingFooter">
         <section class="section">
@@ -359,8 +366,8 @@
       </div>
 
       <div class="account-grid">
-        <div class="card">
-          <h3 class="card-title">Profile</h3>
+        <div class="panel">
+          <h3 class="panel-title">Profile</h3>
           <div class="profile-row">
             <div class="avatar-wrap">
               <img id="avatarPreview" class="avatar" alt="Avatar" />
@@ -380,8 +387,8 @@
           <div id="profileStatus" class="status-msg"></div>
         </div>
 
-        <div class="card">
-          <h3 class="card-title">Subscription</h3>
+        <div class="panel">
+          <h3 class="panel-title">Subscription</h3>
           <div class="sub-details">
             <div class="sub-line">Plan: <strong id="subPlanName">...</strong></div>
             <div class="sub-line text-muted" id="subPlanMeta"></div>

@@ -304,6 +304,20 @@ body {
   margin-bottom: 1rem;
 }
 
+.panel {
+  background: rgba(11, 19, 34, 0.62);
+  border-radius: 14px;
+  padding: 2rem;
+  border: 1px solid var(--border);
+}
+
+.panel-title {
+  font-size: 1.125rem;
+  font-weight: 800;
+  margin-bottom: 1rem;
+  letter-spacing: -0.01em;
+}
+
 .account-grid {
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
@@ -367,14 +381,74 @@ body {
   }
 }
 
-/* Auth Card */
-.auth-card {
-  max-width: 400px;
-  margin: 2rem auto;
+/* Auth */
+.authShell {
+  width: 100%;
+  max-width: 1060px;
+  margin: 0 auto;
+}
+
+.authGrid {
+  display: grid;
+  grid-template-columns: 1fr min(420px, 100%);
+  gap: 2rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .authGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.authAside {
+  padding: 1rem 0;
+}
+
+.authAsideTop {
+  display: grid;
+  gap: 1rem;
+  max-width: 520px;
+}
+
+.authAsideMeta {
+  color: rgba(229,231,235,0.86);
+  font-weight: 700;
+}
+
+.authAsideList {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.authAsideItem {
+  padding-left: 1.25rem;
+  position: relative;
+  font-weight: 700;
+  color: rgba(229,231,235,0.92);
+}
+
+.authAsideItem::before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  color: rgba(163,230,53,0.9);
+  font-weight: 900;
+}
+
+.authMain {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.authPanel {
+  width: 100%;
   padding: 2.5rem;
-  background: rgba(11, 19, 34, 0.92);
-  border-radius: 12px;
-  box-shadow: 0 22px 60px rgba(0,0,0,0.45);
+  background: rgba(11, 19, 34, 0.88);
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 22px 70px rgba(0,0,0,0.55);
 }
 
 .portalNotice {
@@ -450,15 +524,16 @@ body {
   color: var(--text);
 }
 
-.auth-card h2 {
+.authPanel h2 {
   font-size: 1.5rem;
   margin-bottom: 0.5rem;
-  text-align: center;
 }
 
 .text-muted {
   color: var(--text-muted);
-  text-align: center;
+}
+
+.authPanel .text-muted {
   margin-bottom: 2rem;
 }
 
@@ -567,6 +642,115 @@ body {
 /* Dashboard Plans */
 .dashboard-header {
   margin-bottom: 3rem;
+}
+
+.plansShell {
+  max-width: 1100px;
+  margin: 0 auto 3rem auto;
+}
+
+.plansHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.planTable {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(11, 19, 34, 0.55);
+  overflow: hidden;
+}
+
+.planRow {
+  display: grid;
+  grid-template-columns: 1fr min(220px, 34%);
+  gap: 1.25rem;
+  padding: 1.35rem 1.35rem;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.planRow:first-child {
+  border-top: none;
+}
+
+@media (max-width: 720px) {
+  .planRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+.planRowMain {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.planRowAction {
+  display: flex;
+  align-items: center;
+}
+
+@media (max-width: 720px) {
+  .planRowAction {
+    justify-content: flex-start;
+  }
+}
+
+.planName {
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  font-size: 1.05rem;
+}
+
+.planMeta {
+  color: rgba(229,231,235,0.88);
+  font-weight: 800;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.planMetaSep {
+  color: rgba(229,231,235,0.35);
+  font-weight: 800;
+}
+
+.planDesc {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.planNote {
+  color: rgba(229,231,235,0.65);
+  font-size: 0.85rem;
+}
+
+.planIncludes {
+  color: rgba(229,231,235,0.82);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.planRowFeatured {
+  background: linear-gradient(90deg, rgba(163,230,53,0.08), rgba(11, 19, 34, 0.0) 55%);
+}
+
+.planRowService {
+  background: rgba(255,255,255,0.02);
+}
+
+.planRow.is-current {
+  outline: 2px solid rgba(163, 230, 53, 0.25);
+  outline-offset: -2px;
+}
+
+.planRow.is-current .btn {
+  cursor: default;
+  opacity: 0.92;
 }
 
 .hero-kicker {
