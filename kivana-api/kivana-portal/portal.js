@@ -158,6 +158,39 @@ function isMacOs() {
   return /mac/i.test(plat) || /macintosh/i.test(ua)
 }
 
+function detectPricingCurrency() {
+  const langs = Array.isArray(navigator.languages) && navigator.languages.length ? navigator.languages : [navigator.language]
+  const lang = String(langs[0] || '').toUpperCase()
+  const tz = (() => {
+    try {
+      return String(Intl.DateTimeFormat().resolvedOptions().timeZone || '')
+    } catch {
+      return ''
+    }
+  })()
+
+  const isNorway = lang.includes('-NO') || lang.startsWith('NB') || lang.startsWith('NN') || /OSLO/i.test(tz)
+  const isUk = lang.includes('-GB') || /LONDON/i.test(tz)
+  if (isNorway) return { code: 'NOK', symbol: 'kr', monthlyStd: 99, monthlyPro: 299 }
+  if (isUk) return { code: 'GBP', symbol: '£', monthlyStd: 9.99, monthlyPro: 29.9 }
+  return { code: 'EUR', symbol: '€', monthlyStd: 9.99, monthlyPro: 29.9 }
+}
+
+const PRICING = detectPricingCurrency()
+
+function formatAmount(v) {
+  if (v == null) return ''
+  const n = Number(v)
+  if (!Number.isFinite(n)) return ''
+  if (Number.isInteger(n)) return String(n)
+  return n.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')
+}
+
+function formatMoney(amount) {
+  if (PRICING.code === 'NOK') return `${PRICING.symbol} ${formatAmount(Math.round(Number(amount) || 0))}`
+  return `${PRICING.symbol}${formatAmount(amount)}`
+}
+
 function getTheme() {
   try {
     const t = String(localStorage.getItem(LS_THEME) || '').trim().toLowerCase()
@@ -838,27 +871,31 @@ function setBillingCycle(next) {
 function updatePricingUI() {
   const stdBtn = document.getElementById('btnPlanStandard')
   const proBtn = document.getElementById('btnPlanPro')
+  const monthlyStd = Number(PRICING.monthlyStd)
+  const monthlyPro = Number(PRICING.monthlyPro)
+  const yearlyStd = PRICING.code === 'NOK' ? monthlyStd * 11 : Number((monthlyStd * 11).toFixed(2))
+  const yearlyPro = PRICING.code === 'NOK' ? monthlyPro * 11 : Number((monthlyPro * 11).toFixed(2))
 
   if (billingCycle === 'yearly') {
-    els.stdMainPrice.textContent = '€165'
+    els.stdMainPrice.textContent = formatMoney(yearlyStd)
     els.stdMainUnit.textContent = '/yr'
-    els.stdSubPrice.textContent = '€15/mo'
-    els.stdNote.textContent = 'Save 1 month with annual billing. €165 / year (1 month free).'
-    els.proMainPrice.textContent = '€539'
+    els.stdSubPrice.textContent = `${formatMoney(monthlyStd)}/mo`
+    els.stdNote.textContent = `Save 1 month with annual billing. ${formatMoney(yearlyStd)} / year (1 month free).`
+    els.proMainPrice.textContent = formatMoney(yearlyPro)
     els.proMainUnit.textContent = '/yr'
-    els.proSubPrice.textContent = '€49/mo'
-    els.proNote.textContent = 'Save 1 month with annual billing. €539 / year (1 month free).'
+    els.proSubPrice.textContent = `${formatMoney(monthlyPro)}/mo`
+    els.proNote.textContent = `Save 1 month with annual billing. ${formatMoney(yearlyPro)} / year (1 month free).`
     if (stdBtn && !stdBtn.disabled) stdBtn.textContent = 'Get Ordinary (Yearly)'
     if (proBtn && !proBtn.disabled) proBtn.textContent = 'Get Pro (Yearly)'
   } else {
-    els.stdMainPrice.textContent = '€15'
+    els.stdMainPrice.textContent = formatMoney(monthlyStd)
     els.stdMainUnit.textContent = '/mo'
-    els.stdSubPrice.textContent = '€165/yr'
-    els.stdNote.textContent = 'Annual billing saves 1 month. €165 / year (1 month free).'
-    els.proMainPrice.textContent = '€49'
+    els.stdSubPrice.textContent = `${formatMoney(yearlyStd)}/yr`
+    els.stdNote.textContent = `Annual billing saves 1 month. ${formatMoney(yearlyStd)} / year (1 month free).`
+    els.proMainPrice.textContent = formatMoney(monthlyPro)
     els.proMainUnit.textContent = '/mo'
-    els.proSubPrice.textContent = '€539/yr'
-    els.proNote.textContent = 'Annual billing saves 1 month. €539 / year (1 month free).'
+    els.proSubPrice.textContent = `${formatMoney(yearlyPro)}/yr`
+    els.proNote.textContent = `Annual billing saves 1 month. ${formatMoney(yearlyPro)} / year (1 month free).`
     if (stdBtn && !stdBtn.disabled) stdBtn.textContent = 'Get Ordinary (Monthly)'
     if (proBtn && !proBtn.disabled) proBtn.textContent = 'Get Pro (Monthly)'
   }
