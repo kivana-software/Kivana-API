@@ -180,7 +180,7 @@ function applyTheme(theme) {
 
 function updateThemeButtons() {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
-  const label = isDark ? 'Light' : 'Dark'
+  const label = isDark ? 'Theme: Light' : 'Theme: Dark'
   if (els.btnThemeToggle) els.btnThemeToggle.textContent = label
   if (els.mThemeToggle) els.mThemeToggle.textContent = label
   if (els.mThemeToggleAuthed) els.mThemeToggleAuthed.textContent = label

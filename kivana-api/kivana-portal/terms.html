@@ -6,7 +6,17 @@
   <link rel="icon" type="image/png" href="/kivana-logo.png" />
   <link rel="apple-touch-icon" href="/kivana-logo.png" />
   <title>Kivana • Terms of Service</title>
-  <link rel="stylesheet" href="portal.css?v=0.4.14" />
+  <script>
+    ;(() => {
+      try {
+        const t = localStorage.getItem('kivanaPortal/theme')
+        document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light')
+      } catch {
+        document.documentElement.setAttribute('data-theme', 'light')
+      }
+    })()
+  </script>
+  <link rel="stylesheet" href="portal.css?v=0.4.18" />
 </head>
 <body>
   <div id="app">
@@ -17,6 +27,7 @@
       </div>
       <div class="nav-links">
         <div class="nav-actions">
+          <button class="btn btn-secondary themeToggle" id="btnThemeToggle" type="button">Theme</button>
           <a class="btn btn-secondary" href="/">Back</a>
         </div>
       </div>
@@ -108,5 +119,34 @@
       <div>kivana.eu • All rights reserved © 2026</div>
     </div>
   </div>
+  <script>
+    ;(() => {
+      const btn = document.getElementById('btnThemeToggle')
+      function getTheme() {
+        try {
+          return localStorage.getItem('kivanaPortal/theme') === 'dark' ? 'dark' : 'light'
+        } catch {
+          return 'light'
+        }
+      }
+      function setTheme(t) {
+        const v = t === 'dark' ? 'dark' : 'light'
+        document.documentElement.setAttribute('data-theme', v)
+        try {
+          localStorage.setItem('kivanaPortal/theme', v)
+        } catch {
+          void 0
+        }
+        const label = v === 'dark' ? 'Theme: Light' : 'Theme: Dark'
+        if (btn) btn.textContent = label
+      }
+      function toggle() {
+        const cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
+        setTheme(cur === 'dark' ? 'light' : 'dark')
+      }
+      setTheme(getTheme())
+      if (btn) btn.addEventListener('click', toggle)
+    })()
+  </script>
 </body>
 </html>

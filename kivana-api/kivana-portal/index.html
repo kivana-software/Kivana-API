@@ -15,7 +15,6 @@
   <meta property="og:url" content="https://kivana.eu/" />
   <meta property="og:image" content="https://kivana.eu/kivana-logo.png" />
   <meta name="twitter:card" content="summary" />
-  <link rel="stylesheet" href="portal.css?v=0.4.15" />
   <script>
     ;(() => {
       try {
@@ -26,6 +25,7 @@
       }
     })()
   </script>
+  <link rel="stylesheet" href="portal.css?v=0.4.18" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -47,7 +47,7 @@
             <button type="button" class="os-btn active" id="osMac">macOS</button>
             <button type="button" class="os-btn" id="osWin">Windows</button>
           </div>
-          <button id="btnThemeToggle" class="btn btn-secondary">Dark</button>
+          <button id="btnThemeToggle" class="btn btn-secondary themeToggle" type="button">Theme</button>
           <button id="btnSignIn" class="btn btn-secondary">Sign in</button>
           <button id="btnSignUp" class="btn btn-primary">Create account</button>
         </div>
@@ -90,12 +90,12 @@
             <button type="button" class="os-btn active" id="mOsMac">macOS</button>
             <button type="button" class="os-btn" id="mOsWin">Windows</button>
           </div>
-          <button class="btn btn-secondary w-full" id="mThemeToggle" type="button">Dark</button>
+          <button class="btn btn-secondary w-full themeToggle" id="mThemeToggle" type="button">Theme</button>
           <button class="btn btn-secondary w-full" id="mSignIn">Sign in</button>
           <button class="btn btn-primary w-full" id="mGetKivana">Create account</button>
         </div>
         <div class="mobile-menu-actions hidden" id="mobileMenuAuthedActions">
-          <button class="btn btn-secondary w-full" id="mThemeToggleAuthed" type="button">Dark</button>
+          <button class="btn btn-secondary w-full themeToggle" id="mThemeToggleAuthed" type="button">Theme</button>
           <button class="btn btn-secondary w-full" id="mSignOut">Sign out</button>
         </div>
       </div>
@@ -585,6 +585,6 @@
     </div>
   </div>
 
-  <script src="portal.js?v=0.4.15"></script>
+  <script src="portal.js?v=0.4.18"></script>
 </body>
 </html>
