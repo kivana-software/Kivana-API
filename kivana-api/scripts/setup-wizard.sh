@@ -384,6 +384,8 @@ setup_caddy_https() {
 
 ${domain} {
   encode zstd gzip
+  redir /portal / 308
+  redir /portal/ / 308
   reverse_proxy 127.0.0.1:${upstream_port}
 }
 EOF
@@ -391,6 +393,8 @@ EOF
     cat > /etc/caddy/Caddyfile <<EOF
 ${domain} {
   encode zstd gzip
+  redir /portal / 308
+  redir /portal/ / 308
   reverse_proxy 127.0.0.1:${upstream_port}
 }
 EOF
