@@ -7,7 +7,7 @@
 After a fresh server install, run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kivana-software/Kivana-API/main/kivana-api/scripts/setup-wizard.sh | bash
+sudo bash -c 'export KIVANA_ADMIN_EMAIL="kojankus@gmail.com"; curl -fsSLO https://raw.githubusercontent.com/kivana-software/Kivana-API/main/kivana-api/scripts/setup-wizard.sh; bash setup-wizard.sh --domain=kivana.eu'
 ```
 
 This writes `.env`, starts Docker, waits for health, then prints the Portal/Admin URLs and can create the first admin user.
