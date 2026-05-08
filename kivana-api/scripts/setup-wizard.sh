@@ -272,6 +272,14 @@ if [ -f .env ]; then
   fi
 fi
 
+if [ "$ENABLE_HTTPS" = "y" ]; then
+  KIVANA_BIND_IP="127.0.0.1"
+  if [ "$HTTP_PORT" = "80" ] || [ "$HTTP_PORT" = "443" ]; then
+    warn "Internal API port ${HTTP_PORT} conflicts with HTTPS (Caddy needs 80/443). Switching internal API port to 8080."
+    HTTP_PORT="8080"
+  fi
+fi
+
 if [ "$OVERWRITE_ENV" = "y" ] || confirm "Write/update .env now?" y; then
   cat > .env <<EOF
 DATABASE_URL=postgres://kivana:${POSTGRES_PASSWORD}@db:5432/kivana
@@ -405,13 +413,19 @@ EOF
     success "HTTPS enabled via Caddy."
   else
     systemctl restart caddy >/dev/null 2>&1 || true
-    success "Caddy restarted."
+    warn "Caddy reload failed; restarted Caddy."
+    warn "If HTTPS still does not work, check logs: journalctl -u caddy -n 200 --no-pager"
   fi
 }
 
 if [ -n "$DOMAIN_NAME" ] && [ "$ENABLE_HTTPS" = "y" ]; then
   echo
   warn "HTTPS requires ports 80 and 443 reachable from the internet for Let's Encrypt."
+  if command -v ufw >/dev/null 2>&1; then
+    info "Allowing ports 80/443 in UFW (if enabled)..."
+    ufw allow 80/tcp >/dev/null 2>&1 || true
+    ufw allow 443/tcp >/dev/null 2>&1 || true
+  fi
   setup_caddy_https "$DOMAIN_NAME" "$HTTP_PORT" "$HTTPS_EMAIL"
 fi
 
