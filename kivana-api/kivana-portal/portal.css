@@ -1833,3 +1833,79 @@ body {
   color: var(--text-muted);
   margin-top: 1rem;
 }
+
+.wipBanner {
+  position: sticky;
+  top: 72px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem 1rem;
+  background: rgba(163,230,53,0.08);
+  border-bottom: 1px solid rgba(163,230,53,0.22);
+  color: rgba(229,231,235,0.92);
+  font-weight: 800;
+  font-size: 0.9rem;
+  letter-spacing: -0.01em;
+}
+
+@media (max-width: 900px) {
+  .wipBanner {
+    top: 64px;
+    font-size: 0.85rem;
+  }
+}
+
+.adminToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.tableWrap {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.adminTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+  background: rgba(11, 19, 34, 0.45);
+}
+
+.adminTable th,
+.adminTable td {
+  padding: 0.8rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 0.9rem;
+}
+
+.adminTable th {
+  font-weight: 900;
+  color: rgba(229,231,235,0.86);
+  background: rgba(5, 11, 20, 0.35);
+  position: sticky;
+  top: 0;
+}
+
+.adminTable td {
+  color: rgba(229,231,235,0.9);
+}
+
+.select {
+  width: 100%;
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(5, 11, 20, 0.35);
+  color: rgba(229,231,235,0.92);
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  font-weight: 800;
+}

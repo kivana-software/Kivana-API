@@ -2,6 +2,7 @@ const els = {
   viewAuth: document.getElementById('viewAuth'),
   viewDashboard: document.getElementById('viewDashboard'),
   viewAccount: document.getElementById('viewAccount'),
+  viewAdmin: document.getElementById('viewAdmin'),
   navUser: document.getElementById('navUser'),
   navUserAvatar: document.getElementById('navUserAvatar'),
   navUserName: document.getElementById('navUserName'),
@@ -9,6 +10,7 @@ const els = {
   btnSignOut: document.getElementById('btnSignOut'),
   btnNavPlans: document.getElementById('btnNavPlans'),
   btnNavAccount: document.getElementById('btnNavAccount'),
+  btnNavAdmin: document.getElementById('btnNavAdmin'),
   btnSignIn: document.getElementById('btnSignIn'),
   btnSignUp: document.getElementById('btnSignUp'),
   btnMenu: document.getElementById('btnMenu'),
@@ -26,6 +28,7 @@ const els = {
   mNavResources: document.getElementById('mNavResources'),
   mPlans: document.getElementById('mPlans'),
   mAccount: document.getElementById('mAccount'),
+  mAdmin: document.getElementById('mAdmin'),
   mSignOut: document.getElementById('mSignOut'),
   mSignIn: document.getElementById('mSignIn'),
   mGetKivana: document.getElementById('mGetKivana'),
@@ -54,6 +57,11 @@ const els = {
   btnAccountantService: document.getElementById('btnAccountantService'),
   btnBackToWebsite: document.getElementById('btnBackToWebsite'),
   footerYear: document.getElementById('footerYear'),
+  wipBanner: document.getElementById('wipBanner'),
+
+  btnAdminReload: document.getElementById('btnAdminReload'),
+  adminStatus: document.getElementById('adminStatus'),
+  adminUsersBody: document.getElementById('adminUsersBody'),
 
   authForm: document.getElementById('authForm'),
   authTitle: document.getElementById('authTitle'),
@@ -99,8 +107,7 @@ let billingCycle = 'yearly'
 let currentMe = null
 let currentEntitlement = null
 let pendingPlanSelection = null
-const marketingMode = new URLSearchParams(window.location.search).get('marketing') === '1'
-if (marketingMode) document.body.classList.remove('portalMode')
+const marketingMode = new URLSearchParams(window.location.search).get('portal') !== '1'
 
 function getAccessToken() {
   return localStorage.getItem('kivanaPortal/accessToken') || ''
@@ -248,6 +255,7 @@ function showOnly(view) {
   els.viewAuth.classList.toggle('hidden', view !== 'auth')
   els.viewDashboard.classList.toggle('hidden', view !== 'dashboard')
   els.viewAccount.classList.toggle('hidden', view !== 'account')
+  if (els.viewAdmin) els.viewAdmin.classList.toggle('hidden', view !== 'admin')
   applyNav()
 }
 
@@ -266,6 +274,7 @@ function closeMenu() {
 
 function applyNav() {
   const authed = isAuthed()
+  const isAdmin = !!(authed && currentMe && currentMe.isAdmin)
   if (els.btnSignIn) els.btnSignIn.classList.toggle('hidden', authed)
   if (els.btnSignUp) els.btnSignUp.classList.toggle('hidden', authed)
   const showMarketing = marketingMode && !authed
@@ -281,11 +290,13 @@ function applyNav() {
   els.btnSignOut.classList.toggle('hidden', !authed)
   els.btnNavPlans.classList.toggle('hidden', !authed)
   els.btnNavAccount.classList.toggle('hidden', !authed)
+  if (els.btnNavAdmin) els.btnNavAdmin.classList.toggle('hidden', !isAdmin)
 
   if (els.mobileMenuPublic) els.mobileMenuPublic.classList.toggle('hidden', authed)
   if (els.mobileMenuPublicActions) els.mobileMenuPublicActions.classList.toggle('hidden', authed)
   if (els.mobileMenuAuthed) els.mobileMenuAuthed.classList.toggle('hidden', !authed)
   if (els.mobileMenuAuthedActions) els.mobileMenuAuthedActions.classList.toggle('hidden', !authed)
+  if (els.mAdmin) els.mAdmin.classList.toggle('hidden', !isAdmin)
 }
 
 function normalizePlanLabel(entitlement) {
@@ -388,7 +399,15 @@ async function handleAuthSubmit(e) {
       await handleSelectPlan(payload, els.dashboardStatus)
     }
   } catch (err) {
-    els.authError.textContent = err && err.message ? err.message : 'Failed to sign in.'
+    const code = err && err.message ? String(err.message) : ''
+    const friendly = code === 'admin_ip_locked'
+      ? 'Admin login is locked to the first login IP. Try from the same network/IP.'
+      : code === 'admin_ip_required'
+        ? 'Admin login requires a visible IP address. Try again from the main website (not a cached file) or disable privacy proxy/VPN.'
+        : code === 'too_many_requests'
+          ? 'Too many attempts. Please wait a moment and try again.'
+          : ''
+    els.authError.textContent = friendly || (code || 'Failed to sign in.')
   } finally {
     els.btnSubmitAuth.disabled = false
     els.btnSubmitAuth.textContent = isLoginMode ? 'Sign in' : 'Sign up'
@@ -523,12 +542,6 @@ function fillAccountProfile() {
 }
 
 async function showDashboard() {
-  if (!isAuthed() && !marketingMode) {
-    pendingPlanSelection = null
-    setAuthMode(true)
-    await showAuth()
-    return
-  }
   showOnly('dashboard')
   els.dashboardStatus.textContent = ''
   if (isAuthed()) {
@@ -576,6 +589,223 @@ async function showAuth() {
   currentEntitlement = null
 }
 
+function fmtDateTime(v) {
+  return String(v || '').replace('T', ' ').replace('Z', '')
+}
+
+function computeEndsAt(durationCode) {
+  const now = new Date()
+  if (durationCode === 'lifetime') return null
+  if (durationCode === 'month') {
+    const d = new Date(now.getTime())
+    d.setMonth(d.getMonth() + 1)
+    return d.toISOString()
+  }
+  if (durationCode === 'year') {
+    const d = new Date(now.getTime())
+    d.setFullYear(d.getFullYear() + 1)
+    return d.toISOString()
+  }
+  if (durationCode === 'custom') {
+    const s = prompt('Ends at (YYYY-MM-DD). Leave empty to cancel.')
+    if (!s) return undefined
+    const d = new Date(`${s}T23:59:59Z`)
+    if (Number.isNaN(d.getTime())) throw new Error('Invalid date')
+    return d.toISOString()
+  }
+  return null
+}
+
+async function loadAdminUsers() {
+  const res = await apiFetch('/v1/admin/users', { method: 'GET' })
+  const json = await res.json()
+  return Array.isArray(json.users) ? json.users : []
+}
+
+async function renderAdminUsers() {
+  if (!els.adminUsersBody || !els.adminStatus) return
+  els.adminStatus.textContent = 'Loading…'
+  els.adminUsersBody.innerHTML = ''
+  try {
+    const users = await loadAdminUsers()
+    for (const u of users) {
+      const tr = document.createElement('tr')
+
+      const emailTd = document.createElement('td')
+      emailTd.textContent = u.email || ''
+      tr.appendChild(emailTd)
+
+      const createdTd = document.createElement('td')
+      createdTd.textContent = fmtDateTime(u.createdAt || '')
+      tr.appendChild(createdTd)
+
+      const ipTd = document.createElement('td')
+      ipTd.textContent = u.lastIp || 'Unknown'
+      tr.appendChild(ipTd)
+
+      const adminTd = document.createElement('td')
+      adminTd.textContent = u.isAdmin ? 'Yes' : 'No'
+      tr.appendChild(adminTd)
+
+      const planTd = document.createElement('td')
+      planTd.textContent = u.kivanaPlanName ? `kivana / ${u.kivanaPlanName}` : '—'
+      tr.appendChild(planTd)
+
+      const endsTd = document.createElement('td')
+      endsTd.textContent = u.kivanaEndsAt ? fmtDateTime(u.kivanaEndsAt) : '—'
+      tr.appendChild(endsTd)
+
+      const setTd = document.createElement('td')
+      const sel = document.createElement('select')
+      sel.className = 'select'
+      const plans = [
+        { code: 'basic', name: 'Basic (Trial)' },
+        { code: 'standard', name: 'Ordinary' },
+        { code: 'pro', name: 'Pro' },
+        { code: 'lifetime_pro', name: 'Lifetime (Pro)' },
+      ]
+      for (const p of plans) {
+        const opt = document.createElement('option')
+        opt.value = p.code
+        opt.textContent = p.name
+        sel.appendChild(opt)
+      }
+      sel.value = u.kivanaPlanCode || 'basic'
+
+      const durationSel = document.createElement('select')
+      durationSel.className = 'select'
+      const durations = [
+        { code: 'month', name: '1 month' },
+        { code: 'year', name: '1 year' },
+        { code: 'lifetime', name: 'No expiry' },
+        { code: 'custom', name: 'Custom…' },
+      ]
+      for (const d of durations) {
+        const opt = document.createElement('option')
+        opt.value = d.code
+        opt.textContent = d.name
+        durationSel.appendChild(opt)
+      }
+      durationSel.value = 'lifetime'
+
+      const applyBtn = document.createElement('button')
+      applyBtn.className = 'btn btn-secondary'
+      applyBtn.textContent = 'Apply'
+      applyBtn.addEventListener('click', async () => {
+        els.adminStatus.textContent = 'Applying…'
+        applyBtn.disabled = true
+        try {
+          const endsAt = computeEndsAt(String(durationSel.value || 'lifetime'))
+          if (endsAt === undefined) {
+            els.adminStatus.textContent = 'Cancelled.'
+            return
+          }
+          await apiFetch('/v1/admin/grant', {
+            method: 'POST',
+            body: JSON.stringify({
+              email: u.email,
+              productCode: 'kivana',
+              planCode: String(sel.value || '').trim(),
+              endsAt,
+            }),
+          })
+          await renderAdminUsers()
+          els.adminStatus.textContent = 'Updated.'
+        } catch (e) {
+          els.adminStatus.textContent = `Failed: ${String(e?.message || e)}`
+        } finally {
+          applyBtn.disabled = false
+        }
+      })
+
+      const wrap = document.createElement('div')
+      wrap.style.display = 'grid'
+      wrap.style.gridTemplateColumns = '1fr 1fr auto'
+      wrap.style.gap = '8px'
+      wrap.appendChild(sel)
+      wrap.appendChild(durationSel)
+      wrap.appendChild(applyBtn)
+      setTd.appendChild(wrap)
+      tr.appendChild(setTd)
+
+      const actionsTd = document.createElement('td')
+      const pwBtn = document.createElement('button')
+      pwBtn.className = 'btn btn-secondary'
+      pwBtn.textContent = 'Reset password'
+      pwBtn.addEventListener('click', async () => {
+        const pw = prompt(`New password for ${u.email} (min 8 chars). Leave empty to cancel.`)
+        if (!pw) return
+        if (String(pw).length < 8) {
+          alert('Password too short.')
+          return
+        }
+        pwBtn.disabled = true
+        try {
+          await apiFetch(`/v1/admin/users/${u.id}/password`, {
+            method: 'POST',
+            body: JSON.stringify({ password: String(pw) }),
+          })
+          await renderAdminUsers()
+        } catch (e) {
+          alert(String(e?.message || e))
+        } finally {
+          pwBtn.disabled = false
+        }
+      })
+
+      const delBtn = document.createElement('button')
+      delBtn.className = 'btn btn-secondary'
+      delBtn.textContent = 'Delete'
+      delBtn.addEventListener('click', async () => {
+        if (!window.confirm(`Delete user ${u.email}? This cannot be undone.`)) return
+        delBtn.disabled = true
+        try {
+          await apiFetch(`/v1/admin/users/${u.id}`, { method: 'DELETE' })
+          await renderAdminUsers()
+        } catch (e) {
+          alert(String(e?.message || e))
+        } finally {
+          delBtn.disabled = false
+        }
+      })
+
+      const actWrap = document.createElement('div')
+      actWrap.style.display = 'flex'
+      actWrap.style.flexWrap = 'wrap'
+      actWrap.style.gap = '8px'
+      actWrap.appendChild(pwBtn)
+      actWrap.appendChild(delBtn)
+      actionsTd.appendChild(actWrap)
+      tr.appendChild(actionsTd)
+
+      els.adminUsersBody.appendChild(tr)
+    }
+    els.adminStatus.textContent = users.length ? '' : 'No users found.'
+  } catch (e) {
+    els.adminStatus.textContent = `Failed: ${String(e?.message || e)}`
+  }
+}
+
+async function showAdmin() {
+  if (!isAuthed()) {
+    pendingPlanSelection = null
+    setAuthMode(true)
+    await showAuth()
+    return
+  }
+  try {
+    await syncSessionData()
+  } catch {
+    void 0
+  }
+  if (!currentMe || !currentMe.isAdmin) {
+    await showDashboard()
+    return
+  }
+  showOnly('admin')
+  await renderAdminUsers()
+}
+
 async function handleSelectPlan(payload, statusEl) {
   if (!isAuthed()) {
     pendingPlanSelection = payload
@@ -608,7 +838,8 @@ async function handleSignOut() {
     void 0
   }
   clearTokens()
-  await showAuth()
+  if (marketingMode) await showDashboard()
+  else await showAuth()
 }
 
 async function handleAvatarFile(file) {
@@ -716,6 +947,8 @@ if (els.authForm) els.authForm.addEventListener('submit', handleAuthSubmit)
 if (els.btnSignOut) els.btnSignOut.addEventListener('click', handleSignOut)
 if (els.btnNavPlans) els.btnNavPlans.addEventListener('click', () => void showDashboard())
 if (els.btnNavAccount) els.btnNavAccount.addEventListener('click', () => void showAccount())
+if (els.btnNavAdmin) els.btnNavAdmin.addEventListener('click', () => void showAdmin())
+if (els.btnAdminReload) els.btnAdminReload.addEventListener('click', () => void showAdmin())
 if (els.btnSignIn) els.btnSignIn.addEventListener('click', () => {
   pendingPlanSelection = null
   setAuthMode(true)
@@ -742,7 +975,7 @@ function startFree() {
 
 if (els.navFeatures) els.navFeatures.addEventListener('click', () => void goToPublicSection('how'))
 if (els.navPricing) els.navPricing.addEventListener('click', () => void goToPublicSection('pricing'))
-if (els.navSecurity) els.navSecurity.addEventListener('click', () => void goToPublicSection('benefits'))
+if (els.navSecurity) els.navSecurity.addEventListener('click', () => void goToPublicSection('security'))
 if (els.navResources) els.navResources.addEventListener('click', () => void goToPublicSection('preview'))
 if (els.navAccountants) els.navAccountants.addEventListener('click', () => void goToPublicSection('different'))
 if (els.btnCtaCreate) els.btnCtaCreate.addEventListener('click', startFree)
@@ -768,7 +1001,7 @@ if (els.menuBackdrop) els.menuBackdrop.addEventListener('click', closeMenu)
 
 if (els.mNavFeatures) els.mNavFeatures.addEventListener('click', () => void goToPublicSection('how'))
 if (els.mNavPricing) els.mNavPricing.addEventListener('click', () => void goToPublicSection('pricing'))
-if (els.mNavSecurity) els.mNavSecurity.addEventListener('click', () => void goToPublicSection('benefits'))
+if (els.mNavSecurity) els.mNavSecurity.addEventListener('click', () => void goToPublicSection('security'))
 if (els.mNavResources) els.mNavResources.addEventListener('click', () => void goToPublicSection('preview'))
 if (els.mNavAccountants) els.mNavAccountants.addEventListener('click', () => void goToPublicSection('different'))
 if (els.mSignIn) els.mSignIn.addEventListener('click', () => {
@@ -785,6 +1018,10 @@ if (els.mPlans) els.mPlans.addEventListener('click', () => {
 if (els.mAccount) els.mAccount.addEventListener('click', () => {
   closeMenu()
   void showAccount()
+})
+if (els.mAdmin) els.mAdmin.addEventListener('click', () => {
+  closeMenu()
+  void showAdmin()
 })
 if (els.mSignOut) els.mSignOut.addEventListener('click', () => {
   closeMenu()
@@ -839,11 +1076,11 @@ async function applyHashNav() {
   const id = String(window.location.hash || '').replace(/^#/, '').trim()
   if (!id) return
   const normalized = id === 'features' ? 'how'
-    : id === 'security' ? 'benefits'
+    : id === 'security' ? 'security'
     : id === 'resources' ? 'preview'
     : id === 'accountants' ? 'different'
     : id
-  const allow = new Set(['benefits', 'how', 'preview', 'different', 'pricing'])
+  const allow = new Set(['benefits', 'security', 'how', 'preview', 'different', 'pricing'])
   if (!allow.has(normalized)) return
   await showDashboard()
   setTimeout(() => document.getElementById(normalized)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)

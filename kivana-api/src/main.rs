@@ -12,10 +12,14 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Row};
+use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
+use std::time::{Duration as StdDuration, Instant};
 use time::{Duration, OffsetDateTime};
 use tokio::sync::broadcast;
+use tokio::sync::Mutex;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 use tracing::Level;
@@ -31,11 +35,43 @@ struct AppConfig {
 }
 
 #[derive(Clone)]
+struct RateLimiter {
+    inner: std::sync::Arc<Mutex<HashMap<String, VecDeque<Instant>>>>,
+}
+
+impl RateLimiter {
+    fn new() -> Self {
+        Self {
+            inner: std::sync::Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    async fn allow(&self, key: String, window: StdDuration, max: usize) -> bool {
+        let now = Instant::now();
+        let mut map = self.inner.lock().await;
+        let q = map.entry(key).or_insert_with(VecDeque::new);
+        while let Some(t) = q.front().copied() {
+            if now.duration_since(t) > window {
+                q.pop_front();
+            } else {
+                break;
+            }
+        }
+        if q.len() >= max {
+            return false;
+        }
+        q.push_back(now);
+        true
+    }
+}
+
+#[derive(Clone)]
 struct AppState {
     pool: PgPool,
     jwt: JwtKeys,
     cfg: AppConfig,
     tx_events: broadcast::Sender<UserEvent>,
+    rate_limiter: RateLimiter,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -102,6 +138,7 @@ struct UserInfo {
     email: String,
     display_name: Option<String>,
     avatar_data_url: Option<String>,
+    is_admin: bool,
 }
 
 #[derive(Deserialize)]
@@ -205,6 +242,7 @@ async fn main() -> anyhow::Result<()> {
         jwt,
         cfg: cfg.clone(),
         tx_events,
+        rate_limiter: RateLimiter::new(),
     };
 
     let cors = CorsLayer::new()
@@ -215,6 +253,9 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .route("/healthz", get(healthz))
+        .route("/favicon.ico", get(|| async { Redirect::permanent("/kivana-logo.png") }))
+        .route("/robots.txt", get(robots_txt))
+        .route("/sitemap.xml", get(sitemap_xml))
         .route("/v1/auth/signup", post(signup))
         .route("/v1/auth/login", post(login))
         .route("/v1/auth/refresh", post(refresh))
@@ -244,6 +285,7 @@ async fn main() -> anyhow::Result<()> {
             ServeDir::new("kivana-portal").append_index_html_on_directories(true),
         )
         .layer(cors)
+        .layer(RequestBodyLimitLayer::new(1_000_000))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
@@ -260,6 +302,38 @@ async fn healthz() -> impl IntoResponse {
     (StatusCode::OK, "ok")
 }
 
+async fn robots_txt() -> impl IntoResponse {
+    let domain = std::env::var("KIVANA_DOMAIN")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "kivana.eu".to_string());
+    let body = format!(
+        "User-agent: *\nAllow: /\nSitemap: https://{}/sitemap.xml\n",
+        domain
+    );
+    ([(axum::http::header::CONTENT_TYPE, "text/plain; charset=utf-8")], body)
+}
+
+async fn sitemap_xml() -> impl IntoResponse {
+    let domain = std::env::var("KIVANA_DOMAIN")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "kivana.eu".to_string());
+    let body = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://{}/</loc></url>
+  <url><loc>https://{}/privacy.html</loc></url>
+  <url><loc>https://{}/terms.html</loc></url>
+</urlset>
+"#,
+        domain, domain, domain
+    );
+    ([(axum::http::header::CONTENT_TYPE, "application/xml; charset=utf-8")], body)
+}
+
 async fn signup(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
@@ -274,14 +348,25 @@ async fn signup(
         return err(StatusCode::BAD_REQUEST, "weak_password").into_response();
     }
 
+    let client_ip = get_client_ip(&headers, connect_info);
+    if !state
+        .rate_limiter
+        .allow(
+            format!("signup:{}", client_ip.clone().unwrap_or_else(|| "unknown".to_string())),
+            StdDuration::from_secs(10 * 60),
+            5,
+        )
+        .await
+    {
+        return err(StatusCode::TOO_MANY_REQUESTS, "too_many_requests").into_response();
+    }
+
     let user_id = Uuid::new_v4();
     let password_hash = hash_password(&req.password).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
     let password_hash = match password_hash {
         Ok(v) => v,
         Err(code) => return err(code, "hash_failed").into_response(),
     };
-
-    let client_ip = get_client_ip(&headers, connect_info);
 
     let inserted = sqlx::query(
         r#"
@@ -304,7 +389,7 @@ async fn signup(
         Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
     }
 
-    let tokens = issue_tokens(&state, user_id, &email).await;
+    let tokens = issue_tokens(&state, user_id, &email, false).await;
     match tokens {
         Ok(v) => (StatusCode::OK, Json(v)).into_response(),
         Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "token_error").into_response(),
@@ -322,7 +407,20 @@ async fn login(
         return err(StatusCode::BAD_REQUEST, "invalid_email").into_response();
     }
 
-    let row = sqlx::query("SELECT id, password_hash FROM users WHERE email = $1")
+    let client_ip = get_client_ip(&headers, connect_info);
+    if !state
+        .rate_limiter
+        .allow(
+            format!("login:{}", client_ip.clone().unwrap_or_else(|| "unknown".to_string())),
+            StdDuration::from_secs(60),
+            10,
+        )
+        .await
+    {
+        return err(StatusCode::TOO_MANY_REQUESTS, "too_many_requests").into_response();
+    }
+
+    let row = sqlx::query("SELECT id, password_hash, is_admin, admin_lock_ip FROM users WHERE email = $1")
         .bind(&email)
         .fetch_optional(&state.pool)
         .await;
@@ -335,11 +433,32 @@ async fn login(
 
     let user_id: Uuid = row.get("id");
     let password_hash: String = row.get("password_hash");
+    let is_admin: bool = row.get("is_admin");
+    let admin_lock_ip: Option<String> = row.try_get("admin_lock_ip").ok().flatten();
     if !verify_password(&req.password, &password_hash) {
         return err(StatusCode::UNAUTHORIZED, "invalid_credentials").into_response();
     }
 
-    let client_ip = get_client_ip(&headers, connect_info);
+    if is_admin {
+        let ip = match client_ip.clone() {
+            Some(v) => v,
+            None => return err(StatusCode::FORBIDDEN, "admin_ip_required").into_response(),
+        };
+        if let Some(locked) = admin_lock_ip.clone().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+            if locked != ip {
+                return err(StatusCode::FORBIDDEN, "admin_ip_locked").into_response();
+            }
+        } else {
+            let now = OffsetDateTime::now_utc();
+            let _ = sqlx::query("UPDATE users SET admin_lock_ip = $1, admin_lock_at = $2 WHERE id = $3 AND admin_lock_ip IS NULL")
+                .bind(&ip)
+                .bind(now)
+                .bind(user_id)
+                .execute(&state.pool)
+                .await;
+        }
+    }
+
     if let Some(ip) = client_ip {
         let _ = sqlx::query("UPDATE users SET last_ip = $1 WHERE id = $2")
             .bind(ip)
@@ -348,7 +467,7 @@ async fn login(
             .await;
     }
 
-    let tokens = issue_tokens(&state, user_id, &email).await;
+    let tokens = issue_tokens(&state, user_id, &email, is_admin).await;
     match tokens {
         Ok(v) => (StatusCode::OK, Json(v)).into_response(),
         Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "token_error").into_response(),
@@ -368,7 +487,7 @@ async fn refresh(
 
     let row = sqlx::query(
         r#"
-      SELECT s.id, s.user_id, u.email
+      SELECT s.id, s.user_id, u.email, u.is_admin
       FROM sessions s
       JOIN users u ON u.id = s.user_id
       WHERE s.refresh_token_hash = $1
@@ -390,6 +509,7 @@ async fn refresh(
     let session_id: Uuid = row.get("id");
     let user_id: Uuid = row.get("user_id");
     let email: String = row.get("email");
+    let is_admin: bool = row.get("is_admin");
 
     let new_refresh = random_token_urlsafe(48);
     let new_hash = sha256_hex(new_refresh.as_bytes());
@@ -425,6 +545,7 @@ async fn refresh(
                     email,
                     display_name: None,
                     avatar_data_url: None,
+                    is_admin,
                 },
             }),
         )
@@ -477,7 +598,7 @@ async fn me(
     };
 
     let row =
-        sqlx::query("SELECT id, email, display_name, avatar_data_url FROM users WHERE id = $1")
+        sqlx::query("SELECT id, email, display_name, avatar_data_url, is_admin FROM users WHERE id = $1")
             .bind(user_id)
             .fetch_optional(&state.pool)
             .await;
@@ -492,6 +613,7 @@ async fn me(
     let email: String = row.get("email");
     let display_name: Option<String> = row.try_get("display_name").unwrap_or(None);
     let avatar_data_url: Option<String> = row.try_get("avatar_data_url").unwrap_or(None);
+    let is_admin: bool = row.try_get("is_admin").unwrap_or(false);
     (
         StatusCode::OK,
         Json(UserInfo {
@@ -499,6 +621,7 @@ async fn me(
             email,
             display_name,
             avatar_data_url,
+            is_admin,
         }),
     )
         .into_response()
@@ -808,9 +931,10 @@ async fn poll_events(
 async fn admin_grant(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     Json(req): Json<AdminGrantRequest>,
 ) -> axum::response::Response {
-    if let Err(r) = require_admin(&state, &headers).await {
+    if let Err(r) = require_admin(&state, &headers, connect_info).await {
         return r;
     }
 
@@ -954,8 +1078,9 @@ async fn admin_bootstrap(
 async fn admin_users(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
 ) -> axum::response::Response {
-    if let Err(r) = require_admin(&state, &headers).await {
+    if let Err(r) = require_admin(&state, &headers, connect_info).await {
         return r;
     }
 
@@ -1023,9 +1148,10 @@ async fn admin_users(
 async fn admin_delete_user(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     axum::extract::Path(id): axum::extract::Path<Uuid>,
 ) -> axum::response::Response {
-    if let Err(r) = require_admin(&state, &headers).await {
+    if let Err(r) = require_admin(&state, &headers, connect_info).await {
         return r;
     }
 
@@ -1043,10 +1169,11 @@ async fn admin_delete_user(
 async fn admin_set_password(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     axum::extract::Path(id): axum::extract::Path<Uuid>,
     Json(req): Json<AdminSetPasswordRequest>,
 ) -> axum::response::Response {
-    if let Err(r) = require_admin(&state, &headers).await {
+    if let Err(r) = require_admin(&state, &headers, connect_info).await {
         return r;
     }
     if req.password.len() < 8 {
@@ -1149,25 +1276,53 @@ fn access_user_id(
 async fn require_admin(
     state: &AppState,
     headers: &axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
 ) -> Result<(), axum::response::Response> {
     let user_id = match access_user_id(state, headers) {
         Ok(v) => v,
         Err(r) => return Err(r),
     };
 
-    let row = sqlx::query("SELECT is_admin FROM users WHERE id = $1")
+    let row = sqlx::query("SELECT is_admin, admin_lock_ip FROM users WHERE id = $1")
         .bind(user_id)
         .fetch_optional(&state.pool)
         .await;
 
-    let is_admin: bool = match row {
-        Ok(Some(r)) => r.get("is_admin"),
+    let (is_admin, admin_lock_ip): (bool, Option<String>) = match row {
+        Ok(Some(r)) => (r.get("is_admin"), r.try_get("admin_lock_ip").ok().flatten()),
         Ok(None) => return Err(err(StatusCode::UNAUTHORIZED, "invalid_token").into_response()),
         Err(_) => return Err(err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response()),
     };
 
     if !is_admin {
         return Err(err(StatusCode::FORBIDDEN, "forbidden").into_response());
+    }
+
+    if let Some(locked) = admin_lock_ip
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+    {
+        let ip = get_client_ip(headers, connect_info);
+        let ip = match ip {
+            Some(v) => v,
+            None => return Err(err(StatusCode::FORBIDDEN, "admin_ip_required").into_response()),
+        };
+        if ip != locked {
+            return Err(err(StatusCode::FORBIDDEN, "admin_ip_locked").into_response());
+        }
+    } else {
+        let ip = get_client_ip(headers, connect_info);
+        if let Some(ip) = ip {
+            let now = OffsetDateTime::now_utc();
+            let _ = sqlx::query("UPDATE users SET admin_lock_ip = $1, admin_lock_at = $2 WHERE id = $3 AND admin_lock_ip IS NULL")
+                .bind(&ip)
+                .bind(now)
+                .bind(user_id)
+                .execute(&state.pool)
+                .await;
+        }
     }
     Ok(())
 }
@@ -1176,6 +1331,7 @@ async fn issue_tokens(
     state: &AppState,
     user_id: Uuid,
     email: &str,
+    is_admin: bool,
 ) -> anyhow::Result<AuthResponse> {
     let now = OffsetDateTime::now_utc();
     let access_token = issue_access_token(state, user_id, email)?;
@@ -1206,6 +1362,7 @@ async fn issue_tokens(
             email: email.to_string(),
             display_name: None,
             avatar_data_url: None,
+            is_admin,
         },
     })
 }
