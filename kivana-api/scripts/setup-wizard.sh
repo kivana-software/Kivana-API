@@ -36,6 +36,23 @@ ENABLE_HTTPS="n"
 POSTGRES_PASSWORD=""
 JWT_SECRET=""
 ADMIN_TOKEN=""
+INTERACTIVE="n"
+ADMIN_EMAIL="${KIVANA_ADMIN_EMAIL:-}"
+ADMIN_PASSWORD="${KIVANA_ADMIN_PASSWORD:-}"
+
+for arg in "$@"; do
+  case "$arg" in
+    --interactive) INTERACTIVE="y" ;;
+    --domain=*) DOMAIN_NAME="${arg#*=}" ;;
+    --email=*) HTTPS_EMAIL="${arg#*=}" ;;
+    --base-dir=*) BASE_DIR="${arg#*=}" ;;
+    --repo=*) REPO_URL="${arg#*=}" ;;
+    --http-port=*) HTTP_PORT="${arg#*=}" ;;
+    --no-https) ENABLE_HTTPS="n" ;;
+    --admin-email=*) ADMIN_EMAIL="${arg#*=}" ;;
+    --admin-password=*) ADMIN_PASSWORD="${arg#*=}" ;;
+  esac
+done
 
 prompt() {
   local label="${C_PURPLE}[?]${C_RESET} $1"
@@ -108,14 +125,17 @@ prompt_secret() {
 }
 
 banner() {
-  echo -e "${C_CYAN}"
-  echo '    _  __ _                             '
-  echo '   | |/ /(_)__   __ __ _  _ __    __ _  '
-  echo '   | '\'' / | |\ \ / // _` || '\''_ \  / _` | '
-  echo '   | . \ | | \ V /| (_| || | | || (_| | '
-  echo '   |_|\_\|_|  \_/  \__,_||_| |_| \__,_| '
+  echo -e "${C_CYAN}${C_BOLD}"
+  cat <<'EOF'
+ _  ___                     
+| |/ (_)_   ____ _ _ __ ___ 
+| ' /| \ \ / / _` | '_ ` _ \
+| . \| |\ V / (_| | | | | | |
+|_|\_\_| \_/ \__,_|_| |_| |_|
+EOF
   echo -e "${C_RESET}"
-  echo -e "   ${C_BOLD}Server Edition${C_RESET} ${C_PURPLE}v0.2.3${C_RESET}"
+  echo -e " ${C_BOLD}Kivana API Server Setup${C_RESET} ${C_PURPLE}v0.2.6${C_RESET}"
+  echo -e " ${C_YELLOW}Auto install: Docker + Postgres + HTTPS (Caddy)${C_RESET}"
   echo
 }
 
@@ -150,21 +170,26 @@ set_env_key() {
   fi
 }
 
-if [ -r /dev/tty ]; then
+if [ "$INTERACTIVE" = "y" ]; then
   info "Starting interactive setup..."
-  BASE_DIR="$(prompt "Install base dir" "$BASE_DIR_DEFAULT")"
-  DOMAIN_NAME="$(prompt "Public domain name for HTTPS" "$DOMAIN_NAME_DEFAULT")"
+  BASE_DIR="$(prompt "Install base dir" "$BASE_DIR")"
+  DOMAIN_NAME="$(prompt "Public domain name for HTTPS" "$DOMAIN_NAME")"
   if confirm "Enable HTTPS (Let's Encrypt) for ${DOMAIN_NAME} using Caddy?" y; then
     ENABLE_HTTPS="y"
-    KIVANA_BIND_IP="127.0.0.1"
   else
     ENABLE_HTTPS="n"
   fi
+  if [ -z "$ADMIN_EMAIL" ]; then
+    ADMIN_EMAIL="$(prompt "Admin email (optional, leave blank to skip)" "")"
+  fi
 else
-  warn "No TTY detected. Using defaults (non-interactive)."
-  info "Tip: run without piping for prompts: curl -fsSLO <url> && bash setup-wizard.sh"
+  info "Auto mode: minimal prompts, safe updates."
   if [ -n "${KIVANA_DOMAIN:-}" ]; then DOMAIN_NAME="$KIVANA_DOMAIN"; fi
-  ENABLE_HTTPS="y"
+  if [ -z "$DOMAIN_NAME" ]; then DOMAIN_NAME="$DOMAIN_NAME_DEFAULT"; fi
+  ENABLE_HTTPS="${ENABLE_HTTPS:-y}"
+fi
+
+if [ "$ENABLE_HTTPS" = "y" ]; then
   KIVANA_BIND_IP="127.0.0.1"
 fi
 
@@ -211,14 +236,14 @@ fi
 if ! command -v docker >/dev/null 2>&1; then
   warn "Docker not found. Installing Docker + Compose..."
   info "Step 3/6: Installing Docker..."
-    install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-    chmod a+r /etc/apt/keyrings/docker.asc
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo ${VERSION_CODENAME}) stable" > /etc/apt/sources.list.d/docker.list
-    apt_update_once
-    apt-get update -y
-    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-    success "Docker installed."
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  chmod a+r /etc/apt/keyrings/docker.asc
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo ${VERSION_CODENAME}) stable" > /etc/apt/sources.list.d/docker.list
+  apt_update_once
+  apt-get update -y
+  apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  success "Docker installed."
 fi
 
 mkdir -p "$BASE_DIR"
@@ -271,10 +296,11 @@ info "Step 5/6: Configuring environment (.env)..."
 OVERWRITE_ENV="y"
 if [ -f .env ]; then
   OVERWRITE_ENV="n"
-  if [ -r /dev/tty ] && confirm ".env exists. Overwrite it? (recommended only on fresh server)" n; then
+  if [ "$INTERACTIVE" = "y" ] && confirm ".env exists. Overwrite it? (recommended only on fresh server)" n; then
     OVERWRITE_ENV="y"
-  else
-    warn "Keeping existing .env (will only update HTTPS-related keys)."
+  fi
+  if [ "$OVERWRITE_ENV" != "y" ]; then
+    warn "Keeping existing .env (will update only missing/required keys)."
   fi
 fi
 
@@ -296,11 +322,14 @@ EOF
   chmod 600 .env || true
   success ".env written"
 else
+  if ! grep -qE '^POSTGRES_PASSWORD=' .env; then set_env_key "POSTGRES_PASSWORD" "${POSTGRES_PASSWORD}" ".env"; fi
+  if ! grep -qE '^JWT_SECRET=' .env; then set_env_key "JWT_SECRET" "${JWT_SECRET}" ".env"; fi
+  if ! grep -qE '^ADMIN_TOKEN=' .env; then set_env_key "ADMIN_TOKEN" "${ADMIN_TOKEN}" ".env"; fi
   set_env_key "KIVANA_HTTP_PORT" "${HTTP_PORT}" ".env"
   set_env_key "KIVANA_BIND_IP" "${KIVANA_BIND_IP}" ".env"
   set_env_key "KIVANA_DOMAIN" "${DOMAIN_NAME}" ".env"
   set_env_key "KIVANA_ENABLE_HTTPS" "${ENABLE_HTTPS}" ".env"
-  success ".env updated (HTTPS keys)"
+  success ".env updated"
 fi
 
 echo
@@ -322,7 +351,7 @@ if [ "$ok" != "y" ]; then
   docker compose logs --tail=200 api || true
   if docker compose logs --tail=200 api 2>/dev/null | grep -qi "password authentication failed for user"; then
     warn "Detected Postgres password mismatch between API and DB."
-    if [ -r /dev/tty ] && confirm "Fix by resetting DB password to match .env (recommended)?" y; then
+    if [ "$INTERACTIVE" = "y" ] && confirm "Fix by resetting DB password to match .env (recommended)?" y; then
       if docker compose exec -T db psql -U postgres -d postgres -c "ALTER USER kivana WITH PASSWORD '${POSTGRES_PASSWORD}';" >/dev/null 2>&1; then
         success "DB password updated."
         docker compose restart api >/dev/null 2>&1 || true
@@ -345,6 +374,9 @@ if [ "$ok" != "y" ]; then
         exit 1
       fi
     else
+      if [ "$INTERACTIVE" != "y" ]; then
+        error "Auto mode will not reset DB passwords. Fix by ensuring your .env matches your DB, or wipe volumes if it's a fresh server."
+      fi
       info "Fix option (wipes DB): cd $API_DIR && docker compose down -v && docker compose up -d --build"
       exit 1
     fi
@@ -370,10 +402,10 @@ setup_caddy_https() {
 
   if ! command -v caddy >/dev/null 2>&1; then
     info "Installing Caddy (HTTPS reverse proxy)..."
-    apt-get update -y
-    apt-get install -y curl ca-certificates debian-keyring debian-archive-keyring apt-transport-https gnupg
+    apt_install debian-keyring debian-archive-keyring apt-transport-https gnupg
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null
+    apt_update_once
     apt-get update -y
     apt-get install -y caddy
     success "Caddy installed."
@@ -464,9 +496,49 @@ fi
 echo
 echo -e "${C_BOLD}Admin bootstrap token:${C_RESET}"
 echo -e "  ${C_YELLOW}${ADMIN_TOKEN}${C_RESET}"
+
+if [ "$INTERACTIVE" != "y" ] && [ -n "$ADMIN_EMAIL" ]; then
+  if [ -z "$ADMIN_PASSWORD" ]; then
+    ADMIN_PASSWORD="$(rand_hex 16)"
+  fi
+  if [ "${#ADMIN_PASSWORD}" -lt 8 ]; then
+    error "ADMIN password must be at least 8 characters."
+    exit 1
+  fi
+
+  echo
+  info "Creating admin user (${ADMIN_EMAIL})..."
+  signup_code="$(curl -sS -o /dev/null -w "%{http_code}" -X POST \
+    -H "content-type: application/json" \
+    -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\"}" \
+    "http://localhost:${HTTP_PORT}/v1/auth/signup" || true)"
+
+  if [ "$signup_code" = "200" ] || [ "$signup_code" = "409" ]; then
+    success "User account exists."
+  else
+    error "Signup failed (HTTP ${signup_code})."
+    exit 1
+  fi
+
+  if curl -fsS -X POST \
+    -H "content-type: application/json" \
+    -H "x-admin-token: ${ADMIN_TOKEN}" \
+    -d "{\"email\":\"${ADMIN_EMAIL}\"}" \
+    "http://localhost:${HTTP_PORT}/v1/admin/bootstrap" > /dev/null; then
+    success "Admin created successfully!"
+    echo
+    echo -e "${C_BOLD}Admin login:${C_RESET}"
+    echo -e "  Email:    ${C_YELLOW}${ADMIN_EMAIL}${C_RESET}"
+    echo -e "  Password: ${C_YELLOW}${ADMIN_PASSWORD}${C_RESET}"
+  else
+    error "Failed to create admin."
+    exit 1
+  fi
+fi
+
 echo -e "${C_GREEN}===============================================${C_RESET}\n"
 
-if confirm "Create first admin user now?" n; then
+if [ "$INTERACTIVE" = "y" ] && confirm "Create first admin user now?" n; then
   ADMIN_EMAIL="$(prompt "Admin email" "")"
   if [ -n "$ADMIN_EMAIL" ]; then
     info "Bootstrapping admin user..."
