@@ -529,6 +529,10 @@ function applyCurrentPlanUI() {
     const parts = []
     if (status) parts.push(status)
     if (endsAt) parts.push(`Ends: ${endsAt}`)
+    const founder = !!(currentMe && currentMe.isFounder)
+    const pct = currentMe && currentMe.discountPercent != null ? Number(currentMe.discountPercent) : 0
+    if (founder) parts.push('Founder discount: 50%')
+    else if (pct > 0) parts.push(`Discount: ${pct}%`)
     els.subPlanMeta.textContent = parts.length ? parts.join(' • ') : (planCode ? 'Active' : 'Choose a plan to continue.')
   }
   const isBasic = !planCode || planCode === 'basic'
