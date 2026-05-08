@@ -24,12 +24,13 @@ REPO_URL_DEFAULT="https://github.com/kivana-software/Kivana-API.git"
 BASE_DIR_DEFAULT="/opt/kivana"
 REPO_DIR_DEFAULT="${BASE_DIR_DEFAULT}/Kivana-API"
 API_DIR_DEFAULT="${REPO_DIR_DEFAULT}/kivana-api"
+DOMAIN_NAME_DEFAULT="kivana.eu"
 
 REPO_URL="$REPO_URL_DEFAULT"
 BASE_DIR="$BASE_DIR_DEFAULT"
 HTTP_PORT="8080"
 KIVANA_BIND_IP="0.0.0.0"
-DOMAIN_NAME=""
+DOMAIN_NAME="$DOMAIN_NAME_DEFAULT"
 HTTPS_EMAIL=""
 ENABLE_HTTPS="n"
 POSTGRES_PASSWORD=""
@@ -114,40 +115,60 @@ banner() {
   echo '   | . \ | | \ V /| (_| || | | || (_| | '
   echo '   |_|\_\|_|  \_/  \__,_||_| |_| \__,_| '
   echo -e "${C_RESET}"
-  echo -e "   ${C_BOLD}Server Edition${C_RESET} ${C_PURPLE}v0.2.2${C_RESET}"
+  echo -e "   ${C_BOLD}Server Edition${C_RESET} ${C_PURPLE}v0.2.3${C_RESET}"
   echo
 }
 
 banner
 
+APT_UPDATED="n"
+apt_update_once() {
+  if [ "$APT_UPDATED" = "y" ]; then return 0; fi
+  if ! command -v apt-get >/dev/null 2>&1; then
+    error "apt-get not found. This wizard currently supports Debian/Ubuntu servers."
+    exit 1
+  fi
+  info "Step 1/6: Preparing system packages..."
+  apt-get update -y
+  apt-get install -y ca-certificates curl
+  APT_UPDATED="y"
+}
+
+apt_install() {
+  apt_update_once
+  apt-get install -y "$@"
+}
+
+set_env_key() {
+  local key="$1"
+  local value="$2"
+  local file="$3"
+  if [ -f "$file" ] && grep -qE "^${key}=" "$file"; then
+    sed -i -E "s|^${key}=.*|${key}=${value}|g" "$file"
+  else
+    echo "${key}=${value}" >> "$file"
+  fi
+}
+
 if [ -r /dev/tty ]; then
   info "Starting interactive setup..."
-  REPO_URL="$(prompt "GitHub repo URL" "$REPO_URL_DEFAULT")"
   BASE_DIR="$(prompt "Install base dir" "$BASE_DIR_DEFAULT")"
-  HTTP_PORT="$(prompt "Internal API port" "8080")"
-  DOMAIN_NAME="$(prompt "Public domain name for HTTPS (example: kivana.eu). Leave blank to skip" "")"
-  if [ -n "$DOMAIN_NAME" ]; then
+  DOMAIN_NAME="$(prompt "Public domain name for HTTPS" "$DOMAIN_NAME_DEFAULT")"
+  if confirm "Enable HTTPS (Let's Encrypt) for ${DOMAIN_NAME} using Caddy?" y; then
     ENABLE_HTTPS="y"
-    if confirm "Enable HTTPS (Let's Encrypt) using Caddy?" y; then
-      ENABLE_HTTPS="y"
-      HTTPS_EMAIL="$(prompt "TLS email (optional, used for Let's Encrypt expiry notices)" "")"
-      KIVANA_BIND_IP="127.0.0.1"
-      if [ "$HTTP_PORT" = "80" ] || [ "$HTTP_PORT" = "443" ]; then
-        warn "Port ${HTTP_PORT} is reserved for HTTPS. Using internal API port 8080 instead."
-        HTTP_PORT="8080"
-      fi
-    else
-      ENABLE_HTTPS="n"
-    fi
+    KIVANA_BIND_IP="127.0.0.1"
+  else
+    ENABLE_HTTPS="n"
   fi
-
-  POSTGRES_PASSWORD="$(prompt "Postgres password (leave blank to auto-generate)" "")"
-  JWT_SECRET="$(prompt "JWT secret (leave blank to auto-generate)" "")"
-  ADMIN_TOKEN="$(prompt "Admin token (leave blank to auto-generate)" "")"
 else
   warn "No TTY detected. Using defaults (non-interactive)."
   info "Tip: run without piping for prompts: curl -fsSLO <url> && bash setup-wizard.sh"
+  if [ -n "${KIVANA_DOMAIN:-}" ]; then DOMAIN_NAME="$KIVANA_DOMAIN"; fi
+  ENABLE_HTTPS="y"
+  KIVANA_BIND_IP="127.0.0.1"
 fi
+
+apt_update_once
 
 if [ -z "$POSTGRES_PASSWORD" ]; then
   POSTGRES_PASSWORD="$(rand_hex 24)"
@@ -164,6 +185,13 @@ if [ -z "$ADMIN_TOKEN" ]; then
   success "Generated admin token."
 fi
 
+if [ "$ENABLE_HTTPS" = "y" ]; then
+  if [ "$HTTP_PORT" = "80" ] || [ "$HTTP_PORT" = "443" ]; then
+    warn "Internal API port ${HTTP_PORT} conflicts with HTTPS (Caddy needs 80/443). Switching internal API port to 8080."
+    HTTP_PORT="8080"
+  fi
+fi
+
 if [ -d "${BASE_DIR}/Kivana-API/.git" ]; then
   REPO_DIR="${BASE_DIR}/Kivana-API"
 elif [ -d "${BASE_DIR}/Kivana-server/.git" ]; then
@@ -176,49 +204,40 @@ fi
 API_DIR="${REPO_DIR}/kivana-api"
 
 if ! command -v git >/dev/null 2>&1; then
-  if confirm "Install git now?" y; then
-    apt-get update -y
-    apt-get install -y git
-  else
-    error "git is required."
-    exit 1
-  fi
+  info "Step 2/6: Installing prerequisites (git)..."
+  apt_install git
 fi
 
 if ! command -v docker >/dev/null 2>&1; then
-  warn "Docker not found."
-  if confirm "Install Docker + Compose?" y; then
-    info "Installing Docker..."
-    apt-get update -y
-    apt-get install -y ca-certificates curl
+  warn "Docker not found. Installing Docker + Compose..."
+  info "Step 3/6: Installing Docker..."
     install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
     chmod a+r /etc/apt/keyrings/docker.asc
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo ${VERSION_CODENAME}) stable" > /etc/apt/sources.list.d/docker.list
+    apt_update_once
     apt-get update -y
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     success "Docker installed."
-  else
-    error "Docker is required for the easy deploy."
-    exit 1
-  fi
 fi
 
 mkdir -p "$BASE_DIR"
 if [ -d "$REPO_DIR/.git" ]; then
   cd "$REPO_DIR"
-  if confirm "Repo exists. Pull latest changes?" y; then
-    info "Pulling latest changes..."
-    current_origin="$(git remote get-url origin 2>/dev/null || true)"
-    if [ -z "$current_origin" ]; then
-      git remote add origin "$REPO_URL"
-    elif [ "$current_origin" != "$REPO_URL" ]; then
-      warn "Updating origin remote:"
-      warn "  from: ${current_origin}"
-      warn "    to: ${REPO_URL}"
-      git remote set-url origin "$REPO_URL"
-    fi
+  info "Step 4/6: Updating repo..."
+  current_origin="$(git remote get-url origin 2>/dev/null || true)"
+  if [ -z "$current_origin" ]; then
+    git remote add origin "$REPO_URL"
+  elif [ "$current_origin" != "$REPO_URL" ]; then
+    warn "Updating origin remote:"
+    warn "  from: ${current_origin}"
+    warn "    to: ${REPO_URL}"
+    git remote set-url origin "$REPO_URL"
+  fi
 
+  if ! git diff --quiet || ! git diff --cached --quiet; then
+    warn "Local changes detected. Skipping git pull to avoid overwriting changes."
+  else
     git fetch origin --prune
     BRANCH="main"
     if git show-ref --verify --quiet refs/remotes/origin/main; then
@@ -237,9 +256,10 @@ if [ -d "$REPO_DIR/.git" ]; then
     fi
 
     git pull --rebase origin "$BRANCH"
-    success "Updated."
+    success "Repo updated."
   fi
 else
+  info "Step 4/6: Cloning repo..."
   info "Cloning repo..."
   git clone "$REPO_URL" "$REPO_DIR"
   success "Cloned."
@@ -247,40 +267,18 @@ fi
 
 cd "$API_DIR"
 
-info "Writing .env file..."
+info "Step 5/6: Configuring environment (.env)..."
 OVERWRITE_ENV="y"
 if [ -f .env ]; then
-  if confirm ".env exists. Overwrite it?" y; then
+  OVERWRITE_ENV="n"
+  if [ -r /dev/tty ] && confirm ".env exists. Overwrite it? (recommended only on fresh server)" n; then
     OVERWRITE_ENV="y"
   else
-    OVERWRITE_ENV="n"
-    warn "Keeping existing .env"
-    existing_http_port="$(grep -E '^KIVANA_HTTP_PORT=' .env | head -n1 | cut -d= -f2- || true)"
-    existing_bind_ip="$(grep -E '^KIVANA_BIND_IP=' .env | head -n1 | cut -d= -f2- || true)"
-    existing_domain_name="$(grep -E '^KIVANA_DOMAIN=' .env | head -n1 | cut -d= -f2- || true)"
-    existing_enable_https="$(grep -E '^KIVANA_ENABLE_HTTPS=' .env | head -n1 | cut -d= -f2- || true)"
-    existing_postgres_password="$(grep -E '^POSTGRES_PASSWORD=' .env | head -n1 | cut -d= -f2- || true)"
-    existing_jwt_secret="$(grep -E '^JWT_SECRET=' .env | head -n1 | cut -d= -f2- || true)"
-    existing_admin_token="$(grep -E '^ADMIN_TOKEN=' .env | head -n1 | cut -d= -f2- || true)"
-    if [ -n "$existing_http_port" ]; then HTTP_PORT="$existing_http_port"; fi
-    if [ -n "$existing_bind_ip" ]; then KIVANA_BIND_IP="$existing_bind_ip"; fi
-    if [ -n "$existing_domain_name" ]; then DOMAIN_NAME="$existing_domain_name"; fi
-    if [ -n "$existing_enable_https" ]; then ENABLE_HTTPS="$existing_enable_https"; fi
-    if [ -n "$existing_postgres_password" ]; then POSTGRES_PASSWORD="$existing_postgres_password"; fi
-    if [ -n "$existing_jwt_secret" ]; then JWT_SECRET="$existing_jwt_secret"; fi
-    if [ -n "$existing_admin_token" ]; then ADMIN_TOKEN="$existing_admin_token"; fi
+    warn "Keeping existing .env (will only update HTTPS-related keys)."
   fi
 fi
 
-if [ "$ENABLE_HTTPS" = "y" ]; then
-  KIVANA_BIND_IP="127.0.0.1"
-  if [ "$HTTP_PORT" = "80" ] || [ "$HTTP_PORT" = "443" ]; then
-    warn "Internal API port ${HTTP_PORT} conflicts with HTTPS (Caddy needs 80/443). Switching internal API port to 8080."
-    HTTP_PORT="8080"
-  fi
-fi
-
-if [ "$OVERWRITE_ENV" = "y" ] || confirm "Write/update .env now?" y; then
+if [ "$OVERWRITE_ENV" = "y" ]; then
   cat > .env <<EOF
 DATABASE_URL=postgres://kivana:${POSTGRES_PASSWORD}@db:5432/kivana
 JWT_SECRET=${JWT_SECRET}
@@ -297,10 +295,16 @@ POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 EOF
   chmod 600 .env || true
   success ".env written"
+else
+  set_env_key "KIVANA_HTTP_PORT" "${HTTP_PORT}" ".env"
+  set_env_key "KIVANA_BIND_IP" "${KIVANA_BIND_IP}" ".env"
+  set_env_key "KIVANA_DOMAIN" "${DOMAIN_NAME}" ".env"
+  set_env_key "KIVANA_ENABLE_HTTPS" "${ENABLE_HTTPS}" ".env"
+  success ".env updated (HTTPS keys)"
 fi
 
 echo
-info "Starting containers..."
+info "Step 6/6: Starting containers..."
 docker compose up -d --build
 
 info "Waiting for health..."
@@ -462,7 +466,7 @@ echo -e "${C_BOLD}Admin bootstrap token:${C_RESET}"
 echo -e "  ${C_YELLOW}${ADMIN_TOKEN}${C_RESET}"
 echo -e "${C_GREEN}===============================================${C_RESET}\n"
 
-if confirm "Create first admin user now?" y; then
+if confirm "Create first admin user now?" n; then
   ADMIN_EMAIL="$(prompt "Admin email" "")"
   if [ -n "$ADMIN_EMAIL" ]; then
     info "Bootstrapping admin user..."
