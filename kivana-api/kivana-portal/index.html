@@ -15,7 +15,7 @@
   <meta property="og:url" content="https://kivana.eu/" />
   <meta property="og:image" content="https://kivana.eu/kivana-logo.png" />
   <meta name="twitter:card" content="summary" />
-  <link rel="stylesheet" href="portal.css?v=0.4.13" />
+  <link rel="stylesheet" href="portal.css?v=0.4.14" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -174,9 +174,11 @@
             <div class="prebetaDownloads">
               <button class="btn btn-secondary" id="btnPrebetaDownloadMac">Download macOS (pre-beta)</button>
               <button class="btn btn-secondary" id="btnPrebetaDownloadWin">Download Windows (pre-beta)</button>
+              <button class="btn btn-secondary" id="btnMacGuide">macOS setup guide</button>
               <a class="prebetaLink" href="https://github.com/kivana-software/Kivana/releases" target="_blank" rel="noopener">All releases</a>
               <a class="prebetaLink" href="https://github.com/kivana-software/Kivana" target="_blank" rel="noopener">GitHub</a>
             </div>
+            <div id="downloadStatus" class="status-msg"></div>
           </div>
 
           <div class="prebetaGrid" aria-label="Pre-beta info">
@@ -592,6 +594,22 @@
       </div>
     </div>
 
+    <div class="modal hidden" id="macGuideModal" role="dialog" aria-modal="true" aria-label="macOS setup guide">
+      <div class="modalPanel">
+        <div class="modalTop">
+          <div class="modalTitle">macOS (pre-beta) setup guide</div>
+          <button class="modalClose" id="btnCloseMacGuide" type="button" aria-label="Close">✕</button>
+        </div>
+        <div class="modalBody">
+          <div class="modalMeta">
+            <a class="prebetaLink" href="https://github.com/kivana-software/Kivana/blob/main/readmemac.md" target="_blank" rel="noopener">Open on GitHub</a>
+          </div>
+          <pre class="mdPre" id="macGuideContent">Loading…</pre>
+        </div>
+      </div>
+      <div class="modalBackdrop" id="macGuideBackdrop"></div>
+    </div>
+
     <div class="portalBottomFooter">
       <div class="portalBottomFooterLinks">
         <a href="/privacy.html">Privacy</a>
@@ -602,6 +620,6 @@
     </div>
   </div>
 
-  <script src="portal.js?v=0.4.13"></script>
+  <script src="portal.js?v=0.4.14"></script>
 </body>
 </html>

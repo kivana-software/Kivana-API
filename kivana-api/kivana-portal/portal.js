@@ -50,6 +50,8 @@ const els = {
   btnPrebetaSignIn: document.getElementById('btnPrebetaSignIn'),
   btnPrebetaDownloadMac: document.getElementById('btnPrebetaDownloadMac'),
   btnPrebetaDownloadWin: document.getElementById('btnPrebetaDownloadWin'),
+  btnMacGuide: document.getElementById('btnMacGuide'),
+  downloadStatus: document.getElementById('downloadStatus'),
   navFullLanding: document.getElementById('navFullLanding'),
   btnDownloadPrimary: document.getElementById('btnDownloadPrimary'),
   btnDownloadSecondary: document.getElementById('btnDownloadSecondary'),
@@ -80,6 +82,11 @@ const els = {
   adminStatUsers: document.getElementById('adminStatUsers'),
   adminStatAdmins: document.getElementById('adminStatAdmins'),
   adminStatActivePlans: document.getElementById('adminStatActivePlans'),
+
+  macGuideModal: document.getElementById('macGuideModal'),
+  btnCloseMacGuide: document.getElementById('btnCloseMacGuide'),
+  macGuideBackdrop: document.getElementById('macGuideBackdrop'),
+  macGuideContent: document.getElementById('macGuideContent'),
 
   authForm: document.getElementById('authForm'),
   authTitle: document.getElementById('authTitle'),
@@ -131,6 +138,13 @@ const fullLanding = sp.get('full') === '1'
 let adminUsersCache = []
 let adminActiveTab = 'users'
 const LATEST_JSON_URL = 'https://github.com/kivana-software/Kivana/releases/latest/download/latest.json'
+const MAC_GUIDE_MD_URL = 'https://raw.githubusercontent.com/kivana-software/Kivana/main/readmemac.md'
+
+function isMacOs() {
+  const ua = String(navigator.userAgent || '')
+  const plat = String(navigator.platform || '')
+  return /mac/i.test(plat) || /macintosh/i.test(ua)
+}
 
 function getAccessToken() {
   return localStorage.getItem('kivanaPortal/accessToken') || ''
@@ -237,12 +251,37 @@ async function getLatestDownloadUrl(platformKey) {
 async function startPrebetaDownload(platformKey) {
   const ok = window.confirm('This is a pre-beta build. Download anyway?')
   if (!ok) return
+  if (els.downloadStatus) els.downloadStatus.textContent = 'Preparing download…'
   try {
     const url = await getLatestDownloadUrl(platformKey)
-    window.location.href = url
+    window.open(url, '_blank', 'noopener')
+    if (els.downloadStatus) els.downloadStatus.textContent = 'Download started in a new tab.'
   } catch {
-    window.location.href = 'https://github.com/kivana-software/Kivana/releases'
+    window.open('https://github.com/kivana-software/Kivana/releases', '_blank', 'noopener')
+    if (els.downloadStatus) els.downloadStatus.textContent = 'Could not start download automatically. Opened releases page.'
   }
+}
+
+function openMacGuide() {
+  if (!els.macGuideModal || !els.macGuideContent) {
+    window.open('https://github.com/kivana-software/Kivana/blob/main/readmemac.md', '_blank', 'noopener')
+    return
+  }
+  els.macGuideModal.classList.remove('hidden')
+  els.macGuideContent.textContent = 'Loading…'
+  fetch(MAC_GUIDE_MD_URL, { cache: 'no-store' })
+    .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))))
+    .then((txt) => {
+      els.macGuideContent.textContent = String(txt || '').trim() || 'Empty.'
+    })
+    .catch(() => {
+      els.macGuideContent.textContent = 'Failed to load. Please use the GitHub link.'
+    })
+}
+
+function closeMacGuide() {
+  if (!els.macGuideModal) return
+  els.macGuideModal.classList.add('hidden')
 }
 
 function profileKey(userId) {
@@ -1125,6 +1164,13 @@ if (els.btnPrebetaSignIn) els.btnPrebetaSignIn.addEventListener('click', () => {
 })
 if (els.btnPrebetaDownloadMac) els.btnPrebetaDownloadMac.addEventListener('click', () => void startPrebetaDownload('darwin-aarch64'))
 if (els.btnPrebetaDownloadWin) els.btnPrebetaDownloadWin.addEventListener('click', () => void startPrebetaDownload('windows-x86_64'))
+if (els.btnMacGuide) els.btnMacGuide.addEventListener('click', openMacGuide)
+if (els.btnCloseMacGuide) els.btnCloseMacGuide.addEventListener('click', closeMacGuide)
+if (els.macGuideBackdrop) els.macGuideBackdrop.addEventListener('click', closeMacGuide)
+
+if (els.btnMacGuide) {
+  els.btnMacGuide.classList.toggle('hidden', !isMacOs())
+}
 
 async function goToPublicSection(id) {
   if (isAuthed() || !fullLanding) return
