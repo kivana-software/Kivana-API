@@ -1,14 +1,34 @@
 :root {
   --primary: #A3E635;
   --primary-hover: #84CC16;
+  --bg: #F6F7FB;
+  --surface: #FFFFFF;
+  --surface-2: #F1F5F9;
+  --text: #0B1220;
+  --text-muted: #475569;
+  --border: #E2E8F0;
+  --error: #EF4444;
+  --success: #22C55E;
+  --page-bg: radial-gradient(900px 420px at 15% 0%, rgba(163,230,53,0.18), rgba(246,247,251,0) 62%),
+    radial-gradient(700px 380px at 90% 20%, rgba(79,70,229,0.10), rgba(246,247,251,0) 60%),
+    var(--bg);
+}
+
+html {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
   --bg: #050B14;
   --surface: #0B1322;
   --surface-2: #0E1A2F;
   --text: #E5E7EB;
   --text-muted: #9AA4B2;
   --border: #1B2A45;
-  --error: #EF4444;
-  --success: #22C55E;
+  --page-bg: radial-gradient(900px 420px at 15% 0%, rgba(163,230,53,0.12), rgba(5,11,20,0) 62%),
+    radial-gradient(700px 380px at 90% 20%, rgba(79,70,229,0.18), rgba(5,11,20,0) 60%),
+    var(--bg);
 }
 
 * {
@@ -19,9 +39,7 @@
 }
 
 body {
-  background: radial-gradient(900px 420px at 15% 0%, rgba(163,230,53,0.12), rgba(5,11,20,0) 62%),
-    radial-gradient(700px 380px at 90% 20%, rgba(79,70,229,0.18), rgba(5,11,20,0) 60%),
-    var(--bg);
+  background: var(--page-bg);
   color: var(--text);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -2288,6 +2306,259 @@ body {
   font-size: 0.98rem;
   line-height: 1.5;
   margin-bottom: 0.9rem;
+}
+
+html:not([data-theme="dark"]) #navbar {
+  background: rgba(246, 247, 251, 0.88);
+  border-bottom-color: rgba(2, 6, 23, 0.10);
+}
+
+html:not([data-theme="dark"]) .nav-links .nav-anchor {
+  color: rgba(2, 6, 23, 0.62);
+}
+
+html:not([data-theme="dark"]) .nav-links .nav-anchor:hover {
+  color: rgba(2, 6, 23, 0.88);
+}
+
+html:not([data-theme="dark"]) .nav-user {
+  border-color: rgba(2, 6, 23, 0.12);
+  background: rgba(2, 6, 23, 0.03);
+}
+
+html:not([data-theme="dark"]) .nav-user-name {
+  color: rgba(2, 6, 23, 0.92);
+}
+
+html:not([data-theme="dark"]) .nav-user-plan {
+  color: rgba(2, 6, 23, 0.55);
+}
+
+html:not([data-theme="dark"]) .mobile-menu-panel {
+  background: rgba(248, 250, 252, 0.98);
+  border-left-color: rgba(2, 6, 23, 0.10);
+  box-shadow: -24px 0 80px rgba(2, 6, 23, 0.25);
+}
+
+html:not([data-theme="dark"]) .mobile-menu-backdrop {
+  background: rgba(2, 6, 23, 0.35);
+}
+
+html:not([data-theme="dark"]) .card {
+  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.10);
+}
+
+html:not([data-theme="dark"]) .panel {
+  background: rgba(255,255,255,0.92);
+  border-color: rgba(2, 6, 23, 0.10);
+  box-shadow: 0 12px 40px rgba(2, 6, 23, 0.08);
+}
+
+html:not([data-theme="dark"]) .avatar-wrap {
+  background: rgba(2, 6, 23, 0.04);
+}
+
+html:not([data-theme="dark"]) .authAsideMeta,
+html:not([data-theme="dark"]) .authAsideItem {
+  color: rgba(2, 6, 23, 0.80);
+}
+
+html:not([data-theme="dark"]) .authPanel {
+  background: rgba(255,255,255,0.92);
+  border-color: rgba(2, 6, 23, 0.10);
+  box-shadow: 0 22px 70px rgba(2, 6, 23, 0.12);
+}
+
+html:not([data-theme="dark"]) .input-group input {
+  background: rgba(255,255,255,0.92);
+  border-color: rgba(2, 6, 23, 0.12);
+}
+
+html:not([data-theme="dark"]) .btn-secondary {
+  background-color: rgba(2, 6, 23, 0.04);
+  border-color: rgba(2, 6, 23, 0.10);
+}
+
+html:not([data-theme="dark"]) .btn-secondary:hover {
+  background-color: rgba(2, 6, 23, 0.07);
+}
+
+html:not([data-theme="dark"]) .btn-plan {
+  background-color: rgba(2, 6, 23, 0.05);
+}
+
+html:not([data-theme="dark"]) .btn-plan:hover {
+  background-color: rgba(2, 6, 23, 0.09);
+}
+
+html:not([data-theme="dark"]) .planTable {
+  background: rgba(255,255,255,0.92);
+  border-color: rgba(2, 6, 23, 0.10);
+}
+
+html:not([data-theme="dark"]) .planRow {
+  border-top-color: rgba(2, 6, 23, 0.08);
+}
+
+html:not([data-theme="dark"]) .planMeta {
+  color: rgba(2, 6, 23, 0.80);
+}
+
+html:not([data-theme="dark"]) .planMetaSep {
+  color: rgba(2, 6, 23, 0.30);
+}
+
+html:not([data-theme="dark"]) .planNote {
+  color: rgba(2, 6, 23, 0.55);
+}
+
+html:not([data-theme="dark"]) .planIncludes {
+  color: rgba(2, 6, 23, 0.72);
+}
+
+html:not([data-theme="dark"]) .planRowFeatured {
+  background: linear-gradient(90deg, rgba(163,230,53,0.16), rgba(255,255,255,0.0) 55%);
+}
+
+html:not([data-theme="dark"]) .planRowService {
+  background: rgba(2,6,23,0.03);
+}
+
+html:not([data-theme="dark"]) .portalBottomFooter {
+  color: rgba(2, 6, 23, 0.55);
+}
+
+html:not([data-theme="dark"]) .portalBottomFooterLinks a {
+  color: rgba(2, 6, 23, 0.70);
+}
+
+html:not([data-theme="dark"]) .portalBottomFooterLinks a:hover {
+  color: rgba(2, 6, 23, 0.90);
+}
+
+html:not([data-theme="dark"]) .wipBanner {
+  color: rgba(2, 6, 23, 0.86);
+  border-bottom-color: rgba(163,230,53,0.22);
+}
+
+html:not([data-theme="dark"]) .tableWrap {
+  border-color: rgba(2, 6, 23, 0.10);
+}
+
+html:not([data-theme="dark"]) .adminTable {
+  background: rgba(255,255,255,0.92);
+}
+
+html:not([data-theme="dark"]) .adminTable th {
+  color: rgba(2, 6, 23, 0.86);
+  background: rgba(2, 6, 23, 0.03);
+}
+
+html:not([data-theme="dark"]) .adminTable th,
+html:not([data-theme="dark"]) .adminTable td {
+  border-bottom-color: rgba(2, 6, 23, 0.08);
+}
+
+html:not([data-theme="dark"]) .adminSidebar {
+  border-color: rgba(2, 6, 23, 0.10);
+  background: rgba(255,255,255,0.92);
+}
+
+html:not([data-theme="dark"]) .adminSidebarTitle {
+  color: rgba(2, 6, 23, 0.72);
+}
+
+html:not([data-theme="dark"]) .adminNavItem {
+  border-color: rgba(2, 6, 23, 0.10);
+  background: rgba(2, 6, 23, 0.03);
+  color: rgba(2, 6, 23, 0.86);
+}
+
+html:not([data-theme="dark"]) .adminStat {
+  border-color: rgba(2, 6, 23, 0.10);
+  background: rgba(255,255,255,0.92);
+}
+
+html:not([data-theme="dark"]) .adminStatLabel {
+  color: rgba(2, 6, 23, 0.60);
+}
+
+html:not([data-theme="dark"]) .adminTopbarSub,
+html:not([data-theme="dark"]) .adminStatus,
+html:not([data-theme="dark"]) .adminPlaceholderText {
+  color: rgba(2, 6, 23, 0.62);
+}
+
+html:not([data-theme="dark"]) .adminPanel {
+  border-color: rgba(2, 6, 23, 0.10);
+  background: rgba(255,255,255,0.92);
+}
+
+html:not([data-theme="dark"]) .adminSearch {
+  border-color: rgba(2, 6, 23, 0.12);
+  background: rgba(255,255,255,0.92);
+  color: rgba(2, 6, 23, 0.86);
+}
+
+html:not([data-theme="dark"]) .adminPlaceholder {
+  border-color: rgba(2, 6, 23, 0.16);
+  background: rgba(2, 6, 23, 0.03);
+}
+
+html:not([data-theme="dark"]) .prebetaHero {
+  background: rgba(255,255,255,0.92);
+  border-color: rgba(2, 6, 23, 0.10);
+  box-shadow: 0 18px 70px rgba(2, 6, 23, 0.10);
+}
+
+html:not([data-theme="dark"]) .prebetaSubtitle {
+  color: rgba(2, 6, 23, 0.62);
+}
+
+html:not([data-theme="dark"]) .prebetaPanel {
+  background: rgba(255,255,255,0.92);
+  border-color: rgba(2, 6, 23, 0.10);
+}
+
+html:not([data-theme="dark"]) .prebetaPanelText {
+  color: rgba(2, 6, 23, 0.62);
+}
+
+html:not([data-theme="dark"]) .prebetaLink {
+  color: rgba(2, 6, 23, 0.78);
+  border-color: rgba(2, 6, 23, 0.10);
+  background: rgba(2, 6, 23, 0.03);
+}
+
+html:not([data-theme="dark"]) .prebetaLink:hover {
+  color: rgba(2, 6, 23, 0.92);
+  background: rgba(2, 6, 23, 0.06);
+}
+
+html:not([data-theme="dark"]) .modalBackdrop {
+  background: rgba(2, 6, 23, 0.35);
+}
+
+html:not([data-theme="dark"]) .modalPanel {
+  background: rgba(255,255,255,0.96);
+  border-color: rgba(2, 6, 23, 0.12);
+  box-shadow: 0 30px 120px rgba(2, 6, 23, 0.22);
+}
+
+html:not([data-theme="dark"]) .modalClose {
+  border-color: rgba(2, 6, 23, 0.12);
+  background: rgba(2, 6, 23, 0.03);
+  color: rgba(2, 6, 23, 0.85);
+}
+
+html:not([data-theme="dark"]) .mdPre {
+  color: rgba(2, 6, 23, 0.88);
+  background: rgba(2, 6, 23, 0.03);
+  border-color: rgba(2, 6, 23, 0.10);
+}
+
+html:not([data-theme="dark"]) .modalText {
+  color: rgba(2, 6, 23, 0.80);
 }
 
 .modalForm {

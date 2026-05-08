@@ -6,16 +6,26 @@
   <link rel="icon" type="image/png" href="/kivana-logo.png" />
   <link rel="apple-touch-icon" href="/kivana-logo.png" />
   <title>Kivana | Personal Finance & Accounting</title>
-  <meta name="description" content="Kivana is local-first personal finance and accounting software. Your data stays on your device, with flexible plans and accountant-ready exports when you need them." />
+  <meta name="description" content="Kivana is a local-first personal finance desktop app. Your data stays on your device, with optional account features." />
   <link rel="canonical" href="https://kivana.eu/" />
   <meta name="robots" content="index,follow" />
   <meta property="og:title" content="Kivana Personal Finance & Accounting" />
-  <meta property="og:description" content="Local-first personal finance and accounting. Your data stays on your device, with flexible plans and accountant-ready exports." />
+  <meta property="og:description" content="Local-first personal finance. Your data stays on your device, with optional account features." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://kivana.eu/" />
   <meta property="og:image" content="https://kivana.eu/kivana-logo.png" />
   <meta name="twitter:card" content="summary" />
   <link rel="stylesheet" href="portal.css?v=0.4.15" />
+  <script>
+    ;(() => {
+      try {
+        const t = localStorage.getItem('kivanaPortal/theme')
+        document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light')
+      } catch {
+        document.documentElement.setAttribute('data-theme', 'light')
+      }
+    })()
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -37,6 +47,7 @@
             <button type="button" class="os-btn active" id="osMac">macOS</button>
             <button type="button" class="os-btn" id="osWin">Windows</button>
           </div>
+          <button id="btnThemeToggle" class="btn btn-secondary">Dark</button>
           <button id="btnSignIn" class="btn btn-secondary">Sign in</button>
           <button id="btnSignUp" class="btn btn-primary">Create account</button>
         </div>
@@ -79,10 +90,12 @@
             <button type="button" class="os-btn active" id="mOsMac">macOS</button>
             <button type="button" class="os-btn" id="mOsWin">Windows</button>
           </div>
+          <button class="btn btn-secondary w-full" id="mThemeToggle" type="button">Dark</button>
           <button class="btn btn-secondary w-full" id="mSignIn">Sign in</button>
           <button class="btn btn-primary w-full" id="mGetKivana">Create account</button>
         </div>
         <div class="mobile-menu-actions hidden" id="mobileMenuAuthedActions">
+          <button class="btn btn-secondary w-full" id="mThemeToggleAuthed" type="button">Dark</button>
           <button class="btn btn-secondary w-full" id="mSignOut">Sign out</button>
         </div>
       </div>

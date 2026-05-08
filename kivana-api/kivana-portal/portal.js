@@ -43,6 +43,9 @@ const els = {
   mOsToggle: document.getElementById('mOsToggle'),
   mOsMac: document.getElementById('mOsMac'),
   mOsWin: document.getElementById('mOsWin'),
+  btnThemeToggle: document.getElementById('btnThemeToggle'),
+  mThemeToggle: document.getElementById('mThemeToggle'),
+  mThemeToggleAuthed: document.getElementById('mThemeToggleAuthed'),
   marketingSections: document.getElementById('marketingSections'),
   marketingFooter: document.getElementById('marketingFooter'),
   prebetaLanding: document.getElementById('prebetaLanding'),
@@ -147,11 +150,45 @@ let adminUsersCache = []
 let adminActiveTab = 'users'
 const LATEST_JSON_URL = 'https://github.com/kivana-software/Kivana/releases/latest/download/latest.json'
 const MAC_GUIDE_MD_URL = 'https://raw.githubusercontent.com/kivana-software/Kivana/main/readmemac.md'
+const LS_THEME = 'kivanaPortal/theme'
 
 function isMacOs() {
   const ua = String(navigator.userAgent || '')
   const plat = String(navigator.platform || '')
   return /mac/i.test(plat) || /macintosh/i.test(ua)
+}
+
+function getTheme() {
+  try {
+    const t = String(localStorage.getItem(LS_THEME) || '').trim().toLowerCase()
+    return t === 'dark' ? 'dark' : 'light'
+  } catch {
+    return 'light'
+  }
+}
+
+function applyTheme(theme) {
+  const t = theme === 'dark' ? 'dark' : 'light'
+  document.documentElement.setAttribute('data-theme', t)
+  try {
+    localStorage.setItem(LS_THEME, t)
+  } catch {
+    void 0
+  }
+  updateThemeButtons()
+}
+
+function updateThemeButtons() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+  const label = isDark ? 'Light' : 'Dark'
+  if (els.btnThemeToggle) els.btnThemeToggle.textContent = label
+  if (els.mThemeToggle) els.mThemeToggle.textContent = label
+  if (els.mThemeToggleAuthed) els.mThemeToggleAuthed.textContent = label
+}
+
+function toggleTheme() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+  applyTheme(isDark ? 'light' : 'dark')
 }
 
 function openActionModal({ title, okText, cancelText, build }) {
@@ -1386,6 +1423,8 @@ if (els.btnMacGuide) {
   els.btnMacGuide.classList.toggle('hidden', !isMacOs())
 }
 
+applyTheme(getTheme())
+
 async function goToPublicSection(id) {
   if (isAuthed() || !fullLanding) return
   if (id === 'pricing') return
@@ -1499,6 +1538,15 @@ if (els.osMac) els.osMac.addEventListener('click', () => setSelectedOs('mac'))
 if (els.osWin) els.osWin.addEventListener('click', () => setSelectedOs('win'))
 if (els.mOsMac) els.mOsMac.addEventListener('click', () => setSelectedOs('mac'))
 if (els.mOsWin) els.mOsWin.addEventListener('click', () => setSelectedOs('win'))
+if (els.btnThemeToggle) els.btnThemeToggle.addEventListener('click', toggleTheme)
+if (els.mThemeToggle) els.mThemeToggle.addEventListener('click', () => {
+  toggleTheme()
+  closeMenu()
+})
+if (els.mThemeToggleAuthed) els.mThemeToggleAuthed.addEventListener('click', () => {
+  toggleTheme()
+  closeMenu()
+})
 if (els.btnDownloadPrimary) els.btnDownloadPrimary.addEventListener('click', () => void handleDownloadClick())
 if (els.btnDownloadSecondary) els.btnDownloadSecondary.addEventListener('click', () => void handleDownloadClick())
 
