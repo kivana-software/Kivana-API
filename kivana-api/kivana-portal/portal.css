@@ -1963,6 +1963,29 @@ body {
   flex-wrap: wrap;
 }
 
+.prebetaDownloads {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.8rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.prebetaLink {
+  color: rgba(229,231,235,0.78);
+  font-weight: 800;
+  text-decoration: none;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(5, 11, 20, 0.20);
+  padding: 0.55rem 0.75rem;
+  border-radius: 12px;
+}
+
+.prebetaLink:hover {
+  color: rgba(229,231,235,0.95);
+  background: rgba(255,255,255,0.05);
+}
+
 .prebetaGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

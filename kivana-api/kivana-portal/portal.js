@@ -48,6 +48,8 @@ const els = {
   prebetaLanding: document.getElementById('prebetaLanding'),
   btnPrebetaCreate: document.getElementById('btnPrebetaCreate'),
   btnPrebetaSignIn: document.getElementById('btnPrebetaSignIn'),
+  btnPrebetaDownloadMac: document.getElementById('btnPrebetaDownloadMac'),
+  btnPrebetaDownloadWin: document.getElementById('btnPrebetaDownloadWin'),
   navFullLanding: document.getElementById('navFullLanding'),
   btnDownloadPrimary: document.getElementById('btnDownloadPrimary'),
   btnDownloadSecondary: document.getElementById('btnDownloadSecondary'),
@@ -128,6 +130,7 @@ const startInAuth = sp.get('portal') === '1'
 const fullLanding = sp.get('full') === '1'
 let adminUsersCache = []
 let adminActiveTab = 'users'
+const LATEST_JSON_URL = 'https://github.com/kivana-software/Kivana/releases/latest/download/latest.json'
 
 function getAccessToken() {
   return localStorage.getItem('kivanaPortal/accessToken') || ''
@@ -218,6 +221,28 @@ async function refreshAccessToken() {
   const res = await apiFetch('/v1/auth/refresh', { method: 'POST', body: JSON.stringify({ refresh_token: refreshToken }) })
   const json = await res.json()
   setTokens(json.accessToken, json.refreshToken)
+}
+
+async function getLatestDownloadUrl(platformKey) {
+  const res = await fetch(LATEST_JSON_URL, { cache: 'no-store' })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json = await res.json()
+  const platforms = json && typeof json === 'object' ? json.platforms : null
+  const entry = platforms && typeof platforms === 'object' ? platforms[platformKey] : null
+  const url = entry && typeof entry === 'object' ? entry.url : null
+  if (!url || typeof url !== 'string') throw new Error('missing_url')
+  return url
+}
+
+async function startPrebetaDownload(platformKey) {
+  const ok = window.confirm('This is a pre-beta build. Download anyway?')
+  if (!ok) return
+  try {
+    const url = await getLatestDownloadUrl(platformKey)
+    window.location.href = url
+  } catch {
+    window.location.href = 'https://github.com/kivana-software/Kivana/releases'
+  }
 }
 
 function profileKey(userId) {
@@ -1094,6 +1119,8 @@ if (els.btnPrebetaSignIn) els.btnPrebetaSignIn.addEventListener('click', () => {
   setAuthMode(true)
   void showAuth()
 })
+if (els.btnPrebetaDownloadMac) els.btnPrebetaDownloadMac.addEventListener('click', () => void startPrebetaDownload('darwin-aarch64'))
+if (els.btnPrebetaDownloadWin) els.btnPrebetaDownloadWin.addEventListener('click', () => void startPrebetaDownload('windows-x86_64'))
 
 async function goToPublicSection(id) {
   if (isAuthed() || !fullLanding) return
