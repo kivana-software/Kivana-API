@@ -1943,6 +1943,12 @@ body {
   font-size: 0.85rem;
 }
 
+.prebetaTagMuted {
+  border-color: rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  color: rgba(229,231,235,0.78);
+}
+
 .prebetaTitle {
   font-size: 1.55rem;
   font-weight: 900;
@@ -1993,6 +1999,53 @@ body {
   margin-top: 1rem;
 }
 
+.prebetaPanels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.prebetaPanel {
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(11, 19, 34, 0.40);
+  border-radius: 18px;
+  padding: 1.2rem;
+}
+
+.prebetaPanelTitle {
+  font-weight: 950;
+  letter-spacing: -0.02em;
+}
+
+.prebetaPanelText {
+  margin-top: 0.35rem;
+  color: rgba(229,231,235,0.72);
+  font-weight: 650;
+}
+
+.prebetaSteps {
+  margin-top: 0.75rem;
+  padding-left: 1.1rem;
+  color: rgba(229,231,235,0.86);
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.prebetaSteps li {
+  margin-bottom: 0.25rem;
+}
+
+.prebetaNote {
+  margin-top: 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid rgba(163,230,53,0.18);
+  background: rgba(163,230,53,0.08);
+  color: rgba(229,231,235,0.82);
+  font-weight: 800;
+}
+
 .prebetaCard {
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(5, 11, 20, 0.28);
@@ -2015,6 +2068,9 @@ body {
 @media (max-width: 900px) {
   .prebetaLanding {
     padding-top: 1.6rem;
+  }
+  .prebetaPanels {
+    grid-template-columns: 1fr;
   }
   .prebetaGrid {
     grid-template-columns: 1fr;

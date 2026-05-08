@@ -30,9 +30,7 @@
       <div class="nav-links">
         <div class="nav-main hidden" id="navFullLanding">
           <button class="nav-anchor" id="navFeatures">How it works</button>
-          <button class="nav-anchor" id="navSecurity">Security</button>
           <button class="nav-anchor" id="navResources">Preview</button>
-          <button class="nav-anchor" id="navAccountants">Why Kivana</button>
         </div>
         <div class="nav-actions">
           <div class="os-toggle" id="osToggle">
@@ -69,9 +67,7 @@
         </div>
         <div class="mobile-menu-links" id="mobileMenuPublic">
           <button class="mobile-menu-link" id="mNavFeatures">How it works</button>
-          <button class="mobile-menu-link" id="mNavSecurity">Security</button>
           <button class="mobile-menu-link" id="mNavResources">Preview</button>
-          <button class="mobile-menu-link" id="mNavAccountants">Why Kivana</button>
         </div>
         <div class="mobile-menu-links hidden" id="mobileMenuAuthed">
           <button class="mobile-menu-link" id="mPlans">Plans</button>
@@ -159,42 +155,40 @@
           <div class="prebetaHero">
             <div class="prebetaHeroTop">
               <div class="prebetaTag">Pre-beta</div>
-              <div class="prebetaTitle">Kivana account portal</div>
+              <div class="prebetaTag prebetaTagMuted">Desktop app</div>
             </div>
+            <div class="prebetaTitle">Kivana</div>
             <div class="prebetaSubtitle">
-              Create an account, sign in, and manage your plan. The product is still in progress. Features will expand over time.
+              Personal finance app that runs on your device.
             </div>
             <div class="prebetaActions">
               <button class="btn btn-primary" id="btnPrebetaCreate">Create account</button>
               <button class="btn btn-secondary" id="btnPrebetaSignIn">Sign in</button>
             </div>
-
-            <div class="prebetaDownloads">
-              <button class="btn btn-secondary" id="btnPrebetaDownloadMac">Download macOS (pre-beta)</button>
-              <button class="btn btn-secondary" id="btnPrebetaDownloadWin">Download Windows (pre-beta)</button>
-              <button class="btn btn-secondary" id="btnMacGuide">macOS setup guide</button>
-              <a class="prebetaLink" href="https://github.com/kivana-software/Kivana/releases" target="_blank" rel="noopener">All releases</a>
-              <a class="prebetaLink" href="https://github.com/kivana-software/Kivana" target="_blank" rel="noopener">GitHub</a>
-            </div>
-            <div id="downloadStatus" class="status-msg"></div>
           </div>
 
-          <div class="prebetaGrid" aria-label="Pre-beta info">
-            <div class="prebetaCard">
-              <div class="prebetaCardTitle">Minimal & focused</div>
-              <div class="prebetaCardText">Account + plan management only. More coming soon.</div>
+          <div class="prebetaPanels" aria-label="Pre-beta info">
+            <div class="prebetaPanel">
+              <div class="prebetaPanelTitle">Download</div>
+              <div class="prebetaPanelText">Latest pre-beta builds.</div>
+              <div class="prebetaDownloads">
+                <button class="btn btn-secondary" id="btnPrebetaDownloadMac">Download macOS</button>
+                <button class="btn btn-secondary" id="btnPrebetaDownloadWin">Download Windows</button>
+                <button class="btn btn-secondary" id="btnMacGuide">macOS setup guide</button>
+                <a class="prebetaLink" href="https://github.com/kivana-software/Kivana/releases" target="_blank" rel="noopener">All releases</a>
+                <a class="prebetaLink" href="https://github.com/kivana-software/Kivana" target="_blank" rel="noopener">GitHub</a>
+              </div>
+              <div id="downloadStatus" class="status-msg"></div>
             </div>
-            <div class="prebetaCard">
-              <div class="prebetaCardTitle">Security basics</div>
-              <div class="prebetaCardText">HTTPS in transit, strong password hashing, revocable sessions.</div>
-            </div>
-            <div class="prebetaCard">
-              <div class="prebetaCardTitle">Founder accounts</div>
-              <div class="prebetaCardText">First 20 accounts get 50% lifetime discount.</div>
-            </div>
-            <div class="prebetaCard">
-              <div class="prebetaCardTitle">Admin protection</div>
-              <div class="prebetaCardText">Admin access can be locked to the first login IP.</div>
+
+            <div class="prebetaPanel">
+              <div class="prebetaPanelTitle">How it works</div>
+              <ol class="prebetaSteps">
+                <li>Download and install the app.</li>
+                <li>Use it locally on your device.</li>
+                <li>Sign in only for your plan and updates.</li>
+              </ol>
+              <div class="prebetaNote">Founder offer: first 20 accounts get 50% lifetime discount.</div>
             </div>
           </div>
         </div>
@@ -203,7 +197,7 @@
           <div class="hero hero-solo">
             <div>
               <h2 class="hero-title">Your finances. On your device.</h2>
-              <p class="hero-subtitle">Local-first accounting with flexible plans and on-demand accountants.</p>
+              <p class="hero-subtitle">Local-first personal finance with flexible plans.</p>
               <div class="hero-ctas">
                 <button class="btn btn-primary btn-hero" id="btnHeroStartFree">Create account</button>
               </div>
@@ -213,11 +207,11 @@
           <div class="clarity-strip" aria-label="Key guarantees">
             <div class="clarity-item">No forced cloud</div>
             <div class="clarity-item">Pay only for what you use</div>
-            <div class="clarity-item">Hire an accountant anytime</div>
+            <div class="clarity-item">Simple by design</div>
           </div>
 
           <div class="trust-strip" aria-label="Trust">
-            Built for individuals and small businesses • Privacy-first • No lock-in
+            Built for individuals and small businesses • No lock-in
           </div>
 
           <section class="section" id="benefits">
@@ -230,37 +224,6 @@
               <div class="benefit-card">
                 <div class="benefit-title">Flexible pricing</div>
                 <div class="benefit-desc">Upgrade only when you need more.</div>
-              </div>
-              <div class="benefit-card">
-                <div class="benefit-title">Professional help</div>
-                <div class="benefit-desc">Hire an accountant in one click.</div>
-              </div>
-            </div>
-          </section>
-
-          <section class="section" id="security">
-            <div class="section-title">Security & privacy</div>
-            <div class="section-subtitle">Simple by design. Strong where it matters.</div>
-            <div class="diff-grid">
-              <div class="diff-card">
-                <div class="diff-title">Encrypted connections</div>
-                <div class="diff-desc">When served over HTTPS, data is encrypted in transit.</div>
-              </div>
-              <div class="diff-card">
-                <div class="diff-title">Protected passwords</div>
-                <div class="diff-desc">Passwords are stored using a strong one-way hash.</div>
-              </div>
-              <div class="diff-card">
-                <div class="diff-title">Session safety</div>
-                <div class="diff-desc">Short-lived access tokens, refresh tokens, and logout that revokes sessions.</div>
-              </div>
-              <div class="diff-card">
-                <div class="diff-title">Abuse prevention</div>
-                <div class="diff-desc">Rate limits and request size limits help reduce spam and brute-force attempts.</div>
-              </div>
-              <div class="diff-card">
-                <div class="diff-title">Admin protection</div>
-                <div class="diff-desc">Admin access can be locked to the first login IP for extra safety.</div>
               </div>
             </div>
           </section>
@@ -286,8 +249,8 @@
               <div class="step">
                 <div class="step-n">3</div>
                 <div>
-                  <div class="step-t">Hire an accountant if required</div>
-                  <div class="step-d">Export a clean pack or get a professional review.</div>
+                  <div class="step-t">Sign in only when needed</div>
+                  <div class="step-d">Your account is used for your plan and updates.</div>
                 </div>
               </div>
             </div>
@@ -326,28 +289,6 @@
             </div>
           </section>
 
-          <section class="section" id="different">
-            <div class="section-title">Why Kivana is different</div>
-            <div class="section-subtitle">This is the edge: privacy-first control with optional services.</div>
-            <div class="diff-grid">
-              <div class="diff-card">
-                <div class="diff-title">Works locally - your data stays with you</div>
-                <div class="diff-desc">Run it on your device first.</div>
-              </div>
-              <div class="diff-card">
-                <div class="diff-title">Optional cloud - only if you choose</div>
-                <div class="diff-desc">Add cloud features when you want them.</div>
-              </div>
-              <div class="diff-card">
-                <div class="diff-title">No lock-in - flexible plans</div>
-                <div class="diff-desc">Upgrade only when you need more.</div>
-              </div>
-              <div class="diff-card">
-                <div class="diff-title">On-demand accountant - no long-term commitment</div>
-                <div class="diff-desc">Get help when you need it.</div>
-              </div>
-            </div>
-          </section>
         </div>
 
         <section class="plansShell section" id="pricing" aria-label="Plans and pricing" data-authed-only="1">
@@ -570,7 +511,7 @@
               <div class="adminPlaceholder">
                 <div class="adminPlaceholderTitle">Access controls</div>
                 <div class="adminPlaceholderText">
-                  Coming soon: admin IP lock reset, audit logs, and safer role management.
+                  Coming soon.
                 </div>
               </div>
             </div>
@@ -579,7 +520,7 @@
               <div class="adminPlaceholder">
                 <div class="adminPlaceholderTitle">Settings</div>
                 <div class="adminPlaceholderText">
-                  Coming soon: maintenance mode, security settings, and service configuration.
+                  Coming soon.
                 </div>
               </div>
             </div>
