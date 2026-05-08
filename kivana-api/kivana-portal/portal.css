@@ -2234,16 +2234,18 @@ body {
 .modalBackdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0,0,0,0.60);
+  background: rgba(0,0,0,0.52);
+  z-index: 0;
 }
 
 .modalPanel {
   position: relative;
+  z-index: 1;
   width: min(980px, 100%);
   max-height: min(78vh, 820px);
   overflow: hidden;
   border: 1px solid rgba(255,255,255,0.10);
-  background: rgba(11, 19, 34, 0.82);
+  background: rgba(11, 19, 34, 0.92);
   border-radius: 18px;
   box-shadow: 0 30px 120px rgba(0,0,0,0.70);
   display: flex;
@@ -2281,7 +2283,7 @@ body {
 }
 
 .modalText {
-  color: rgba(229,231,235,0.78);
+  color: rgba(229,231,235,0.88);
   font-weight: 650;
   font-size: 0.98rem;
   line-height: 1.5;
