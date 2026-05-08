@@ -2224,6 +2224,31 @@ body {
   overflow: auto;
 }
 
+.modalText {
+  color: rgba(229,231,235,0.78);
+  font-weight: 650;
+  font-size: 0.98rem;
+  line-height: 1.5;
+  margin-bottom: 0.9rem;
+}
+
+.modalForm {
+  display: grid;
+  gap: 0.8rem;
+  margin-bottom: 0.9rem;
+}
+
+.modalActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  padding-top: 0.9rem;
+  margin-top: 0.9rem;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  flex-wrap: wrap;
+}
+
 .modalMeta {
   display: flex;
   justify-content: flex-end;

@@ -88,6 +88,14 @@ const els = {
   macGuideBackdrop: document.getElementById('macGuideBackdrop'),
   macGuideContent: document.getElementById('macGuideContent'),
 
+  actionModal: document.getElementById('actionModal'),
+  actionModalTitle: document.getElementById('actionModalTitle'),
+  actionModalBody: document.getElementById('actionModalBody'),
+  actionModalOk: document.getElementById('actionModalOk'),
+  actionModalCancel: document.getElementById('actionModalCancel'),
+  btnCloseActionModal: document.getElementById('btnCloseActionModal'),
+  actionModalBackdrop: document.getElementById('actionModalBackdrop'),
+
   authForm: document.getElementById('authForm'),
   authTitle: document.getElementById('authTitle'),
   authSubtitle: document.getElementById('authSubtitle'),
@@ -144,6 +152,204 @@ function isMacOs() {
   const ua = String(navigator.userAgent || '')
   const plat = String(navigator.platform || '')
   return /mac/i.test(plat) || /macintosh/i.test(ua)
+}
+
+function openActionModal({ title, okText, cancelText, build }) {
+  return new Promise((resolve) => {
+    if (
+      !els.actionModal ||
+      !els.actionModalBody ||
+      !els.actionModalTitle ||
+      !els.actionModalOk ||
+      !els.actionModalCancel
+    ) {
+      resolve(null)
+      return
+    }
+
+    els.actionModalTitle.textContent = String(title || 'Action')
+    els.actionModalOk.textContent = String(okText || 'OK')
+    els.actionModalCancel.textContent = String(cancelText || 'Cancel')
+    els.actionModalBody.innerHTML = ''
+
+    let getValue = null
+    if (typeof build === 'function') {
+      getValue = build(els.actionModalBody, els.actionModalOk)
+    }
+
+    const cleanup = () => {
+      document.removeEventListener('keydown', onKeyDown)
+      if (els.btnCloseActionModal) els.btnCloseActionModal.onclick = null
+      if (els.actionModalBackdrop) els.actionModalBackdrop.onclick = null
+      els.actionModalCancel.onclick = null
+      els.actionModalOk.onclick = null
+    }
+
+    const close = (value) => {
+      cleanup()
+      els.actionModal.classList.add('hidden')
+      resolve(value)
+    }
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') close(null)
+    }
+
+    els.actionModalCancel.onclick = () => close(null)
+    els.actionModalOk.onclick = () => {
+      const v = typeof getValue === 'function' ? getValue() : true
+      if (v === undefined) return
+      close(v)
+    }
+    if (els.btnCloseActionModal) els.btnCloseActionModal.onclick = () => close(null)
+    if (els.actionModalBackdrop) els.actionModalBackdrop.onclick = () => close(null)
+    document.addEventListener('keydown', onKeyDown)
+
+    els.actionModal.classList.remove('hidden')
+    setTimeout(() => {
+      const first = els.actionModalBody.querySelector('input, button, select, textarea')
+      if (first && typeof first.focus === 'function') first.focus()
+    }, 0)
+  })
+}
+
+async function confirmAction({ title, message, okText }) {
+  const res = await openActionModal({
+    title,
+    okText: okText || 'Confirm',
+    cancelText: 'Cancel',
+    build: (body) => {
+      const p = document.createElement('div')
+      p.className = 'modalText'
+      p.textContent = String(message || '')
+      body.appendChild(p)
+      return () => true
+    },
+  })
+  return !!res
+}
+
+async function promptDiscount(email) {
+  return openActionModal({
+    title: 'Discount',
+    okText: 'Save',
+    cancelText: 'Cancel',
+    build: (body) => {
+      const wrap = document.createElement('div')
+      wrap.className = 'modalForm'
+
+      const g1 = document.createElement('div')
+      g1.className = 'input-group'
+      const l1 = document.createElement('label')
+      l1.textContent = `Discount percent for ${email}`
+      const i1 = document.createElement('input')
+      i1.type = 'number'
+      i1.min = '0'
+      i1.max = '90'
+      i1.step = '1'
+      i1.placeholder = '0'
+      g1.appendChild(l1)
+      g1.appendChild(i1)
+
+      const g2 = document.createElement('div')
+      g2.className = 'input-group'
+      const l2 = document.createElement('label')
+      l2.textContent = 'Label (optional)'
+      const i2 = document.createElement('input')
+      i2.type = 'text'
+      i2.placeholder = 'founder'
+      g2.appendChild(l2)
+      g2.appendChild(i2)
+
+      wrap.appendChild(g1)
+      wrap.appendChild(g2)
+      body.appendChild(wrap)
+
+      return () => {
+        const pct = Number(String(i1.value || '0').trim() || '0')
+        if (!Number.isFinite(pct) || pct < 0 || pct > 90) {
+          i1.focus()
+          return undefined
+        }
+        const label = String(i2.value || '').trim()
+        return { percent: pct, label: label || null }
+      }
+    },
+  })
+}
+
+async function promptPassword(email) {
+  return openActionModal({
+    title: `Reset password for ${email}`,
+    okText: 'Set password',
+    cancelText: 'Cancel',
+    build: (body) => {
+      const wrap = document.createElement('div')
+      wrap.className = 'modalForm'
+
+      const g1 = document.createElement('div')
+      g1.className = 'input-group'
+      const l1 = document.createElement('label')
+      l1.textContent = 'New password (min 8 chars)'
+      const p1 = document.createElement('input')
+      p1.type = 'password'
+      g1.appendChild(l1)
+      g1.appendChild(p1)
+
+      const g2 = document.createElement('div')
+      g2.className = 'input-group'
+      const l2 = document.createElement('label')
+      l2.textContent = 'Confirm password'
+      const p2 = document.createElement('input')
+      p2.type = 'password'
+      g2.appendChild(l2)
+      g2.appendChild(p2)
+
+      wrap.appendChild(g1)
+      wrap.appendChild(g2)
+      body.appendChild(wrap)
+
+      return () => {
+        const a = String(p1.value || '')
+        const b = String(p2.value || '')
+        if (a.length < 8) {
+          p1.focus()
+          return undefined
+        }
+        if (a !== b) {
+          p2.focus()
+          return undefined
+        }
+        return a
+      }
+    },
+  })
+}
+
+async function promptCustomEndsAt() {
+  return openActionModal({
+    title: 'Custom end date',
+    okText: 'Apply',
+    cancelText: 'Cancel',
+    build: (body) => {
+      const g = document.createElement('div')
+      g.className = 'input-group'
+      const l = document.createElement('label')
+      l.textContent = 'Ends at (date)'
+      const i = document.createElement('input')
+      i.type = 'date'
+      g.appendChild(l)
+      g.appendChild(i)
+      body.appendChild(g)
+      return () => {
+        const s = String(i.value || '').trim()
+        if (!s) return undefined
+        const d = new Date(`${s}T23:59:59Z`)
+        if (Number.isNaN(d.getTime())) return undefined
+        return d.toISOString()
+      }
+    },
+  })
 }
 
 function getAccessToken() {
@@ -249,7 +455,11 @@ async function getLatestDownloadUrl(platformKey) {
 }
 
 async function startPrebetaDownload(platformKey) {
-  const ok = window.confirm('This is a pre-beta build. Download anyway?')
+  const ok = await confirmAction({
+    title: 'Download pre-beta build',
+    message: 'This is a pre-beta build. Download anyway?',
+    okText: 'Download',
+  })
   if (!ok) return
   if (els.downloadStatus) els.downloadStatus.textContent = 'Preparing download…'
   try {
@@ -372,6 +582,7 @@ function applyNav() {
   if (els.marketingFooter) els.marketingFooter.classList.toggle('hidden', !showMarketing)
   if (els.navFullLanding) els.navFullLanding.classList.toggle('hidden', !showMarketing)
   if (els.prebetaLanding) els.prebetaLanding.classList.toggle('hidden', authed || showMarketing)
+  document.querySelectorAll('[data-authed-only="1"]').forEach((el) => el.classList.toggle('hidden', !authed))
   if (els.navUser) els.navUser.classList.toggle('hidden', !authed)
   els.btnSignOut.classList.toggle('hidden', !authed)
   els.btnNavPlans.classList.toggle('hidden', !authed)
@@ -639,8 +850,6 @@ async function showDashboard() {
       await syncSessionData()
       if (!currentEntitlement) {
         showMarketingStatus('Choose your plan: start a 14-day trial or buy a plan.')
-        if (window.location.hash !== '#pricing') window.location.hash = 'pricing'
-        setTimeout(() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
       }
       return
     } catch (err) {
@@ -683,7 +892,7 @@ function fmtDateTime(v) {
   return String(v || '').replace('T', ' ').replace('Z', '')
 }
 
-function computeEndsAt(durationCode) {
+async function computeEndsAt(durationCode) {
   const now = new Date()
   if (durationCode === 'lifetime') return null
   if (durationCode === 'month') {
@@ -697,11 +906,9 @@ function computeEndsAt(durationCode) {
     return d.toISOString()
   }
   if (durationCode === 'custom') {
-    const s = prompt('Ends at (YYYY-MM-DD). Leave empty to cancel.')
-    if (!s) return undefined
-    const d = new Date(`${s}T23:59:59Z`)
-    if (Number.isNaN(d.getTime())) throw new Error('Invalid date')
-    return d.toISOString()
+    const iso = await promptCustomEndsAt()
+    if (!iso) return undefined
+    return iso
   }
   return null
 }
@@ -784,11 +991,11 @@ async function renderAdminUsers() {
       tr.appendChild(adminTd)
 
       const planTd = document.createElement('td')
-      planTd.textContent = u.kivanaPlanName ? `kivana / ${u.kivanaPlanName}` : '—'
+      planTd.textContent = u.kivanaPlanName ? `kivana / ${u.kivanaPlanName}` : ''
       tr.appendChild(planTd)
 
       const endsTd = document.createElement('td')
-      endsTd.textContent = u.kivanaEndsAt ? fmtDateTime(u.kivanaEndsAt) : '—'
+      endsTd.textContent = u.kivanaEndsAt ? fmtDateTime(u.kivanaEndsAt) : ''
       tr.appendChild(endsTd)
 
       const setTd = document.createElement('td')
@@ -831,7 +1038,7 @@ async function renderAdminUsers() {
         els.adminStatus.textContent = 'Applying…'
         applyBtn.disabled = true
         try {
-          const endsAt = computeEndsAt(String(durationSel.value || 'lifetime'))
+          const endsAt = await computeEndsAt(String(durationSel.value || 'lifetime'))
           if (endsAt === undefined) {
             els.adminStatus.textContent = 'Cancelled.'
             return
@@ -892,20 +1099,16 @@ async function renderAdminUsers() {
       discBtn.className = 'btn btn-secondary'
       discBtn.textContent = 'Discount'
       discBtn.addEventListener('click', async () => {
-        const raw = prompt(`Discount percent for ${u.email} (0 to clear). Example: 50`)
-        if (raw == null) return
-        const pct = Number(String(raw).trim() || '0')
-        if (!Number.isFinite(pct) || pct < 0 || pct > 90) {
-          alert('Invalid percent. Use 0-90.')
-          return
-        }
-        const label = pct > 0 ? prompt('Discount label (optional). Example: founder') : ''
+        const res = await promptDiscount(u.email)
+        if (!res) return
+        const pct = Number(res.percent || 0)
+        const label = res.label
         discBtn.disabled = true
         els.adminStatus.textContent = 'Saving…'
         try {
           await apiFetch('/v1/admin/discount', {
             method: 'POST',
-            body: JSON.stringify({ email: u.email, percent: pct, label: label || null }),
+            body: JSON.stringify({ email: u.email, percent: pct, label }),
           })
           adminUsersCache = []
           await renderAdminUsers()
@@ -920,13 +1123,10 @@ async function renderAdminUsers() {
       pwBtn.className = 'btn btn-secondary'
       pwBtn.textContent = 'Reset password'
       pwBtn.addEventListener('click', async () => {
-        const pw = prompt(`New password for ${u.email} (min 8 chars). Leave empty to cancel.`)
+        const pw = await promptPassword(u.email)
         if (!pw) return
-        if (String(pw).length < 8) {
-          alert('Password too short.')
-          return
-        }
         pwBtn.disabled = true
+        els.adminStatus.textContent = 'Saving…'
         try {
           await apiFetch(`/v1/admin/users/${u.id}/password`, {
             method: 'POST',
@@ -934,7 +1134,7 @@ async function renderAdminUsers() {
           })
           await renderAdminUsers()
         } catch (e) {
-          alert(String(e?.message || e))
+          els.adminStatus.textContent = `Failed: ${String(e?.message || e)}`
         } finally {
           pwBtn.disabled = false
         }
@@ -944,13 +1144,19 @@ async function renderAdminUsers() {
       delBtn.className = 'btn btn-secondary'
       delBtn.textContent = 'Delete'
       delBtn.addEventListener('click', async () => {
-        if (!window.confirm(`Delete user ${u.email}? This cannot be undone.`)) return
+        const ok = await confirmAction({
+          title: 'Delete user',
+          message: `Delete user ${u.email}? This cannot be undone.`,
+          okText: 'Delete',
+        })
+        if (!ok) return
         delBtn.disabled = true
+        els.adminStatus.textContent = 'Deleting…'
         try {
           await apiFetch(`/v1/admin/users/${u.id}`, { method: 'DELETE' })
           await renderAdminUsers()
         } catch (e) {
-          alert(String(e?.message || e))
+          els.adminStatus.textContent = `Failed: ${String(e?.message || e)}`
         } finally {
           delBtn.disabled = false
         }
@@ -1111,7 +1317,12 @@ async function handleCancelSubscription() {
   if (!currentEntitlement) return
   const planCode = String(currentEntitlement.planCode || '').trim().toLowerCase()
   if (planCode === 'basic') return
-  if (!window.confirm('Cancel your subscription and switch to Basic?')) return
+  const ok = await confirmAction({
+    title: 'Cancel subscription',
+    message: 'Cancel your subscription and switch to Basic?',
+    okText: 'Cancel subscription',
+  })
+  if (!ok) return
   await handleSelectPlan({ planCode: 'basic' }, els.accountStatus)
 }
 
@@ -1136,7 +1347,10 @@ function setAuthMode(loginMode) {
 if (els.linkToggleAuth) els.linkToggleAuth.addEventListener('click', toggleAuthMode)
 if (els.authForm) els.authForm.addEventListener('submit', handleAuthSubmit)
 if (els.btnSignOut) els.btnSignOut.addEventListener('click', handleSignOut)
-if (els.btnNavPlans) els.btnNavPlans.addEventListener('click', () => void showDashboard())
+if (els.btnNavPlans) els.btnNavPlans.addEventListener('click', async () => {
+  await showDashboard()
+  setTimeout(() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
+})
 if (els.btnNavAccount) els.btnNavAccount.addEventListener('click', () => void showAccount())
 if (els.btnNavAdmin) els.btnNavAdmin.addEventListener('click', () => void showAdmin())
 if (els.btnAdminReload) els.btnAdminReload.addEventListener('click', () => void showAdmin())
@@ -1174,6 +1388,7 @@ if (els.btnMacGuide) {
 
 async function goToPublicSection(id) {
   if (isAuthed() || !fullLanding) return
+  if (id === 'pricing') return
   pendingPlanSelection = null
   await showDashboard()
   if (window.location.hash !== `#${id}`) window.location.hash = id
@@ -1276,8 +1491,8 @@ function showMarketingStatus(message) {
 
 async function handleDownloadClick() {
   if (isAuthed()) return
-  await goToPublicSection('pricing')
-  showMarketingStatus('Downloads are coming soon. Create an account and choose a plan to get ready.')
+  await goToPublicSection('how')
+  showMarketingStatus('Downloads are pre-beta. Create an account to get started.')
 }
 
 if (els.osMac) els.osMac.addEventListener('click', () => setSelectedOs('mac'))
@@ -1296,7 +1511,7 @@ async function applyHashNav() {
     : id === 'resources' ? 'preview'
     : id === 'accountants' ? 'different'
     : id
-  const allow = new Set(['benefits', 'security', 'how', 'preview', 'different', 'pricing'])
+  const allow = new Set(['benefits', 'security', 'how', 'preview', 'different'])
   if (!allow.has(normalized)) return
   await showDashboard()
   setTimeout(() => document.getElementById(normalized)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
@@ -1326,7 +1541,10 @@ document.querySelectorAll('[data-plan]').forEach((el) => {
   })
 })
 
-if (els.btnManagePlans) els.btnManagePlans.addEventListener('click', () => void showDashboard())
+if (els.btnManagePlans) els.btnManagePlans.addEventListener('click', async () => {
+  await showDashboard()
+  setTimeout(() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
+})
 if (els.btnCancelSub) els.btnCancelSub.addEventListener('click', () => void handleCancelSubscription())
 if (els.btnSaveProfile) els.btnSaveProfile.addEventListener('click', () => void handleSaveProfile())
 if (els.avatarFile) {

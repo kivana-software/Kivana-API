@@ -20,6 +20,13 @@ const els = {
   bootstrapToken: document.getElementById('bootstrapToken'),
   bootstrapBtn: document.getElementById('bootstrapBtn'),
   bootstrapStatus: document.getElementById('bootstrapStatus'),
+  actionModal: document.getElementById('actionModal'),
+  actionModalTitle: document.getElementById('actionModalTitle'),
+  actionModalBody: document.getElementById('actionModalBody'),
+  actionModalOk: document.getElementById('actionModalOk'),
+  actionModalCancel: document.getElementById('actionModalCancel'),
+  actionModalBackdrop: document.getElementById('actionModalBackdrop'),
+  btnCloseActionModal: document.getElementById('btnCloseActionModal'),
 }
 
 function normalizeBaseUrl(v) {
@@ -29,6 +36,171 @@ function normalizeBaseUrl(v) {
 
 function setStatus(el, msg) {
   el.textContent = msg || ''
+}
+
+function openActionModal({ title, okText, cancelText, build }) {
+  return new Promise((resolve) => {
+    if (
+      !els.actionModal ||
+      !els.actionModalBody ||
+      !els.actionModalTitle ||
+      !els.actionModalOk ||
+      !els.actionModalCancel
+    ) {
+      resolve(null)
+      return
+    }
+
+    els.actionModalTitle.textContent = String(title || 'Action')
+    els.actionModalOk.textContent = String(okText || 'OK')
+    els.actionModalCancel.textContent = String(cancelText || 'Cancel')
+    els.actionModalBody.innerHTML = ''
+
+    let getValue = null
+    if (typeof build === 'function') {
+      getValue = build(els.actionModalBody, els.actionModalOk)
+    }
+
+    const cleanup = () => {
+      document.removeEventListener('keydown', onKeyDown)
+      if (els.btnCloseActionModal) els.btnCloseActionModal.onclick = null
+      if (els.actionModalBackdrop) els.actionModalBackdrop.onclick = null
+      els.actionModalCancel.onclick = null
+      els.actionModalOk.onclick = null
+    }
+
+    const close = (value) => {
+      cleanup()
+      els.actionModal.classList.add('hidden')
+      resolve(value)
+    }
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') close(null)
+    }
+
+    els.actionModalCancel.onclick = () => close(null)
+    els.actionModalOk.onclick = () => {
+      const v = typeof getValue === 'function' ? getValue() : true
+      if (v === undefined) return
+      close(v)
+    }
+    if (els.btnCloseActionModal) els.btnCloseActionModal.onclick = () => close(null)
+    if (els.actionModalBackdrop) els.actionModalBackdrop.onclick = () => close(null)
+    document.addEventListener('keydown', onKeyDown)
+
+    els.actionModal.classList.remove('hidden')
+    setTimeout(() => {
+      const first = els.actionModalBody.querySelector('input, button, select, textarea')
+      if (first && typeof first.focus === 'function') first.focus()
+    }, 0)
+  })
+}
+
+async function confirmAction({ title, message, okText }) {
+  const res = await openActionModal({
+    title,
+    okText: okText || 'Confirm',
+    cancelText: 'Cancel',
+    build: (body) => {
+      const p = document.createElement('div')
+      p.className = 'modalText'
+      p.textContent = String(message || '')
+      body.appendChild(p)
+      return () => true
+    },
+  })
+  return !!res
+}
+
+async function promptPassword(email) {
+  return openActionModal({
+    title: `Reset password for ${email}`,
+    okText: 'Set password',
+    cancelText: 'Cancel',
+    build: (body) => {
+      const wrap = document.createElement('div')
+      wrap.className = 'modalForm'
+
+      const r1 = document.createElement('div')
+      r1.className = 'row'
+      const l1 = document.createElement('label')
+      l1.className = 'label'
+      l1.textContent = 'New password'
+      const p1 = document.createElement('input')
+      p1.className = 'input'
+      p1.type = 'password'
+      r1.appendChild(l1)
+      r1.appendChild(p1)
+
+      const r2 = document.createElement('div')
+      r2.className = 'row'
+      const l2 = document.createElement('label')
+      l2.className = 'label'
+      l2.textContent = 'Confirm password'
+      const p2 = document.createElement('input')
+      p2.className = 'input'
+      p2.type = 'password'
+      r2.appendChild(l2)
+      r2.appendChild(p2)
+
+      wrap.appendChild(r1)
+      wrap.appendChild(r2)
+      body.appendChild(wrap)
+
+      const note = document.createElement('div')
+      note.className = 'modalText'
+      note.textContent = 'Minimum 8 characters.'
+      body.appendChild(note)
+
+      return () => {
+        const a = String(p1.value || '')
+        const b = String(p2.value || '')
+        if (a.length < 8) {
+          p1.focus()
+          return undefined
+        }
+        if (a !== b) {
+          p2.focus()
+          return undefined
+        }
+        return a
+      }
+    },
+  })
+}
+
+async function promptCustomEndsAt() {
+  return openActionModal({
+    title: 'Custom end date',
+    okText: 'Apply',
+    cancelText: 'Cancel',
+    build: (body) => {
+      const wrap = document.createElement('div')
+      wrap.className = 'modalForm'
+
+      const r = document.createElement('div')
+      r.className = 'row'
+      const l = document.createElement('label')
+      l.className = 'label'
+      l.textContent = 'Ends at (date)'
+      const i = document.createElement('input')
+      i.className = 'input'
+      i.type = 'date'
+      r.appendChild(l)
+      r.appendChild(i)
+      wrap.appendChild(r)
+      body.appendChild(wrap)
+
+      return () => {
+        const s = String(i.value || '').trim()
+        if (!s) return undefined
+        const d = new Date(`${s}T23:59:59Z`)
+        if (Number.isNaN(d.getTime())) return undefined
+        return d.toISOString()
+      }
+    },
+  })
 }
 
 function getAccessToken() {
@@ -59,7 +231,7 @@ function fmtDateTime(v) {
   return String(v || '').replace('T', ' ').replace('Z', '')
 }
 
-function computeEndsAt(durationCode) {
+async function computeEndsAt(durationCode) {
   const now = new Date()
   if (durationCode === 'lifetime') return null
   if (durationCode === 'month') {
@@ -73,11 +245,9 @@ function computeEndsAt(durationCode) {
     return d.toISOString()
   }
   if (durationCode === 'custom') {
-    const s = prompt('Ends at (YYYY-MM-DD). Leave empty to cancel.')
-    if (!s) return undefined
-    const d = new Date(`${s}T23:59:59Z`)
-    if (Number.isNaN(d.getTime())) throw new Error('Invalid date')
-    return d.toISOString()
+    const iso = await promptCustomEndsAt()
+    if (!iso) return undefined
+    return iso
   }
   return null
 }
@@ -139,12 +309,12 @@ async function loadUsers() {
     tr.appendChild(adminTd)
 
     const planTd = document.createElement('td')
-    planTd.textContent = u.kivanaPlanName ? `kivana / ${u.kivanaPlanName}` : '—'
+    planTd.textContent = u.kivanaPlanName ? `kivana / ${u.kivanaPlanName}` : 'None'
     tr.appendChild(planTd)
 
     const endsTd = document.createElement('td')
     if (!u.kivanaEndsAt) {
-      endsTd.textContent = '—'
+      endsTd.textContent = 'None'
     } else {
       const t = new Date(u.kivanaEndsAt)
       if (!Number.isNaN(t.getTime()) && t.getTime() <= Date.now()) {
@@ -197,7 +367,7 @@ async function loadUsers() {
     btn.addEventListener('click', async () => {
       setStatus(els.panelStatus, 'Applying…')
       try {
-        const endsAt = computeEndsAt(String(durationSel.value || 'lifetime'))
+        const endsAt = await computeEndsAt(String(durationSel.value || 'lifetime'))
         if (endsAt === undefined) {
           setStatus(els.panelStatus, 'Cancelled.')
           return
@@ -232,22 +402,18 @@ async function loadUsers() {
     pwBtn.className = 'btn'
     pwBtn.textContent = 'Reset password'
     pwBtn.onclick = async () => {
-      const pw = prompt(`New password for ${u.email} (min 8 chars). Leave empty to cancel.`)
+      const pw = await promptPassword(u.email || '')
       if (!pw) return
-      if (String(pw).length < 8) {
-        alert('Password too short.')
-        return
-      }
       pwBtn.disabled = true
       pwBtn.textContent = '...'
       try {
         await apiFetch(`/v1/admin/users/${u.id}/password`, {
           method: 'POST',
-          body: JSON.stringify({ password: String(pw) }),
+          body: JSON.stringify({ password: String(pw || '') }),
         })
         await loadUsers()
       } catch (e) {
-        alert(String(e))
+        setStatus(els.panelStatus, `Failed: ${String(e?.message || e)}`)
       } finally {
         pwBtn.disabled = false
         pwBtn.textContent = 'Reset password'
@@ -256,18 +422,23 @@ async function loadUsers() {
 
     const delBtn = document.createElement('button')
     delBtn.className = 'btn'
-    delBtn.style.color = 'var(--text)'
+    delBtn.style.color = 'rgba(255, 255, 255, 0.92)'
     delBtn.style.backgroundColor = '#441111'
     delBtn.textContent = 'Delete'
     delBtn.onclick = async () => {
-      if (!confirm(`Are you sure you want to delete ${u.email}?`)) return
+      const ok = await confirmAction({
+        title: 'Delete user',
+        message: `Delete ${u.email}? This cannot be undone.`,
+        okText: 'Delete',
+      })
+      if (!ok) return
       delBtn.disabled = true
       delBtn.textContent = '...'
       try {
         await apiFetch(`/v1/admin/users/${u.id}`, { method: 'DELETE' })
         await loadUsers()
       } catch (e) {
-        alert(String(e))
+        setStatus(els.panelStatus, `Failed: ${String(e?.message || e)}`)
         delBtn.disabled = false
         delBtn.textContent = 'Delete'
       }
