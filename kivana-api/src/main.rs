@@ -139,6 +139,11 @@ struct UserInfo {
     display_name: Option<String>,
     avatar_data_url: Option<String>,
     is_admin: bool,
+    is_moderator: bool,
+    is_founder: bool,
+    discount_percent: Option<i32>,
+    discount_label: Option<String>,
+    discount_expires_at: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -192,6 +197,21 @@ struct AdminSetPasswordRequest {
     password: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AdminSetModeratorRequest {
+    email: String,
+    enabled: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AdminSetDiscountRequest {
+    email: String,
+    percent: i32,
+    label: Option<String>,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AdminUserRow {
@@ -199,6 +219,11 @@ struct AdminUserRow {
     email: String,
     created_at: String,
     is_admin: bool,
+    is_moderator: bool,
+    is_founder: bool,
+    discount_percent: Option<i32>,
+    discount_label: Option<String>,
+    discount_expires_at: Option<String>,
     last_ip: Option<String>,
     kivana_plan_code: Option<String>,
     kivana_plan_name: Option<String>,
@@ -267,6 +292,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/users", get(admin_users))
         .route("/v1/admin/users/:id", delete(admin_delete_user))
         .route("/v1/admin/users/:id/password", post(admin_set_password))
+        .route("/v1/admin/moderator", post(admin_set_moderator))
+        .route("/v1/admin/discount", post(admin_set_discount))
         .route("/v1/admin/grant", post(admin_grant))
         .route("/v1/portal/select-plan", post(portal_select_plan))
         .route("/v1/events/poll", get(poll_events))
@@ -362,10 +389,15 @@ async fn signup(
     }
 
     let user_id = Uuid::new_v4();
-    let password_hash = hash_password(&req.password).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
-    let password_hash = match password_hash {
+    let password_hash = match hash_password(&req.password) {
         Ok(v) => v,
-        Err(code) => return err(code, "hash_failed").into_response(),
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "hash_failed").into_response(),
+    };
+
+    let tx = state.pool.begin().await;
+    let mut tx = match tx {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
     };
 
     let inserted = sqlx::query(
@@ -380,7 +412,7 @@ async fn signup(
     .bind(&email)
     .bind(&password_hash)
     .bind(&client_ip)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut *tx)
     .await;
 
     match inserted {
@@ -389,7 +421,73 @@ async fn signup(
         Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
     }
 
-    let tokens = issue_tokens(&state, user_id, &email, false).await;
+    let _ = sqlx::query("SELECT pg_advisory_xact_lock(780001)")
+        .execute(&mut *tx)
+        .await;
+    let founders_count_row = sqlx::query("SELECT COUNT(*) AS c FROM users WHERE is_founder = TRUE")
+        .fetch_one(&mut *tx)
+        .await;
+    let founders_count: i64 = match founders_count_row {
+        Ok(r) => r.get::<i64, _>("c"),
+        Err(_) => 0,
+    };
+    if founders_count < 20 {
+        let now = OffsetDateTime::now_utc();
+        let _ = sqlx::query(
+            r#"
+          UPDATE users
+          SET is_founder = TRUE,
+              founder_discount_at = $1,
+              discount_percent = 50,
+              discount_label = 'founder',
+              discount_expires_at = NULL
+          WHERE id = $2
+            AND is_admin = FALSE
+            AND is_founder = FALSE
+        "#,
+        )
+        .bind(now)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await;
+    }
+
+    if tx.commit().await.is_err() {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+    }
+
+    let flags = sqlx::query(
+        "SELECT is_admin, is_moderator, is_founder, discount_percent, discount_label, discount_expires_at FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_one(&state.pool)
+    .await;
+    let (is_admin, is_moderator, is_founder, discount_percent, discount_label, discount_expires_at) = match flags {
+        Ok(r) => (
+            r.try_get::<bool, _>("is_admin").unwrap_or(false),
+            r.try_get::<bool, _>("is_moderator").unwrap_or(false),
+            r.try_get::<bool, _>("is_founder").unwrap_or(false),
+            r.try_get::<Option<i32>, _>("discount_percent").ok().flatten(),
+            r.try_get::<Option<String>, _>("discount_label").ok().flatten(),
+            r.try_get::<Option<sqlx::types::time::OffsetDateTime>, _>("discount_expires_at")
+                .ok()
+                .flatten(),
+        ),
+        Err(_) => (false, false, false, None, None, None),
+    };
+
+    let tokens = issue_tokens(
+        &state,
+        user_id,
+        &email,
+        is_admin,
+        is_moderator,
+        is_founder,
+        discount_percent,
+        discount_label,
+        discount_expires_at,
+    )
+    .await;
     match tokens {
         Ok(v) => (StatusCode::OK, Json(v)).into_response(),
         Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "token_error").into_response(),
@@ -420,7 +518,9 @@ async fn login(
         return err(StatusCode::TOO_MANY_REQUESTS, "too_many_requests").into_response();
     }
 
-    let row = sqlx::query("SELECT id, password_hash, is_admin, admin_lock_ip FROM users WHERE email = $1")
+    let row = sqlx::query(
+        "SELECT id, password_hash, is_admin, is_moderator, is_founder, discount_percent, discount_label, discount_expires_at, admin_lock_ip FROM users WHERE email = $1",
+    )
         .bind(&email)
         .fetch_optional(&state.pool)
         .await;
@@ -434,6 +534,12 @@ async fn login(
     let user_id: Uuid = row.get("id");
     let password_hash: String = row.get("password_hash");
     let is_admin: bool = row.get("is_admin");
+    let is_moderator: bool = row.try_get("is_moderator").unwrap_or(false);
+    let is_founder: bool = row.try_get("is_founder").unwrap_or(false);
+    let discount_percent: Option<i32> = row.try_get("discount_percent").ok().flatten();
+    let discount_label: Option<String> = row.try_get("discount_label").ok().flatten();
+    let discount_expires_at: Option<sqlx::types::time::OffsetDateTime> =
+        row.try_get("discount_expires_at").ok().flatten();
     let admin_lock_ip: Option<String> = row.try_get("admin_lock_ip").ok().flatten();
     if !verify_password(&req.password, &password_hash) {
         return err(StatusCode::UNAUTHORIZED, "invalid_credentials").into_response();
@@ -467,7 +573,18 @@ async fn login(
             .await;
     }
 
-    let tokens = issue_tokens(&state, user_id, &email, is_admin).await;
+    let tokens = issue_tokens(
+        &state,
+        user_id,
+        &email,
+        is_admin,
+        is_moderator,
+        is_founder,
+        discount_percent,
+        discount_label,
+        discount_expires_at,
+    )
+    .await;
     match tokens {
         Ok(v) => (StatusCode::OK, Json(v)).into_response(),
         Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "token_error").into_response(),
@@ -487,7 +604,16 @@ async fn refresh(
 
     let row = sqlx::query(
         r#"
-      SELECT s.id, s.user_id, u.email, u.is_admin
+      SELECT
+        s.id,
+        s.user_id,
+        u.email,
+        u.is_admin,
+        u.is_moderator,
+        u.is_founder,
+        u.discount_percent,
+        u.discount_label,
+        u.discount_expires_at
       FROM sessions s
       JOIN users u ON u.id = s.user_id
       WHERE s.refresh_token_hash = $1
@@ -510,6 +636,12 @@ async fn refresh(
     let user_id: Uuid = row.get("user_id");
     let email: String = row.get("email");
     let is_admin: bool = row.get("is_admin");
+    let is_moderator: bool = row.try_get("is_moderator").unwrap_or(false);
+    let is_founder: bool = row.try_get("is_founder").unwrap_or(false);
+    let discount_percent: Option<i32> = row.try_get("discount_percent").ok().flatten();
+    let discount_label: Option<String> = row.try_get("discount_label").ok().flatten();
+    let discount_expires_at: Option<sqlx::types::time::OffsetDateTime> =
+        row.try_get("discount_expires_at").ok().flatten();
 
     let new_refresh = random_token_urlsafe(48);
     let new_hash = sha256_hex(new_refresh.as_bytes());
@@ -546,6 +678,14 @@ async fn refresh(
                     display_name: None,
                     avatar_data_url: None,
                     is_admin,
+                    is_moderator,
+                    is_founder,
+                    discount_percent,
+                    discount_label,
+                    discount_expires_at: discount_expires_at.map(|t| {
+                        t.format(&time::format_description::well_known::Rfc3339)
+                            .unwrap_or_default()
+                    }),
                 },
             }),
         )
@@ -597,11 +737,12 @@ async fn me(
         Err(_) => return err(StatusCode::UNAUTHORIZED, "invalid_token").into_response(),
     };
 
-    let row =
-        sqlx::query("SELECT id, email, display_name, avatar_data_url, is_admin FROM users WHERE id = $1")
-            .bind(user_id)
-            .fetch_optional(&state.pool)
-            .await;
+    let row = sqlx::query(
+        "SELECT id, email, display_name, avatar_data_url, is_admin, is_moderator, is_founder, discount_percent, discount_label, discount_expires_at FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(&state.pool)
+    .await;
 
     let row = match row {
         Ok(Some(r)) => r,
@@ -614,6 +755,12 @@ async fn me(
     let display_name: Option<String> = row.try_get("display_name").unwrap_or(None);
     let avatar_data_url: Option<String> = row.try_get("avatar_data_url").unwrap_or(None);
     let is_admin: bool = row.try_get("is_admin").unwrap_or(false);
+    let is_moderator: bool = row.try_get("is_moderator").unwrap_or(false);
+    let is_founder: bool = row.try_get("is_founder").unwrap_or(false);
+    let discount_percent: Option<i32> = row.try_get("discount_percent").ok().flatten();
+    let discount_label: Option<String> = row.try_get("discount_label").ok().flatten();
+    let discount_expires_at: Option<sqlx::types::time::OffsetDateTime> =
+        row.try_get("discount_expires_at").ok().flatten();
     (
         StatusCode::OK,
         Json(UserInfo {
@@ -622,6 +769,14 @@ async fn me(
             display_name,
             avatar_data_url,
             is_admin,
+            is_moderator,
+            is_founder,
+            discount_percent,
+            discount_label,
+            discount_expires_at: discount_expires_at.map(|t| {
+                t.format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default()
+            }),
         }),
     )
         .into_response()
@@ -934,7 +1089,7 @@ async fn admin_grant(
     connect_info: Option<ConnectInfo<SocketAddr>>,
     Json(req): Json<AdminGrantRequest>,
 ) -> axum::response::Response {
-    if let Err(r) = require_admin(&state, &headers, connect_info).await {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
         return r;
     }
 
@@ -1080,7 +1235,7 @@ async fn admin_users(
     headers: axum::http::HeaderMap,
     connect_info: Option<ConnectInfo<SocketAddr>>,
 ) -> axum::response::Response {
-    if let Err(r) = require_admin(&state, &headers, connect_info).await {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
         return r;
     }
 
@@ -1091,6 +1246,11 @@ async fn admin_users(
         u.email AS email,
         u.created_at AS created_at,
         u.is_admin AS is_admin,
+        u.is_moderator AS is_moderator,
+        u.is_founder AS is_founder,
+        u.discount_percent AS discount_percent,
+        u.discount_label AS discount_label,
+        u.discount_expires_at AS discount_expires_at,
         u.last_ip AS last_ip,
         pl.code AS plan_code,
         pl.name AS plan_name,
@@ -1120,6 +1280,12 @@ async fn admin_users(
         let email: String = r.get("email");
         let created_at: sqlx::types::time::OffsetDateTime = r.get("created_at");
         let is_admin: bool = r.get("is_admin");
+        let is_moderator: bool = r.try_get("is_moderator").unwrap_or(false);
+        let is_founder: bool = r.try_get("is_founder").unwrap_or(false);
+        let discount_percent: Option<i32> = r.try_get("discount_percent").ok().flatten();
+        let discount_label: Option<String> = r.try_get("discount_label").ok().flatten();
+        let discount_expires_at: Option<sqlx::types::time::OffsetDateTime> =
+            r.try_get("discount_expires_at").ok().flatten();
         let last_ip: Option<String> = r.try_get("last_ip").ok().flatten();
         let plan_code: Option<String> = r.try_get("plan_code").ok();
         let plan_name: Option<String> = r.try_get("plan_name").ok();
@@ -1132,6 +1298,14 @@ async fn admin_users(
                 .format(&time::format_description::well_known::Rfc3339)
                 .unwrap_or_default(),
             is_admin,
+            is_moderator,
+            is_founder,
+            discount_percent,
+            discount_label,
+            discount_expires_at: discount_expires_at.map(|t| {
+                t.format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default()
+            }),
             last_ip,
             kivana_plan_code: plan_code,
             kivana_plan_name: plan_name,
@@ -1151,8 +1325,23 @@ async fn admin_delete_user(
     connect_info: Option<ConnectInfo<SocketAddr>>,
     axum::extract::Path(id): axum::extract::Path<Uuid>,
 ) -> axum::response::Response {
-    if let Err(r) = require_admin(&state, &headers, connect_info).await {
-        return r;
+    let role = match require_staff(&state, &headers, connect_info).await {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    if role == StaffRole::Moderator {
+        let row = sqlx::query("SELECT is_admin FROM users WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&state.pool)
+            .await;
+        let is_admin = match row {
+            Ok(Some(r)) => r.get::<bool, _>("is_admin"),
+            Ok(None) => return err(StatusCode::NOT_FOUND, "user_not_found").into_response(),
+            Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+        };
+        if is_admin {
+            return err(StatusCode::FORBIDDEN, "forbidden").into_response();
+        }
     }
 
     let res = sqlx::query("DELETE FROM users WHERE id = $1")
@@ -1173,8 +1362,23 @@ async fn admin_set_password(
     axum::extract::Path(id): axum::extract::Path<Uuid>,
     Json(req): Json<AdminSetPasswordRequest>,
 ) -> axum::response::Response {
-    if let Err(r) = require_admin(&state, &headers, connect_info).await {
-        return r;
+    let role = match require_staff(&state, &headers, connect_info).await {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    if role == StaffRole::Moderator {
+        let row = sqlx::query("SELECT is_admin FROM users WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&state.pool)
+            .await;
+        let is_admin = match row {
+            Ok(Some(r)) => r.get::<bool, _>("is_admin"),
+            Ok(None) => return err(StatusCode::NOT_FOUND, "user_not_found").into_response(),
+            Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+        };
+        if is_admin {
+            return err(StatusCode::FORBIDDEN, "forbidden").into_response();
+        }
     }
     if req.password.len() < 8 {
         return err(StatusCode::BAD_REQUEST, "weak_password").into_response();
@@ -1204,6 +1408,115 @@ async fn admin_set_password(
             (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
         }
         Ok(_) => err(StatusCode::NOT_FOUND, "user_not_found").into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
+}
+
+async fn admin_set_moderator(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    Json(req): Json<AdminSetModeratorRequest>,
+) -> axum::response::Response {
+    let role = match require_staff(&state, &headers, connect_info).await {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    if role != StaffRole::Admin {
+        return err(StatusCode::FORBIDDEN, "forbidden").into_response();
+    }
+
+    let email = normalize_email(&req.email);
+    if !is_valid_email(&email) {
+        return err(StatusCode::BAD_REQUEST, "invalid_email").into_response();
+    }
+
+    let row = sqlx::query("SELECT id, is_admin FROM users WHERE email = $1")
+        .bind(&email)
+        .fetch_optional(&state.pool)
+        .await;
+    let row = match row {
+        Ok(Some(r)) => r,
+        Ok(None) => return err(StatusCode::NOT_FOUND, "user_not_found").into_response(),
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+    let id: Uuid = row.get("id");
+    let is_admin: bool = row.get("is_admin");
+    if is_admin {
+        return err(StatusCode::FORBIDDEN, "forbidden").into_response();
+    }
+
+    let res = sqlx::query("UPDATE users SET is_moderator = $1 WHERE id = $2")
+        .bind(req.enabled)
+        .bind(id)
+        .execute(&state.pool)
+        .await;
+    match res {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
+}
+
+async fn admin_set_discount(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    Json(req): Json<AdminSetDiscountRequest>,
+) -> axum::response::Response {
+    let role = match require_staff(&state, &headers, connect_info).await {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    if role != StaffRole::Admin {
+        return err(StatusCode::FORBIDDEN, "forbidden").into_response();
+    }
+
+    let email = normalize_email(&req.email);
+    if !is_valid_email(&email) {
+        return err(StatusCode::BAD_REQUEST, "invalid_email").into_response();
+    }
+    if req.percent < 0 || req.percent > 90 {
+        return err(StatusCode::BAD_REQUEST, "invalid_discount").into_response();
+    }
+    if let Some(ref label) = req.label {
+        if label.trim().len() > 64 {
+            return err(StatusCode::BAD_REQUEST, "invalid_discount").into_response();
+        }
+    }
+
+    let user_row = sqlx::query("SELECT id FROM users WHERE email = $1")
+        .bind(&email)
+        .fetch_optional(&state.pool)
+        .await;
+    let user_id: Uuid = match user_row {
+        Ok(Some(r)) => r.get("id"),
+        Ok(None) => return err(StatusCode::NOT_FOUND, "user_not_found").into_response(),
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    let percent: Option<i32> = if req.percent == 0 { None } else { Some(req.percent) };
+    let label: Option<String> = percent.as_ref().map(|_| {
+        req.label
+            .clone()
+            .unwrap_or_else(|| "discount".to_string())
+            .trim()
+            .to_string()
+    });
+    let res = if percent.is_none() {
+        sqlx::query("UPDATE users SET discount_percent = NULL, discount_label = NULL, discount_expires_at = NULL WHERE id = $1")
+            .bind(user_id)
+            .execute(&state.pool)
+            .await
+    } else {
+        sqlx::query("UPDATE users SET discount_percent = $1, discount_label = $2 WHERE id = $3")
+            .bind(percent)
+            .bind(label)
+            .bind(user_id)
+            .execute(&state.pool)
+            .await
+    };
+    match res {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
         Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
     }
 }
@@ -1273,58 +1586,74 @@ fn access_user_id(
     Ok(user_id)
 }
 
-async fn require_admin(
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StaffRole {
+    Admin,
+    Moderator,
+}
+
+async fn require_staff(
     state: &AppState,
     headers: &axum::http::HeaderMap,
     connect_info: Option<ConnectInfo<SocketAddr>>,
-) -> Result<(), axum::response::Response> {
+) -> Result<StaffRole, axum::response::Response> {
     let user_id = match access_user_id(state, headers) {
         Ok(v) => v,
         Err(r) => return Err(r),
     };
 
-    let row = sqlx::query("SELECT is_admin, admin_lock_ip FROM users WHERE id = $1")
+    let row = sqlx::query("SELECT is_admin, is_moderator, admin_lock_ip FROM users WHERE id = $1")
         .bind(user_id)
         .fetch_optional(&state.pool)
         .await;
 
-    let (is_admin, admin_lock_ip): (bool, Option<String>) = match row {
-        Ok(Some(r)) => (r.get("is_admin"), r.try_get("admin_lock_ip").ok().flatten()),
+    let (is_admin, is_moderator, admin_lock_ip): (bool, bool, Option<String>) = match row {
+        Ok(Some(r)) => (
+            r.get("is_admin"),
+            r.try_get("is_moderator").unwrap_or(false),
+            r.try_get("admin_lock_ip").ok().flatten(),
+        ),
         Ok(None) => return Err(err(StatusCode::UNAUTHORIZED, "invalid_token").into_response()),
         Err(_) => return Err(err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response()),
     };
 
-    if !is_admin {
-        return Err(err(StatusCode::FORBIDDEN, "forbidden").into_response());
-    }
-
-    if let Some(locked) = admin_lock_ip
-        .as_deref()
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-    {
-        let ip = get_client_ip(headers, connect_info);
-        let ip = match ip {
-            Some(v) => v,
-            None => return Err(err(StatusCode::FORBIDDEN, "admin_ip_required").into_response()),
-        };
-        if ip != locked {
-            return Err(err(StatusCode::FORBIDDEN, "admin_ip_locked").into_response());
-        }
+    let role = if is_admin {
+        StaffRole::Admin
+    } else if is_moderator {
+        StaffRole::Moderator
     } else {
-        let ip = get_client_ip(headers, connect_info);
-        if let Some(ip) = ip {
-            let now = OffsetDateTime::now_utc();
-            let _ = sqlx::query("UPDATE users SET admin_lock_ip = $1, admin_lock_at = $2 WHERE id = $3 AND admin_lock_ip IS NULL")
-                .bind(&ip)
-                .bind(now)
-                .bind(user_id)
-                .execute(&state.pool)
-                .await;
+        return Err(err(StatusCode::FORBIDDEN, "forbidden").into_response());
+    };
+
+    if role == StaffRole::Admin {
+        if let Some(locked) = admin_lock_ip
+            .as_deref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+        {
+            let ip = get_client_ip(headers, connect_info);
+            let ip = match ip {
+                Some(v) => v,
+                None => return Err(err(StatusCode::FORBIDDEN, "admin_ip_required").into_response()),
+            };
+            if ip != locked {
+                return Err(err(StatusCode::FORBIDDEN, "admin_ip_locked").into_response());
+            }
+        } else {
+            let ip = get_client_ip(headers, connect_info);
+            if let Some(ip) = ip {
+                let now = OffsetDateTime::now_utc();
+                let _ = sqlx::query("UPDATE users SET admin_lock_ip = $1, admin_lock_at = $2 WHERE id = $3 AND admin_lock_ip IS NULL")
+                    .bind(&ip)
+                    .bind(now)
+                    .bind(user_id)
+                    .execute(&state.pool)
+                    .await;
+            }
         }
     }
-    Ok(())
+    Ok(role)
 }
 
 async fn issue_tokens(
@@ -1332,6 +1661,11 @@ async fn issue_tokens(
     user_id: Uuid,
     email: &str,
     is_admin: bool,
+    is_moderator: bool,
+    is_founder: bool,
+    discount_percent: Option<i32>,
+    discount_label: Option<String>,
+    discount_expires_at: Option<sqlx::types::time::OffsetDateTime>,
 ) -> anyhow::Result<AuthResponse> {
     let now = OffsetDateTime::now_utc();
     let access_token = issue_access_token(state, user_id, email)?;
@@ -1363,6 +1697,14 @@ async fn issue_tokens(
             display_name: None,
             avatar_data_url: None,
             is_admin,
+            is_moderator,
+            is_founder,
+            discount_percent,
+            discount_label,
+            discount_expires_at: discount_expires_at.map(|t| {
+                t.format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default()
+            }),
         },
     })
 }

@@ -15,7 +15,7 @@
   <meta property="og:url" content="https://kivana.eu/" />
   <meta property="og:image" content="https://kivana.eu/kivana-logo.png" />
   <meta name="twitter:card" content="summary" />
-  <link rel="stylesheet" href="portal.css?v=0.4.11" />
+  <link rel="stylesheet" href="portal.css?v=0.4.12" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -28,7 +28,7 @@
         <span class="logoText">Kivana</span>
       </div>
       <div class="nav-links">
-        <div class="nav-main">
+        <div class="nav-main hidden" id="navFullLanding">
           <button class="nav-anchor" id="navFeatures">How it works</button>
           <button class="nav-anchor" id="navPricing">Pricing</button>
           <button class="nav-anchor" id="navSecurity">Security</button>
@@ -157,7 +157,42 @@
     <!-- Dashboard View (Plan Selection) -->
     <div id="viewDashboard" class="view active">
       <div class="dashboard-header">
-        <div id="marketingSections">
+        <div id="prebetaLanding" class="prebetaLanding">
+          <div class="prebetaHero">
+            <div class="prebetaHeroTop">
+              <div class="prebetaTag">Pre-beta</div>
+              <div class="prebetaTitle">Kivana account portal</div>
+            </div>
+            <div class="prebetaSubtitle">
+              Create an account, sign in, and manage your plan. The product is still in progress — features will expand over time.
+            </div>
+            <div class="prebetaActions">
+              <button class="btn btn-primary" id="btnPrebetaCreate">Create account</button>
+              <button class="btn btn-secondary" id="btnPrebetaSignIn">Sign in</button>
+            </div>
+          </div>
+
+          <div class="prebetaGrid" aria-label="Pre-beta info">
+            <div class="prebetaCard">
+              <div class="prebetaCardTitle">Minimal & focused</div>
+              <div class="prebetaCardText">Account + plan management only. More coming soon.</div>
+            </div>
+            <div class="prebetaCard">
+              <div class="prebetaCardTitle">Security basics</div>
+              <div class="prebetaCardText">HTTPS in transit, strong password hashing, revocable sessions.</div>
+            </div>
+            <div class="prebetaCard">
+              <div class="prebetaCardTitle">Founder accounts</div>
+              <div class="prebetaCardText">First 20 accounts get 50% lifetime discount.</div>
+            </div>
+            <div class="prebetaCard">
+              <div class="prebetaCardTitle">Admin protection</div>
+              <div class="prebetaCardText">Admin access can be locked to the first login IP.</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="marketingSections" class="hidden">
           <div class="hero hero-solo">
             <div>
               <h2 class="hero-title">Your finances. On your device.</h2>
@@ -389,7 +424,7 @@
         </section>
       </div>
 
-      <div id="marketingFooter">
+      <div id="marketingFooter" class="hidden">
         <section class="section">
           <div class="cta">
           <div class="cta-title">Create account — No Risk</div>
@@ -462,32 +497,90 @@
 
     <div id="viewAdmin" class="view hidden">
       <div class="dashboard-header">
-        <h2>Admin</h2>
-        <p class="text-muted">Manage users and access.</p>
+        <h2>Admin Control Panel</h2>
+        <p class="text-muted">User management, access control, and future admin tools.</p>
       </div>
 
-      <div class="panel">
-        <div class="adminToolbar">
-          <button id="btnAdminReload" class="btn btn-secondary">Reload</button>
-          <div id="adminStatus" class="status-msg"></div>
-        </div>
+      <div class="adminShell">
+        <aside class="adminSidebar" aria-label="Admin navigation">
+          <div class="adminSidebarTitle">Control panel</div>
+          <button class="adminNavItem active" id="adminTabUsers" type="button">Users</button>
+          <button class="adminNavItem" id="adminTabAccess" type="button">Access</button>
+          <button class="adminNavItem" id="adminTabSettings" type="button">Settings</button>
+        </aside>
 
-        <div class="tableWrap" aria-label="Users table">
-          <table class="adminTable">
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Created</th>
-                <th>Last IP</th>
-                <th>Admin</th>
-                <th>Plan</th>
-                <th>Ends</th>
-                <th>Set plan</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="adminUsersBody"></tbody>
-          </table>
+        <div class="adminMain">
+          <div class="adminTopbar">
+            <div class="adminTopbarLeft">
+              <div class="adminTopbarTitle" id="adminSectionTitle">Users</div>
+              <div class="adminTopbarSub" id="adminSectionSub">Manage accounts and plans.</div>
+            </div>
+            <div class="adminTopbarRight">
+              <button id="btnAdminReload" class="btn btn-secondary">Reload</button>
+            </div>
+          </div>
+
+          <div class="adminStats" aria-label="Admin stats">
+            <div class="adminStat">
+              <div class="adminStatLabel">Users</div>
+              <div class="adminStatValue" id="adminStatUsers">—</div>
+            </div>
+            <div class="adminStat">
+              <div class="adminStatLabel">Admins</div>
+              <div class="adminStatValue" id="adminStatAdmins">—</div>
+            </div>
+            <div class="adminStat">
+              <div class="adminStatLabel">Active plans</div>
+              <div class="adminStatValue" id="adminStatActivePlans">—</div>
+            </div>
+          </div>
+
+          <div class="adminPanel">
+            <div class="adminPanelHead">
+              <div class="adminPanelActions">
+                <input id="adminSearch" class="adminSearch" type="search" placeholder="Search users by email…" />
+              </div>
+              <div id="adminStatus" class="adminStatus"></div>
+            </div>
+
+            <div id="adminTabUsersView">
+              <div class="tableWrap" aria-label="Users table">
+                <table class="adminTable">
+                  <thead>
+                    <tr>
+                      <th>Email</th>
+                      <th>Created</th>
+                      <th>Last IP</th>
+                      <th>Role</th>
+                      <th>Plan</th>
+                      <th>Ends</th>
+                      <th>Set plan</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminUsersBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div id="adminTabAccessView" class="hidden">
+              <div class="adminPlaceholder">
+                <div class="adminPlaceholderTitle">Access controls</div>
+                <div class="adminPlaceholderText">
+                  Coming soon: admin IP lock reset, audit logs, and safer role management.
+                </div>
+              </div>
+            </div>
+
+            <div id="adminTabSettingsView" class="hidden">
+              <div class="adminPlaceholder">
+                <div class="adminPlaceholderTitle">Settings</div>
+                <div class="adminPlaceholderText">
+                  Coming soon: maintenance mode, security settings, and service configuration.
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -502,6 +595,6 @@
     </div>
   </div>
 
-  <script src="portal.js?v=0.4.11"></script>
+  <script src="portal.js?v=0.4.12"></script>
 </body>
 </html>

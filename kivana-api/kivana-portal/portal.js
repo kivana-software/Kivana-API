@@ -45,6 +45,10 @@ const els = {
   mOsWin: document.getElementById('mOsWin'),
   marketingSections: document.getElementById('marketingSections'),
   marketingFooter: document.getElementById('marketingFooter'),
+  prebetaLanding: document.getElementById('prebetaLanding'),
+  btnPrebetaCreate: document.getElementById('btnPrebetaCreate'),
+  btnPrebetaSignIn: document.getElementById('btnPrebetaSignIn'),
+  navFullLanding: document.getElementById('navFullLanding'),
   btnDownloadPrimary: document.getElementById('btnDownloadPrimary'),
   btnDownloadSecondary: document.getElementById('btnDownloadSecondary'),
   btnHeroStartFree: document.getElementById('btnHeroStartFree'),
@@ -62,6 +66,18 @@ const els = {
   btnAdminReload: document.getElementById('btnAdminReload'),
   adminStatus: document.getElementById('adminStatus'),
   adminUsersBody: document.getElementById('adminUsersBody'),
+  adminSearch: document.getElementById('adminSearch'),
+  adminTabUsers: document.getElementById('adminTabUsers'),
+  adminTabAccess: document.getElementById('adminTabAccess'),
+  adminTabSettings: document.getElementById('adminTabSettings'),
+  adminTabUsersView: document.getElementById('adminTabUsersView'),
+  adminTabAccessView: document.getElementById('adminTabAccessView'),
+  adminTabSettingsView: document.getElementById('adminTabSettingsView'),
+  adminSectionTitle: document.getElementById('adminSectionTitle'),
+  adminSectionSub: document.getElementById('adminSectionSub'),
+  adminStatUsers: document.getElementById('adminStatUsers'),
+  adminStatAdmins: document.getElementById('adminStatAdmins'),
+  adminStatActivePlans: document.getElementById('adminStatActivePlans'),
 
   authForm: document.getElementById('authForm'),
   authTitle: document.getElementById('authTitle'),
@@ -107,7 +123,11 @@ let billingCycle = 'yearly'
 let currentMe = null
 let currentEntitlement = null
 let pendingPlanSelection = null
-const marketingMode = new URLSearchParams(window.location.search).get('portal') !== '1'
+const sp = new URLSearchParams(window.location.search)
+const startInAuth = sp.get('portal') === '1'
+const fullLanding = sp.get('full') === '1'
+let adminUsersCache = []
+let adminActiveTab = 'users'
 
 function getAccessToken() {
   return localStorage.getItem('kivanaPortal/accessToken') || ''
@@ -277,7 +297,7 @@ function applyNav() {
   const isAdmin = !!(authed && currentMe && currentMe.isAdmin)
   if (els.btnSignIn) els.btnSignIn.classList.toggle('hidden', authed)
   if (els.btnSignUp) els.btnSignUp.classList.toggle('hidden', authed)
-  const showMarketing = marketingMode && !authed
+  const showMarketing = fullLanding && !authed
   if (els.navFeatures) els.navFeatures.classList.toggle('hidden', !showMarketing)
   if (els.navPricing) els.navPricing.classList.toggle('hidden', !showMarketing)
   if (els.navAccountants) els.navAccountants.classList.toggle('hidden', !showMarketing)
@@ -286,6 +306,8 @@ function applyNav() {
   if (els.osToggle) els.osToggle.classList.toggle('hidden', !showMarketing)
   if (els.marketingSections) els.marketingSections.classList.toggle('hidden', !showMarketing)
   if (els.marketingFooter) els.marketingFooter.classList.toggle('hidden', !showMarketing)
+  if (els.navFullLanding) els.navFullLanding.classList.toggle('hidden', !showMarketing)
+  if (els.prebetaLanding) els.prebetaLanding.classList.toggle('hidden', authed || showMarketing)
   if (els.navUser) els.navUser.classList.toggle('hidden', !authed)
   els.btnSignOut.classList.toggle('hidden', !authed)
   els.btnNavPlans.classList.toggle('hidden', !authed)
@@ -622,12 +644,58 @@ async function loadAdminUsers() {
   return Array.isArray(json.users) ? json.users : []
 }
 
+function setAdminTab(tab) {
+  const next = tab === 'access' ? 'access' : tab === 'settings' ? 'settings' : 'users'
+  adminActiveTab = next
+  if (els.adminTabUsers) els.adminTabUsers.classList.toggle('active', next === 'users')
+  if (els.adminTabAccess) els.adminTabAccess.classList.toggle('active', next === 'access')
+  if (els.adminTabSettings) els.adminTabSettings.classList.toggle('active', next === 'settings')
+  if (els.adminTabUsersView) els.adminTabUsersView.classList.toggle('hidden', next !== 'users')
+  if (els.adminTabAccessView) els.adminTabAccessView.classList.toggle('hidden', next !== 'access')
+  if (els.adminTabSettingsView) els.adminTabSettingsView.classList.toggle('hidden', next !== 'settings')
+  if (els.adminSectionTitle) els.adminSectionTitle.textContent = next === 'users' ? 'Users' : next === 'access' ? 'Access' : 'Settings'
+  if (els.adminSectionSub) {
+    els.adminSectionSub.textContent =
+      next === 'users'
+        ? 'Manage accounts and plans.'
+        : next === 'access'
+          ? 'Protect admin access and review access policies.'
+          : 'Service configuration and maintenance.'
+  }
+}
+
+function updateAdminStats(allUsers) {
+  const list = Array.isArray(allUsers) ? allUsers : []
+  const total = list.length
+  const admins = list.filter((u) => !!u?.isAdmin).length
+  const activePlans = list.filter((u) => {
+    const code = String(u?.kivanaPlanCode || '').trim().toLowerCase()
+    if (!code) return false
+    if (code === 'basic') return false
+    const ends = u?.kivanaEndsAt ? new Date(u.kivanaEndsAt) : null
+    if (!ends) return true
+    return !Number.isNaN(ends.getTime()) && ends.getTime() > Date.now()
+  }).length
+  if (els.adminStatUsers) els.adminStatUsers.textContent = String(total)
+  if (els.adminStatAdmins) els.adminStatAdmins.textContent = String(admins)
+  if (els.adminStatActivePlans) els.adminStatActivePlans.textContent = String(activePlans)
+}
+
 async function renderAdminUsers() {
   if (!els.adminUsersBody || !els.adminStatus) return
-  els.adminStatus.textContent = 'Loading…'
-  els.adminUsersBody.innerHTML = ''
   try {
-    const users = await loadAdminUsers()
+    if (!adminUsersCache.length) {
+      els.adminStatus.textContent = 'Loading…'
+      adminUsersCache = await loadAdminUsers()
+    }
+    updateAdminStats(adminUsersCache)
+
+    const q = String(els.adminSearch?.value || '').trim().toLowerCase()
+    const users = q
+      ? adminUsersCache.filter((u) => String(u?.email || '').toLowerCase().includes(q))
+      : adminUsersCache
+
+    els.adminUsersBody.innerHTML = ''
     for (const u of users) {
       const tr = document.createElement('tr')
 
@@ -644,7 +712,7 @@ async function renderAdminUsers() {
       tr.appendChild(ipTd)
 
       const adminTd = document.createElement('td')
-      adminTd.textContent = u.isAdmin ? 'Yes' : 'No'
+      adminTd.textContent = u.isAdmin ? 'Admin' : (u.isModerator ? 'Moderator' : 'User')
       tr.appendChild(adminTd)
 
       const planTd = document.createElement('td')
@@ -729,6 +797,57 @@ async function renderAdminUsers() {
       tr.appendChild(setTd)
 
       const actionsTd = document.createElement('td')
+      const modBtn = document.createElement('button')
+      modBtn.className = 'btn btn-secondary'
+      modBtn.textContent = u.isAdmin ? 'Admin' : (u.isModerator ? 'Remove moderator' : 'Make moderator')
+      modBtn.disabled = !!u.isAdmin
+      modBtn.addEventListener('click', async () => {
+        if (u.isAdmin) return
+        const next = !u.isModerator
+        modBtn.disabled = true
+        els.adminStatus.textContent = 'Saving…'
+        try {
+          await apiFetch('/v1/admin/moderator', {
+            method: 'POST',
+            body: JSON.stringify({ email: u.email, enabled: next }),
+          })
+          adminUsersCache = []
+          await renderAdminUsers()
+        } catch (e) {
+          els.adminStatus.textContent = `Failed: ${String(e?.message || e)}`
+        } finally {
+          modBtn.disabled = false
+        }
+      })
+
+      const discBtn = document.createElement('button')
+      discBtn.className = 'btn btn-secondary'
+      discBtn.textContent = 'Discount'
+      discBtn.addEventListener('click', async () => {
+        const raw = prompt(`Discount percent for ${u.email} (0 to clear). Example: 50`)
+        if (raw == null) return
+        const pct = Number(String(raw).trim() || '0')
+        if (!Number.isFinite(pct) || pct < 0 || pct > 90) {
+          alert('Invalid percent. Use 0-90.')
+          return
+        }
+        const label = pct > 0 ? prompt('Discount label (optional). Example: founder') : ''
+        discBtn.disabled = true
+        els.adminStatus.textContent = 'Saving…'
+        try {
+          await apiFetch('/v1/admin/discount', {
+            method: 'POST',
+            body: JSON.stringify({ email: u.email, percent: pct, label: label || null }),
+          })
+          adminUsersCache = []
+          await renderAdminUsers()
+        } catch (e) {
+          els.adminStatus.textContent = `Failed: ${String(e?.message || e)}`
+        } finally {
+          discBtn.disabled = false
+        }
+      })
+
       const pwBtn = document.createElement('button')
       pwBtn.className = 'btn btn-secondary'
       pwBtn.textContent = 'Reset password'
@@ -773,6 +892,8 @@ async function renderAdminUsers() {
       actWrap.style.display = 'flex'
       actWrap.style.flexWrap = 'wrap'
       actWrap.style.gap = '8px'
+      actWrap.appendChild(modBtn)
+      actWrap.appendChild(discBtn)
       actWrap.appendChild(pwBtn)
       actWrap.appendChild(delBtn)
       actionsTd.appendChild(actWrap)
@@ -780,7 +901,7 @@ async function renderAdminUsers() {
 
       els.adminUsersBody.appendChild(tr)
     }
-    els.adminStatus.textContent = users.length ? '' : 'No users found.'
+    els.adminStatus.textContent = q ? `Showing ${users.length} of ${adminUsersCache.length}` : (users.length ? '' : 'No users found.')
   } catch (e) {
     els.adminStatus.textContent = `Failed: ${String(e?.message || e)}`
   }
@@ -802,7 +923,9 @@ async function showAdmin() {
     await showDashboard()
     return
   }
+  setAdminTab(adminActiveTab || 'users')
   showOnly('admin')
+  adminUsersCache = []
   await renderAdminUsers()
 }
 
@@ -838,8 +961,8 @@ async function handleSignOut() {
     void 0
   }
   clearTokens()
-  if (marketingMode) await showDashboard()
-  else await showAuth()
+  if (startInAuth) await showAuth()
+  else await showDashboard()
 }
 
 async function handleAvatarFile(file) {
@@ -949,15 +1072,31 @@ if (els.btnNavPlans) els.btnNavPlans.addEventListener('click', () => void showDa
 if (els.btnNavAccount) els.btnNavAccount.addEventListener('click', () => void showAccount())
 if (els.btnNavAdmin) els.btnNavAdmin.addEventListener('click', () => void showAdmin())
 if (els.btnAdminReload) els.btnAdminReload.addEventListener('click', () => void showAdmin())
+if (els.adminTabUsers) els.adminTabUsers.addEventListener('click', () => {
+  setAdminTab('users')
+  void renderAdminUsers()
+})
+if (els.adminTabAccess) els.adminTabAccess.addEventListener('click', () => setAdminTab('access'))
+if (els.adminTabSettings) els.adminTabSettings.addEventListener('click', () => setAdminTab('settings'))
+if (els.adminSearch) els.adminSearch.addEventListener('input', () => {
+  if (adminActiveTab !== 'users') return
+  void renderAdminUsers()
+})
 if (els.btnSignIn) els.btnSignIn.addEventListener('click', () => {
   pendingPlanSelection = null
   setAuthMode(true)
   void showAuth()
 })
 if (els.btnSignUp) els.btnSignUp.addEventListener('click', startFree)
+if (els.btnPrebetaCreate) els.btnPrebetaCreate.addEventListener('click', startFree)
+if (els.btnPrebetaSignIn) els.btnPrebetaSignIn.addEventListener('click', () => {
+  pendingPlanSelection = null
+  setAuthMode(true)
+  void showAuth()
+})
 
 async function goToPublicSection(id) {
-  if (isAuthed() || !marketingMode) return
+  if (isAuthed() || !fullLanding) return
   pendingPlanSelection = null
   await showDashboard()
   if (window.location.hash !== `#${id}`) window.location.hash = id
@@ -1072,7 +1211,7 @@ if (els.btnDownloadPrimary) els.btnDownloadPrimary.addEventListener('click', () 
 if (els.btnDownloadSecondary) els.btnDownloadSecondary.addEventListener('click', () => void handleDownloadClick())
 
 async function applyHashNav() {
-  if (isAuthed() || !marketingMode) return
+  if (isAuthed() || !fullLanding) return
   const id = String(window.location.hash || '').replace(/^#/, '').trim()
   if (!id) return
   const normalized = id === 'features' ? 'how'
@@ -1134,11 +1273,11 @@ if (els.avatarFile) {
       clearTokens()
     }
   }
-  if (marketingMode) {
-    await showDashboard()
-    await applyHashNav()
-  } else {
+  if (startInAuth) {
     setAuthMode(true)
     await showAuth()
+    return
   }
+  await showDashboard()
+  await applyHashNav()
 })()

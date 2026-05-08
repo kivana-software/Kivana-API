@@ -1909,3 +1909,247 @@ body {
   padding: 0.55rem 0.65rem;
   font-weight: 800;
 }
+
+.prebetaLanding {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 2.2rem 0 1.5rem;
+}
+
+.prebetaHero {
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(11, 19, 34, 0.62);
+  border-radius: 18px;
+  padding: 1.8rem;
+  box-shadow: 0 18px 70px rgba(0,0,0,0.50);
+}
+
+.prebetaHeroTop {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.prebetaTag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid rgba(163,230,53,0.28);
+  background: rgba(163,230,53,0.10);
+  color: rgba(163,230,53,0.95);
+  font-weight: 900;
+  font-size: 0.85rem;
+}
+
+.prebetaTitle {
+  font-size: 1.55rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+.prebetaSubtitle {
+  margin-top: 0.6rem;
+  color: rgba(229,231,235,0.74);
+  font-weight: 600;
+  max-width: 56ch;
+}
+
+.prebetaActions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.2rem;
+  flex-wrap: wrap;
+}
+
+.prebetaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.prebetaCard {
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(5, 11, 20, 0.28);
+  border-radius: 16px;
+  padding: 1rem;
+}
+
+.prebetaCardTitle {
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
+.prebetaCardText {
+  margin-top: 0.35rem;
+  color: rgba(229,231,235,0.70);
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+@media (max-width: 900px) {
+  .prebetaLanding {
+    padding-top: 1.6rem;
+  }
+  .prebetaGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.adminShell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.adminSidebar {
+  position: sticky;
+  top: 118px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(11, 19, 34, 0.62);
+  border-radius: 18px;
+  padding: 1rem;
+}
+
+.adminSidebarTitle {
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.75rem;
+  color: rgba(229,231,235,0.85);
+}
+
+.adminNavItem {
+  width: 100%;
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(5, 11, 20, 0.25);
+  color: rgba(229,231,235,0.88);
+  border-radius: 14px;
+  padding: 0.75rem 0.85rem;
+  font-weight: 900;
+  cursor: pointer;
+  text-align: left;
+  margin-bottom: 0.6rem;
+}
+
+.adminNavItem.active {
+  border-color: rgba(163,230,53,0.30);
+  background: rgba(163,230,53,0.10);
+  color: rgba(163,230,53,0.96);
+}
+
+.adminMain {
+  min-width: 0;
+}
+
+.adminTopbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.adminTopbarTitle {
+  font-size: 1.15rem;
+  font-weight: 950;
+  letter-spacing: -0.02em;
+}
+
+.adminTopbarSub {
+  margin-top: 0.25rem;
+  color: rgba(229,231,235,0.66);
+  font-weight: 650;
+}
+
+.adminStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.adminStat {
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(11, 19, 34, 0.48);
+  border-radius: 16px;
+  padding: 1rem 1.05rem;
+}
+
+.adminStatLabel {
+  color: rgba(229,231,235,0.62);
+  font-weight: 800;
+  font-size: 0.88rem;
+}
+
+.adminStatValue {
+  margin-top: 0.2rem;
+  font-size: 1.6rem;
+  font-weight: 950;
+  letter-spacing: -0.03em;
+}
+
+.adminPanel {
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(11, 19, 34, 0.62);
+  border-radius: 18px;
+  padding: 1rem;
+}
+
+.adminPanelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.adminSearch {
+  width: min(520px, 100%);
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(5, 11, 20, 0.25);
+  color: rgba(229,231,235,0.92);
+  border-radius: 14px;
+  padding: 0.75rem 0.9rem;
+  font-weight: 800;
+}
+
+.adminStatus {
+  color: rgba(229,231,235,0.70);
+  font-weight: 800;
+  font-size: 0.92rem;
+  text-align: right;
+}
+
+.adminPlaceholder {
+  border: 1px dashed rgba(255,255,255,0.12);
+  background: rgba(5, 11, 20, 0.20);
+  border-radius: 16px;
+  padding: 1.25rem;
+}
+
+.adminPlaceholderTitle {
+  font-weight: 950;
+  letter-spacing: -0.02em;
+}
+
+.adminPlaceholderText {
+  margin-top: 0.4rem;
+  color: rgba(229,231,235,0.68);
+  font-weight: 650;
+}
+
+@media (max-width: 1100px) {
+  .adminShell {
+    grid-template-columns: 1fr;
+  }
+  .adminSidebar {
+    position: static;
+  }
+  .adminStats {
+    grid-template-columns: 1fr;
+  }
+}
