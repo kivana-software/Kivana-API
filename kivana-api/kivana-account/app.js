@@ -360,7 +360,7 @@ function SupportChatSection({
       : 'max-w-[80%] rounded-2xl bg-white border border-gray-200 text-gray-800 px-4 py-3 text-[14px] leading-relaxed'
     return React.createElement(
       'div',
-      { key: String(m.id || Math.random()), className: wrapCls },
+      { key: String(m.id || ''), className: wrapCls },
       React.createElement(
         'div',
         null,
@@ -444,7 +444,6 @@ function SupportChatSection({
                 'w-full sm:w-auto sm:min-w-[260px] rounded-full border border-gray-200 bg-white px-4 py-2.5 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
               value: subject,
               onChange: (e) => setSubject(e.target.value),
-              disabled: busy,
               placeholder: 'Subject (optional)',
             })
       ),
@@ -461,7 +460,6 @@ function SupportChatSection({
             'flex-1 min-h-[46px] max-h-[120px] rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
           value: draft,
           onChange: (e) => setDraft(e.target.value),
-          disabled: busy,
           placeholder: 'Write a message…',
         }),
         React.createElement(
@@ -3605,7 +3603,7 @@ function App() {
                 'flex-1 min-h-[46px] max-h-[120px] rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
               value: reply,
               onChange: (e) => setMsgModal((m) => (m && m.kind === 'support' ? { ...m, reply: e.target.value } : m)),
-              disabled: busy || loading,
+              disabled: loading,
               placeholder: 'Reply as admin…',
               autoFocus: true,
             }),
