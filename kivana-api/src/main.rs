@@ -301,6 +301,66 @@ struct AdminUserRow {
     kivana_plan_code: Option<String>,
     kivana_plan_name: Option<String>,
     kivana_ends_at: Option<String>,
+    kivana_trial_ends_at: Option<String>,
+    password_changed_at: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CurrencyAmounts {
+    eur: f64,
+    gbp: f64,
+    nok: f64,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PricingConfig {
+    yearly_factor: i32,
+    trial_days: i32,
+    show_basic: bool,
+    show_trial: bool,
+    show_standard: bool,
+    show_pro: bool,
+    show_lifetime: bool,
+    show_accountant: bool,
+    standard_monthly: CurrencyAmounts,
+    pro_monthly: CurrencyAmounts,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PortalConfig {
+    allow_signups: bool,
+    pricing: PricingConfig,
+}
+
+impl Default for PortalConfig {
+    fn default() -> Self {
+        Self {
+            allow_signups: true,
+            pricing: PricingConfig {
+                yearly_factor: 11,
+                trial_days: 14,
+                show_basic: true,
+                show_trial: true,
+                show_standard: true,
+                show_pro: true,
+                show_lifetime: true,
+                show_accountant: true,
+                standard_monthly: CurrencyAmounts {
+                    eur: 9.99,
+                    gbp: 9.99,
+                    nok: 99.0,
+                },
+                pro_monthly: CurrencyAmounts {
+                    eur: 29.90,
+                    gbp: 29.90,
+                    nok: 299.0,
+                },
+            },
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -354,6 +414,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/favicon.ico", get(|| async { Redirect::permanent("/kivana-logo.png") }))
         .route("/robots.txt", get(robots_txt))
         .route("/sitemap.xml", get(sitemap_xml))
+        .route("/v1/public/config", get(public_config))
         .route("/v1/contact", post(contact))
         .route("/v1/auth/signup", post(signup))
         .route("/v1/auth/login", post(login))
@@ -369,6 +430,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/account/export", get(account_export))
         .route("/v1/account/delete", post(delete_account))
         .route("/v1/admin/bootstrap", post(admin_bootstrap))
+        .route("/v1/admin/config", get(admin_get_config))
+        .route("/v1/admin/config", post(admin_set_config))
         .route("/v1/admin/users", get(admin_users))
         .route("/v1/admin/contact-messages", get(admin_contact_messages))
         .route(
@@ -425,6 +488,84 @@ async fn main() -> anyhow::Result<()> {
 
 async fn healthz() -> impl IntoResponse {
     (StatusCode::OK, "ok")
+}
+
+async fn get_portal_config(pool: &PgPool) -> PortalConfig {
+    let row = sqlx::query("SELECT value FROM app_settings WHERE key = 'portal_config' LIMIT 1")
+        .fetch_optional(pool)
+        .await;
+    let v: Option<serde_json::Value> = match row {
+        Ok(Some(r)) => r.try_get("value").ok(),
+        _ => None,
+    };
+    match v {
+        Some(val) => serde_json::from_value::<PortalConfig>(val).unwrap_or_default(),
+        None => PortalConfig::default(),
+    }
+}
+
+async fn set_portal_config(pool: &PgPool, cfg: &PortalConfig) -> anyhow::Result<()> {
+    let now = OffsetDateTime::now_utc();
+    let value = serde_json::to_value(cfg)?;
+    sqlx::query(
+        r#"
+      INSERT INTO app_settings (key, value, updated_at)
+      VALUES ('portal_config', $1, $2)
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+    "#,
+    )
+    .bind(value)
+    .bind(now)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn public_config(State(state): State<AppState>) -> axum::response::Response {
+    let cfg = get_portal_config(&state.pool).await;
+    (StatusCode::OK, Json(cfg)).into_response()
+}
+
+async fn admin_get_config(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+    let cfg = get_portal_config(&state.pool).await;
+    (StatusCode::OK, Json(cfg)).into_response()
+}
+
+async fn admin_set_config(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    Json(req): Json<PortalConfig>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+    if req.pricing.yearly_factor < 1 || req.pricing.yearly_factor > 24 {
+        return err(StatusCode::BAD_REQUEST, "invalid_yearly_factor").into_response();
+    }
+    if req.pricing.trial_days < 1 || req.pricing.trial_days > 60 {
+        return err(StatusCode::BAD_REQUEST, "invalid_trial_days").into_response();
+    }
+    if req.pricing.standard_monthly.eur < 0.0
+        || req.pricing.standard_monthly.gbp < 0.0
+        || req.pricing.standard_monthly.nok < 0.0
+        || req.pricing.pro_monthly.eur < 0.0
+        || req.pricing.pro_monthly.gbp < 0.0
+        || req.pricing.pro_monthly.nok < 0.0
+    {
+        return err(StatusCode::BAD_REQUEST, "invalid_price").into_response();
+    }
+    match set_portal_config(&state.pool, &req).await {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
 }
 
 async fn portal_redirect(uri: OriginalUri) -> impl IntoResponse {
@@ -681,6 +822,11 @@ async fn signup(
     }
     if req.password.len() < 8 {
         return err(StatusCode::BAD_REQUEST, "weak_password").into_response();
+    }
+
+    let cfg = get_portal_config(&state.pool).await;
+    if !cfg.allow_signups {
+        return err(StatusCode::SERVICE_UNAVAILABLE, "signups_disabled").into_response();
     }
 
     let client_ip = get_client_ip(&headers, connect_info);
@@ -1988,6 +2134,7 @@ async fn admin_grant(
 
     let product_code = req.product_code.trim().to_lowercase();
     let plan_code = req.plan_code.trim().to_lowercase();
+    let is_trial = plan_code == "trial";
 
     let prod_row = sqlx::query("SELECT id FROM products WHERE code = $1")
         .bind(&product_code)
@@ -1999,9 +2146,25 @@ async fn admin_grant(
         Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
     };
 
+    let cfg = get_portal_config(&state.pool).await;
+    if plan_code == "basic" {
+        let now = OffsetDateTime::now_utc();
+        let res = sqlx::query("UPDATE subscriptions SET status = 'canceled', canceled_at = $1 WHERE user_id = $2 AND product_id = $3 AND status = 'active'")
+            .bind(now)
+            .bind(user_id)
+            .bind(product_id)
+            .execute(&state.pool)
+            .await;
+        match res {
+            Ok(_) => return (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+            Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+        }
+    }
+
+    let plan_code_to_lookup = if is_trial { "standard".to_string() } else { plan_code.clone() };
     let plan_row = sqlx::query("SELECT id FROM plans WHERE product_id = $1 AND code = $2")
         .bind(product_id)
-        .bind(&plan_code)
+        .bind(&plan_code_to_lookup)
         .fetch_optional(&state.pool)
         .await;
     let plan_id: Uuid = match plan_row {
@@ -2037,9 +2200,17 @@ async fn admin_grant(
     .execute(&mut *tx)
     .await;
 
+    let (ends_at, trial_ends_at) = if is_trial {
+        let trial_end_default = now + Duration::days(cfg.pricing.trial_days as i64);
+        let end = ends_at.unwrap_or(trial_end_default);
+        (Some(end), Some(end))
+    } else {
+        (ends_at, None)
+    };
+
     let sub_id = Uuid::new_v4();
     let inserted = sqlx::query(
-    "INSERT INTO subscriptions (id, user_id, product_id, plan_id, status, started_at, ends_at) VALUES ($1,$2,$3,$4,'active',$5,$6)",
+    "INSERT INTO subscriptions (id, user_id, product_id, plan_id, status, started_at, ends_at, trial_ends_at) VALUES ($1,$2,$3,$4,'active',$5,$6,$7)",
   )
   .bind(sub_id)
   .bind(user_id)
@@ -2047,6 +2218,7 @@ async fn admin_grant(
   .bind(plan_id)
   .bind(now)
   .bind(ends_at)
+  .bind(trial_ends_at)
   .execute(&mut *tx)
   .await;
 
@@ -2123,6 +2295,7 @@ async fn admin_users(
         u.id AS id,
         u.email AS email,
         u.created_at AS created_at,
+        u.password_changed_at AS password_changed_at,
         u.is_admin AS is_admin,
         u.is_moderator AS is_moderator,
         u.is_founder AS is_founder,
@@ -2132,7 +2305,8 @@ async fn admin_users(
         u.last_ip AS last_ip,
         pl.code AS plan_code,
         pl.name AS plan_name,
-        s.ends_at AS ends_at
+        s.ends_at AS ends_at,
+        s.trial_ends_at AS trial_ends_at
       FROM users u
       LEFT JOIN subscriptions s
         ON s.user_id = u.id
@@ -2157,6 +2331,8 @@ async fn admin_users(
         let id: Uuid = r.get("id");
         let email: String = r.get("email");
         let created_at: sqlx::types::time::OffsetDateTime = r.get("created_at");
+        let password_changed_at: Option<sqlx::types::time::OffsetDateTime> =
+            r.try_get("password_changed_at").ok().flatten();
         let is_admin: bool = r.get("is_admin");
         let is_moderator: bool = r.try_get("is_moderator").unwrap_or(false);
         let is_founder: bool = r.try_get("is_founder").unwrap_or(false);
@@ -2168,6 +2344,8 @@ async fn admin_users(
         let plan_code: Option<String> = r.try_get("plan_code").ok();
         let plan_name: Option<String> = r.try_get("plan_name").ok();
         let ends_at: Option<sqlx::types::time::OffsetDateTime> = r.try_get("ends_at").ok();
+        let trial_ends_at: Option<sqlx::types::time::OffsetDateTime> =
+            r.try_get("trial_ends_at").ok();
 
         users.push(AdminUserRow {
             id: id.to_string(),
@@ -2188,6 +2366,14 @@ async fn admin_users(
             kivana_plan_code: plan_code,
             kivana_plan_name: plan_name,
             kivana_ends_at: ends_at.map(|t| {
+                t.format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default()
+            }),
+            kivana_trial_ends_at: trial_ends_at.map(|t| {
+                t.format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default()
+            }),
+            password_changed_at: password_changed_at.map(|t| {
                 t.format(&time::format_description::well_known::Rfc3339)
                     .unwrap_or_default()
             }),

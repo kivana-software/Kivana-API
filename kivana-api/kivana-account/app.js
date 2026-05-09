@@ -121,9 +121,9 @@ function detectPricingCurrency() {
 
   const isNorway = lang.includes('-NO') || lang.startsWith('NB') || lang.startsWith('NN') || /OSLO/i.test(tz)
   const isUk = lang.includes('-GB') || /LONDON/i.test(tz)
-  if (isNorway) return { code: 'NOK', symbol: 'kr', monthlyStd: 99, monthlyPro: 299 }
-  if (isUk) return { code: 'GBP', symbol: '£', monthlyStd: 9.99, monthlyPro: 29.9 }
-  return { code: 'EUR', symbol: '€', monthlyStd: 9.99, monthlyPro: 29.9 }
+  if (isNorway) return { code: 'NOK', symbol: 'kr' }
+  if (isUk) return { code: 'GBP', symbol: '£' }
+  return { code: 'EUR', symbol: '€' }
 }
 
 function formatAmount(v) {
@@ -193,6 +193,7 @@ function App() {
     if (s === 'plan' || s === 'plans' || s === 'billing') return 'billing'
     if (s === 'download' || s === 'downloads') return 'downloads'
     if (s === 'security') return 'security'
+    if (s === 'support' || s === 'contact') return 'support'
     if (s === 'data' || s === 'my-data') return 'data'
     if (s === 'admin') return 'admin'
     return 'profile'
@@ -200,6 +201,12 @@ function App() {
   const [sessions, setSessions] = useState([])
   const [pwModal, setPwModal] = useState(null)
   const [deleteModal, setDeleteModal] = useState(null)
+  const [publicConfig, setPublicConfig] = useState(null)
+  const [adminConfig, setAdminConfig] = useState(null)
+  const [adminPage, setAdminPage] = useState('overview')
+  const [msgModal, setMsgModal] = useState(null)
+  const [adminMsgFilter, setAdminMsgFilter] = useState('new')
+  const [adminUserQuery, setAdminUserQuery] = useState('')
 
   const displayNameInputRef = useRef(null)
 
@@ -227,9 +234,14 @@ function App() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  const yearlyFactor = 11
-  const monthlyStd = Number(pricing.monthlyStd)
-  const monthlyPro = Number(pricing.monthlyPro)
+  const cfg = publicConfig || null
+  const cfgPricing = cfg?.pricing || null
+  const yearlyFactor = Number(cfgPricing?.yearlyFactor || 11)
+  const trialDays = Number(cfgPricing?.trialDays || 14)
+
+  const currencyKey = pricing.code === 'NOK' ? 'nok' : pricing.code === 'GBP' ? 'gbp' : 'eur'
+  const monthlyStd = Number(cfgPricing?.standardMonthly?.[currencyKey] ?? (pricing.code === 'NOK' ? 99 : 9.99))
+  const monthlyPro = Number(cfgPricing?.proMonthly?.[currencyKey] ?? (pricing.code === 'NOK' ? 299 : 29.9))
   const yearlyStd = pricing.code === 'NOK' ? monthlyStd * yearlyFactor : Number((monthlyStd * yearlyFactor).toFixed(2))
   const yearlyPro = pricing.code === 'NOK' ? monthlyPro * yearlyFactor : Number((monthlyPro * yearlyFactor).toFixed(2))
 
@@ -264,9 +276,18 @@ function App() {
     return json
   }
 
+  async function loadPublicConfig() {
+    const res = await fetch('/v1/public/config', { cache: 'no-store' })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const json = await res.json()
+    setPublicConfig(json || null)
+    return json
+  }
+
   async function loadSession() {
     setBusy(true)
     try {
+      await loadPublicConfig()
       await loadMe()
       await loadEntitlements()
       await loadSessions()
@@ -450,14 +471,33 @@ function App() {
     setBusy(true)
     setStatus({ kind: 'muted', text: '' })
     try {
-      const [uRes, mRes] = await Promise.all([
+      const [uRes, mRes, cRes] = await Promise.all([
         apiFetch('/v1/admin/users', { method: 'GET' }),
         apiFetch('/v1/admin/contact-messages', { method: 'GET' }),
+        apiFetch('/v1/admin/config', { method: 'GET' }),
       ])
       const uJson = await uRes.json()
       const mJson = await mRes.json()
+      const cJson = await cRes.json()
       setAdminUsers(Array.isArray(uJson?.users) ? uJson.users : [])
       setAdminMessages(Array.isArray(mJson?.messages) ? mJson.messages : [])
+      setAdminConfig(cJson || null)
+    } catch (e) {
+      setStatus({ kind: 'err', text: String(e?.message || e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveAdminConfig(nextCfg) {
+    if (busy) return
+    setBusy(true)
+    setStatus({ kind: 'muted', text: '' })
+    try {
+      await apiFetch('/v1/admin/config', { method: 'POST', body: JSON.stringify(nextCfg) })
+      setStatus({ kind: 'ok', text: 'Settings saved.' })
+      setAdminConfig(nextCfg)
+      await loadPublicConfig()
     } catch (e) {
       setStatus({ kind: 'err', text: String(e?.message || e) })
     } finally {
@@ -489,6 +529,32 @@ function App() {
       await loadAdmin()
     } catch (e) {
       setStatus({ kind: 'err', text: String(e?.message || e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function sendSupportMessage({ subject, message }) {
+    if (busy) return
+    setBusy(true)
+    setStatus({ kind: 'muted', text: '' })
+    try {
+      const name = String(me?.displayName || '').trim() || 'User'
+      const email = String(me?.email || '').trim()
+      const subj = String(subject || '').trim() || 'Support request'
+      const msg = String(message || '').trim()
+      if (!email || !msg) throw new Error('Missing fields')
+      const res = await fetch('/v1/contact', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name, email, subject: subj, message: msg }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(String(j?.error || `HTTP ${res.status}`))
+      setStatus({ kind: 'ok', text: 'Message sent.' })
+    } catch (e) {
+      const msg = String(e?.message || e)
+      setStatus({ kind: 'err', text: msg === 'Missing fields' ? 'Message is required.' : msg })
     } finally {
       setBusy(false)
     }
@@ -1375,34 +1441,44 @@ function App() {
         React.createElement(
           'div',
           { className: 'mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4' },
-          React.createElement(PlanCard, { id: 'basic', title: 'Basic', price: 'Free', meta: 'Local-only, no account features', actionLabel: 'Choose', disabled: false }),
-          React.createElement(PlanCard, {
-            id: 'trial',
-            title: 'Trial',
-            price: '14 days free',
-            meta: 'Try Ordinary',
-            actionLabel: trialEligible ? 'Choose' : isTrial ? 'Current' : 'Not available',
-            disabled: !trialEligible && !isTrial,
-          }),
-          React.createElement(PlanCard, {
-            id: 'standard',
-            title: 'Ordinary',
-            price: `${formatMoney(pricing, billingCycle === 'yearly' ? yearlyStd : monthlyStd)}${billingCycle === 'yearly' ? '/yr' : '/mo'}`,
-            meta: billingCycle === 'yearly' ? `Yearly • ${formatMoney(pricing, monthlyStd)}/mo` : `Monthly • ${formatMoney(pricing, yearlyStd)}/yr`,
-            actionLabel: 'Choose',
-            disabled: false,
-            tone: currentKey === 'standard' ? 'dark' : undefined,
-          }),
-          React.createElement(PlanCard, {
-            id: 'pro',
-            title: 'Pro',
-            price: `${formatMoney(pricing, billingCycle === 'yearly' ? yearlyPro : monthlyPro)}${billingCycle === 'yearly' ? '/yr' : '/mo'}`,
-            meta: billingCycle === 'yearly' ? `Yearly • ${formatMoney(pricing, monthlyPro)}/mo` : `Monthly • ${formatMoney(pricing, yearlyPro)}/yr`,
-            actionLabel: 'Choose',
-            disabled: false,
-            tone: currentKey === 'pro' ? 'dark' : undefined,
-          }),
-          React.createElement(PlanCard, { id: 'lifetime_pro', title: 'Lifetime', price: 'On demand', meta: 'One-time purchase', actionLabel: 'Choose', disabled: false })
+          cfgPricing?.showBasic !== false
+            ? React.createElement(PlanCard, { id: 'basic', title: 'Basic', price: 'Free', meta: 'Local-only, no account features', actionLabel: 'Choose', disabled: false })
+            : null,
+          cfgPricing?.showTrial !== false
+            ? React.createElement(PlanCard, {
+                id: 'trial',
+                title: 'Trial',
+                price: `${trialDays} days free`,
+                meta: 'Try Ordinary',
+                actionLabel: trialEligible ? 'Choose' : isTrial ? 'Current' : 'Not available',
+                disabled: !trialEligible && !isTrial,
+              })
+            : null,
+          cfgPricing?.showStandard !== false
+            ? React.createElement(PlanCard, {
+                id: 'standard',
+                title: 'Ordinary',
+                price: `${formatMoney(pricing, billingCycle === 'yearly' ? yearlyStd : monthlyStd)}${billingCycle === 'yearly' ? '/yr' : '/mo'}`,
+                meta: billingCycle === 'yearly' ? `Yearly • ${formatMoney(pricing, monthlyStd)}/mo` : `Monthly • ${formatMoney(pricing, yearlyStd)}/yr`,
+                actionLabel: 'Choose',
+                disabled: false,
+                tone: currentKey === 'standard' ? 'dark' : undefined,
+              })
+            : null,
+          cfgPricing?.showPro !== false
+            ? React.createElement(PlanCard, {
+                id: 'pro',
+                title: 'Pro',
+                price: `${formatMoney(pricing, billingCycle === 'yearly' ? yearlyPro : monthlyPro)}${billingCycle === 'yearly' ? '/yr' : '/mo'}`,
+                meta: billingCycle === 'yearly' ? `Yearly • ${formatMoney(pricing, monthlyPro)}/mo` : `Monthly • ${formatMoney(pricing, yearlyPro)}/yr`,
+                actionLabel: 'Choose',
+                disabled: false,
+                tone: currentKey === 'pro' ? 'dark' : undefined,
+              })
+            : null,
+          cfgPricing?.showAccountant !== false
+            ? React.createElement(PlanCard, { id: 'lifetime_pro', title: 'Accountant', price: 'On demand', meta: 'No subscription required', actionLabel: 'Choose', disabled: false })
+            : null
         )
       )
     }
@@ -1596,11 +1672,74 @@ function App() {
       )
     }
 
+    function SupportSection() {
+      const [subject, setSubject] = useState('')
+      const [message, setMessage] = useState('')
+      const canSend = String(message || '').trim().length > 0
+
+      return React.createElement(
+        'div',
+        { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+        React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Contact support'),
+        React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, 'Send a message to the team from inside the portal.'),
+        React.createElement(
+          'div',
+          { className: 'mt-6 grid gap-4' },
+          React.createElement(
+            'div',
+            null,
+            React.createElement('div', { className: 'text-[11px] tracking-wide font-extrabold text-gray-500' }, 'SUBJECT'),
+            React.createElement('input', {
+              className:
+                'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+              value: subject,
+              onChange: (e) => setSubject(e.target.value),
+              disabled: busy,
+              placeholder: 'Support request',
+            })
+          ),
+          React.createElement(
+            'div',
+            null,
+            React.createElement('div', { className: 'text-[11px] tracking-wide font-extrabold text-gray-500' }, 'MESSAGE'),
+            React.createElement('textarea', {
+              className:
+                'mt-2 w-full min-h-[140px] rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+              value: message,
+              onChange: (e) => setMessage(e.target.value),
+              disabled: busy,
+              placeholder: 'Write your message…',
+            })
+          ),
+          React.createElement(
+            'div',
+            { className: 'flex items-center justify-end gap-3' },
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                onClick: async () => {
+                  await sendSupportMessage({ subject, message })
+                  setSubject('')
+                  setMessage('')
+                },
+                disabled: busy || !canSend,
+                className:
+                  'px-6 py-2.5 rounded-full text-[14px] font-semibold text-white bg-[#4F3DDD] hover:bg-[#3F2FCB] disabled:opacity-60 disabled:pointer-events-none',
+              },
+              'Send'
+            )
+          )
+        )
+      )
+    }
+
     function CurrentSection() {
       if (section === 'profile') return React.createElement(ProfileSection, null)
       if (section === 'billing') return React.createElement(SectionCard, { title: 'Plan & billing', subtitle: 'Switch tiers anytime. Your finance data is unaffected.' }, React.createElement(BillingSection, null))
       if (section === 'downloads') return React.createElement(DownloadsSection, null)
       if (section === 'security') return React.createElement(SecuritySection, null)
+      if (section === 'support') return React.createElement(SupportSection, null)
       if (section === 'data') return React.createElement(DataSection, null)
       if (section === 'admin') return React.createElement(Admin, null)
       return React.createElement(ProfileSection, null)
@@ -1634,6 +1773,11 @@ function App() {
             id: 'security',
             label: 'Security',
             icon: React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none' }, React.createElement('path', { d: 'M7.5 11V8.5C7.5 6.02 9.52 4 12 4C14.48 4 16.5 6.02 16.5 8.5V11', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' }), React.createElement('path', { d: 'M7 11H17C18.1 11 19 11.9 19 13V18C19 19.1 18.1 20 17 20H7C5.9 20 5 19.1 5 18V13C5 11.9 5.9 11 7 11Z', stroke: 'currentColor', strokeWidth: 1.8 })),
+          }),
+          React.createElement(NavItem, {
+            id: 'support',
+            label: 'Contact support',
+            icon: React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none' }, React.createElement('path', { d: 'M4 6.5C4 5.12 5.12 4 6.5 4H17.5C18.88 4 20 5.12 20 6.5V15.5C20 16.88 18.88 18 17.5 18H9l-5 3v-3.5C4 16.12 4 6.5 4 6.5Z', stroke: 'currentColor', strokeWidth: 1.8, strokeLinejoin: 'round' }), React.createElement('path', { d: 'M7 8h10M7 11h8', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' })),
           }),
           React.createElement(NavItem, {
             id: 'data',
@@ -1771,267 +1915,567 @@ function App() {
       )
     }
 
-    const usersView =
-      adminTab === 'users'
-        ? React.createElement(
-            'div',
-            { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
-            React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Users'),
-            React.createElement('div', { className: 'mt-2 text-sm text-gray-600' }, `${adminUsers.length} users`),
-            React.createElement(
-              'div',
-              { className: 'mt-6 overflow-x-auto' },
-            React.createElement(
-              'table',
-              { className: 'w-full text-sm min-w-[980px]' },
-              React.createElement(
-                'thead',
-                null,
-                React.createElement(
-                  'tr',
-                  null,
-                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Email'),
-                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Created'),
-                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Plan'),
-                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Ends'),
-                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Discount'),
-                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Last IP'),
-                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Flags'),
-                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Actions')
-                )
-              ),
-              React.createElement(
-                'tbody',
-                null,
-                adminUsers.map((u) =>
-                  React.createElement(
-                    'tr',
-                    { key: String(u.id || u.email), className: 'border-t border-gray-100' },
-                    React.createElement('td', { className: 'py-3 pr-4 font-medium text-[#1B1748]' }, String(u.email || '')),
-                    React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, formatRfc3339Short(u.createdAt || '')),
-                    React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, String(u.kivanaPlanName || u.kivanaPlanCode || 'basic')),
-                    React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, u.kivanaEndsAt ? formatRfc3339Short(u.kivanaEndsAt) : '—'),
-                    React.createElement(
-                      'td',
-                      { className: 'py-3 pr-4 text-gray-600' },
-                      u.discountPercent != null && Number(u.discountPercent) > 0
-                        ? `${String(u.discountPercent)}%${u.discountLabel ? ` (${String(u.discountLabel)})` : ''}`
-                        : '—'
-                    ),
-                    React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, String(u.lastIp || '—')),
-                    React.createElement(
-                      'td',
-                      { className: 'py-3 pr-4' },
-                      u.isAdmin ? React.createElement(Pill, { kind: 'ok' }, 'admin') : null,
-                      ' ',
-                      u.isModerator ? React.createElement(Pill, { kind: 'warn' }, 'moderator') : null,
-                      ' ',
-                      u.isFounder ? React.createElement(Pill, { kind: 'ok' }, 'founder') : null
-                    ),
-                    React.createElement(
-                      'td',
-                      { className: 'py-3 pr-4' },
-                      React.createElement(
-                        'button',
-                        {
-                          className:
-                            'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
-                          type: 'button',
-                          onClick: () => openPasswordModal(u),
-                          disabled: busy,
-                        },
-                        'Password'
-                      ),
-                      ' ',
-                      React.createElement(
-                        'button',
-                        {
-                          className:
-                            'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
-                          type: 'button',
-                          onClick: () => openGrantModal(u),
-                          disabled: busy,
-                        },
-                        'Plan'
-                      ),
-                      ' ',
-                      React.createElement(
-                        'button',
-                        {
-                          className:
-                            'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
-                          type: 'button',
-                          onClick: () => openDiscountModal(u),
-                          disabled: busy,
-                        },
-                        'Discount'
-                      ),
-                      ' ',
-                      React.createElement(
-                        'button',
-                        {
-                          className:
-                            'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
-                          type: 'button',
-                          onClick: () => adminToggleModerator(String(u.email || ''), !u.isModerator),
-                          disabled: busy || !!u.isAdmin,
-                        },
-                        u.isModerator ? 'Unmod' : 'Mod'
-                      ),
-                      ' ',
-                      React.createElement(
-                        'button',
-                        {
-                          className:
-                            'px-3 py-2 rounded-full text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none',
-                          type: 'button',
-                          onClick: () => openDeleteUserModal(u),
-                          disabled: busy || !!u.isAdmin,
-                        },
-                        'Delete'
-                      )
-                    )
-                  )
-                )
-              )
-            )
-            )
-          )
-        : null
+    const newMessagesCount = adminMessages.filter((m) => !m.isRead).length
+    const adminsCount = adminUsers.filter((u) => !!u.isAdmin).length
+    const activePlansCount = adminUsers.filter((u) => {
+      const trialActive = u.kivanaTrialEndsAt && new Date(String(u.kivanaTrialEndsAt)).getTime() > Date.now()
+      const code = trialActive ? 'trial' : String(u.kivanaPlanCode || 'basic').toLowerCase()
+      return code !== 'basic'
+    }).length
 
-    const messagesView =
-      adminTab === 'messages'
-        ? React.createElement(
-            'div',
-            { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
-            React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Messages'),
-            React.createElement('div', { className: 'mt-2 text-sm text-gray-600' }, `${adminMessages.length} messages`),
-            React.createElement(
-              'div',
-              { className: 'mt-6 overflow-x-auto' },
-            React.createElement(
-              'table',
-              { className: 'w-full text-sm min-w-[820px]' },
-              React.createElement(
-                'thead',
-                null,
-                React.createElement(
-                  'tr',
-                  null,
-                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'From'),
-                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Subject'),
-                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Status'),
-                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Actions')
-                )
-              ),
-              React.createElement(
-                'tbody',
-                null,
-                adminMessages.map((m) => {
-                  const id = String(m.id || '')
-                  const read = !!m.isRead
-                  return React.createElement(
-                    'tr',
-                    { key: id, className: 'border-t border-gray-100' },
-                    React.createElement(
-                      'td',
-                      { className: 'py-3 pr-4' },
-                      React.createElement('div', { className: 'font-medium text-[#1B1748]' }, String(m.email || '')),
-                      React.createElement('div', { className: 'text-gray-600' }, String(m.name || ''))
-                    ),
-                    React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, String(m.subject || '')),
-                    React.createElement('td', { className: 'py-3 pr-4' }, read ? React.createElement(Pill, { kind: 'ok' }, 'read') : React.createElement(Pill, { kind: 'warn' }, 'unread')),
-                    React.createElement(
-                      'td',
-                      { className: 'py-3 pr-4' },
-                      React.createElement(
-                        'button',
-                        {
-                          className:
-                            'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
-                          type: 'button',
-                          onClick: () => adminMark(id, !read),
-                          disabled: busy,
-                        },
-                        read ? 'Mark unread' : 'Mark read'
-                      ),
-                      ' ',
-                      React.createElement(
-                        'button',
-                        {
-                          className:
-                            'px-3 py-2 rounded-full text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none',
-                          type: 'button',
-                          onClick: () => adminDeleteMsg(id),
-                          disabled: busy,
-                        },
-                        'Delete'
-                      )
-                    )
-                  )
-                })
-              )
-            )
-            )
-          )
-        : null
+    const filteredUsers = adminUsers.filter((u) => {
+      const q = String(adminUserQuery || '').trim().toLowerCase()
+      if (!q) return true
+      return String(u.email || '').toLowerCase().includes(q)
+    })
 
-    return React.createElement(
-      'div',
-      { className: 'grid grid-cols-1 lg:grid-cols-2 gap-8' },
-      React.createElement(
+    const filteredMessages = adminMessages.filter((m) => {
+      if (adminMsgFilter === 'new') return !m.isRead
+      if (adminMsgFilter === 'archived') return !!m.isRead
+      return true
+    })
+
+    function AdminNavItem({ id, label, count }) {
+      const active = adminPage === id
+      return React.createElement(
+        'button',
+        {
+          type: 'button',
+          onClick: () => setAdminPage(id),
+          className: `w-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl text-[14px] font-semibold transition-colors ${
+            active ? 'bg-[#F0EEFC] text-[#4F3DDD]' : 'text-gray-700 hover:bg-gray-50'
+          }`,
+          disabled: busy,
+        },
+        React.createElement('span', null, label),
+        typeof count === 'number' ? React.createElement('span', { className: 'text-xs font-extrabold px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-700' }, String(count)) : null
+      )
+    }
+
+    function StatCard({ label, value }) {
+      return React.createElement(
+        'div',
+        { className: 'rounded-3xl border border-gray-100 bg-white p-6' },
+        React.createElement('div', { className: 'text-[11px] tracking-wide font-extrabold text-gray-500' }, label.toUpperCase()),
+        React.createElement('div', { className: 'mt-2 text-2xl font-extrabold text-[#1B1748]' }, String(value))
+      )
+    }
+
+    function UsersTable() {
+      return React.createElement(
         'div',
         { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
-        React.createElement('div', { className: 'text-2xl font-bold text-[#1B1748] tracking-tight' }, 'Admin'),
-        React.createElement('div', { className: 'mt-2 text-[15px] text-gray-600' }, 'User management and contact inbox.'),
         React.createElement(
           'div',
-          { className: 'mt-6 flex items-center gap-3 flex-wrap' },
+          { className: 'flex items-center justify-between gap-4 flex-wrap' },
           React.createElement(
-            'button',
-            {
-              className: `px-4 py-2 rounded-full border-2 text-[13px] font-semibold transition-colors ${
-                adminTab === 'users' ? 'border-[#4F3DDD] bg-[#F0EEFC] text-[#4F3DDD]' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
-              } disabled:opacity-60 disabled:pointer-events-none`,
-              type: 'button',
-              onClick: () => setAdminTab('users'),
-              disabled: busy,
-            },
-            'Users'
+            'div',
+            null,
+            React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Users'),
+            React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, `${filteredUsers.length} of ${adminUsers.length} accounts`)
           ),
           React.createElement(
-            'button',
-            {
-              className: `px-4 py-2 rounded-full border-2 text-[13px] font-semibold transition-colors ${
-                adminTab === 'messages' ? 'border-[#4F3DDD] bg-[#F0EEFC] text-[#4F3DDD]' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
-              } disabled:opacity-60 disabled:pointer-events-none`,
-              type: 'button',
-              onClick: () => setAdminTab('messages'),
-              disabled: busy,
-            },
-            'Messages'
-          ),
-          React.createElement(
-            'button',
-            {
+            'div',
+            { className: 'flex items-center gap-3 flex-wrap' },
+            React.createElement('input', {
+              value: adminUserQuery,
+              onChange: (e) => setAdminUserQuery(e.target.value),
+              placeholder: 'Search email',
               className:
-                'px-5 py-2.5 rounded-full text-[15px] font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                'px-4 py-2.5 rounded-full border border-gray-200 bg-white text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+              disabled: busy,
+            }),
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                onClick: loadAdmin,
+                disabled: busy,
+                className:
+                  'px-5 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
+              },
+              'Reload'
+            )
+          )
+        ),
+        React.createElement(
+          'div',
+          { className: 'mt-6 overflow-x-auto' },
+          React.createElement(
+            'table',
+            { className: 'w-full text-sm min-w-[1040px]' },
+            React.createElement(
+              'thead',
+              null,
+              React.createElement(
+                'tr',
+                null,
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Email'),
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Created'),
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Last IP'),
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Role'),
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Plan'),
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Ends'),
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Set plan'),
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Actions')
+              )
+            ),
+            React.createElement(
+              'tbody',
+              null,
+              filteredUsers.map((u) => {
+                const email = String(u.email || '')
+                const trialActive = u.kivanaTrialEndsAt && new Date(String(u.kivanaTrialEndsAt)).getTime() > Date.now()
+                const planCode = trialActive ? 'trial' : String(u.kivanaPlanCode || 'basic').toLowerCase()
+                const planLabel = trialActive ? 'Trial' : String(u.kivanaPlanName || normalizePlanLabel(planCode) || 'Basic')
+                const ends = trialActive ? u.kivanaTrialEndsAt : u.kivanaEndsAt
+                const role = u.isAdmin ? 'ADMIN' : u.isModerator ? 'MOD' : 'USER'
+
+                return React.createElement(
+                  'tr',
+                  { key: String(u.id || email), className: 'border-t border-gray-100' },
+                  React.createElement('td', { className: 'py-3 pr-4 font-medium text-[#1B1748]' }, email),
+                  React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, formatRfc3339Short(u.createdAt || '')),
+                  React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, String(u.lastIp || '—')),
+                  React.createElement('td', { className: 'py-3 pr-4' }, React.createElement(Pill, { kind: u.isAdmin ? 'ok' : u.isModerator ? 'warn' : 'muted' }, role)),
+                  React.createElement('td', { className: 'py-3 pr-4 text-gray-700 font-semibold' }, planLabel),
+                  React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, ends ? formatRfc3339Short(ends) : '—'),
+                  React.createElement(
+                    'td',
+                    { className: 'py-3 pr-4' },
+                    React.createElement(
+                      'select',
+                      {
+                        className: 'px-3 py-2 rounded-full border border-gray-200 bg-white text-[13px] font-semibold text-[#1B1748] disabled:opacity-60',
+                        value: planCode,
+                        onChange: async (e) => {
+                          const next = String(e.target.value || 'basic')
+                          const trialDays = Number(adminConfig?.pricing?.trialDays || 14)
+                          const endsAt = (() => {
+                            if (next === 'basic' || next === 'lifetime_pro') return null
+                            const days = next === 'trial' ? trialDays : 30
+                            return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
+                          })()
+                          await adminGrantPlan(email, next, endsAt || '')
+                        },
+                        disabled: busy || !!u.isAdmin,
+                      },
+                      React.createElement('option', { value: 'basic' }, 'Basic'),
+                      React.createElement('option', { value: 'trial' }, 'Trial'),
+                      React.createElement('option', { value: 'standard' }, 'Ordinary'),
+                      React.createElement('option', { value: 'pro' }, 'Pro'),
+                      React.createElement('option', { value: 'lifetime_pro' }, 'Lifetime Pro')
+                    )
+                  ),
+                  React.createElement(
+                    'td',
+                    { className: 'py-3 pr-4' },
+                    React.createElement(
+                      'button',
+                      {
+                        className:
+                          'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                        type: 'button',
+                        onClick: () => openGrantModal(u),
+                        disabled: busy || !!u.isAdmin,
+                      },
+                      'Details'
+                    ),
+                    ' ',
+                    React.createElement(
+                      'button',
+                      {
+                        className:
+                          'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                        type: 'button',
+                        onClick: () => openDiscountModal(u),
+                        disabled: busy || !!u.isAdmin,
+                      },
+                      'Discount'
+                    ),
+                    ' ',
+                    React.createElement(
+                      'button',
+                      {
+                        className:
+                          'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                        type: 'button',
+                        onClick: () => openPasswordModal(u),
+                        disabled: busy || !!u.isAdmin,
+                      },
+                      'Password'
+                    ),
+                    ' ',
+                    React.createElement(
+                      'button',
+                      {
+                        className:
+                          'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                        type: 'button',
+                        onClick: () => adminToggleModerator(String(u.email || ''), !u.isModerator),
+                        disabled: busy || !!u.isAdmin,
+                      },
+                      u.isModerator ? 'Unmod' : 'Mod'
+                    ),
+                    ' ',
+                    React.createElement(
+                      'button',
+                      {
+                        className:
+                          'px-3 py-2 rounded-full text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none',
+                        type: 'button',
+                        onClick: () => openDeleteUserModal(u),
+                        disabled: busy || !!u.isAdmin,
+                      },
+                      'Delete'
+                    )
+                  )
+                )
+              })
+            )
+          )
+        )
+      )
+    }
+
+    function MessagesTable() {
+      const statusPill = (m) => (m.isRead ? React.createElement(Pill, { kind: 'muted' }, 'ARCHIVED') : React.createElement(Pill, { kind: 'warn' }, 'NEW'))
+      const preview = (m) => {
+        const s = String(m.message || '').replace(/\s+/g, ' ').trim()
+        return s.length > 44 ? s.slice(0, 44) + '…' : s
+      }
+      return React.createElement(
+        'div',
+        { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+        React.createElement(
+          'div',
+          { className: 'flex items-center justify-between gap-4 flex-wrap' },
+          React.createElement(
+            'div',
+            null,
+            React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Inbound messages'),
+            React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, 'Contact form submissions from the website.')
+          ),
+          React.createElement(
+            'div',
+            { className: 'flex items-center gap-3 flex-wrap' },
+            React.createElement(
+              'select',
+              {
+                value: adminMsgFilter,
+                onChange: (e) => setAdminMsgFilter(String(e.target.value || 'new')),
+                className: 'px-4 py-2.5 rounded-full border border-gray-200 bg-white text-[14px] font-semibold text-[#1B1748]',
+                disabled: busy,
+              },
+              React.createElement('option', { value: 'new' }, `New (${newMessagesCount})`),
+              React.createElement('option', { value: 'archived' }, 'Archived'),
+              React.createElement('option', { value: 'all' }, `All (${adminMessages.length})`)
+            ),
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                onClick: loadAdmin,
+                disabled: busy,
+                className:
+                  'px-5 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
+              },
+              'Reload'
+            )
+          )
+        ),
+        React.createElement(
+          'div',
+          { className: 'mt-6 overflow-x-auto' },
+          React.createElement(
+            'table',
+            { className: 'w-full text-sm min-w-[1040px]' },
+            React.createElement(
+              'thead',
+              null,
+              React.createElement(
+                'tr',
+                null,
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Created'),
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Status'),
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Name'),
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Email'),
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Subject'),
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Message'),
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'IP'),
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Action')
+              )
+            ),
+            React.createElement(
+              'tbody',
+              null,
+              filteredMessages.map((m) => {
+                const id = String(m.id || '')
+                const read = !!m.isRead
+                return React.createElement(
+                  'tr',
+                  { key: id, className: 'border-t border-gray-100' },
+                  React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, formatRfc3339Short(m.createdAt || '')),
+                  React.createElement('td', { className: 'py-3 pr-4' }, statusPill(m)),
+                  React.createElement('td', { className: 'py-3 pr-4 font-medium text-[#1B1748]' }, String(m.name || '')),
+                  React.createElement('td', { className: 'py-3 pr-4 text-gray-700' }, String(m.email || '')),
+                  React.createElement(
+                    'td',
+                    { className: 'py-3 pr-4 text-[#4F3DDD] font-semibold' },
+                    React.createElement(
+                      'button',
+                      { type: 'button', className: 'hover:underline', onClick: () => setMsgModal(m), disabled: busy },
+                      String(m.subject || '(no subject)')
+                    )
+                  ),
+                  React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, preview(m)),
+                  React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, String(m.clientIp || '—')),
+                  React.createElement(
+                    'td',
+                    { className: 'py-3 pr-4' },
+                    React.createElement(
+                      'button',
+                      {
+                        className:
+                          'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                        type: 'button',
+                        onClick: () => setMsgModal(m),
+                        disabled: busy,
+                      },
+                      'Open'
+                    ),
+                    ' ',
+                    React.createElement(
+                      'button',
+                      {
+                        className:
+                          'px-3 py-2 rounded-full text-xs font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
+                        type: 'button',
+                        onClick: () => adminMark(id, read ? false : true),
+                        disabled: busy,
+                      },
+                      read ? 'Unarchive' : 'Archive'
+                    ),
+                    ' ',
+                    React.createElement(
+                      'button',
+                      {
+                        className:
+                          'px-3 py-2 rounded-full text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none',
+                        type: 'button',
+                        onClick: () => adminDeleteMsg(id),
+                        disabled: busy,
+                      },
+                      'Delete'
+                    )
+                  )
+                )
+              })
+            )
+          )
+        )
+      )
+    }
+
+    function SettingsPanel() {
+      const cfg = adminConfig || null
+      if (!cfg) {
+        return React.createElement(
+          'div',
+          { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+          React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Settings'),
+          React.createElement('div', { className: 'mt-2 text-sm text-gray-600' }, 'Load settings to edit plan visibility and pricing.'),
+          React.createElement(
+            'button',
+            {
               type: 'button',
               onClick: loadAdmin,
               disabled: busy,
+              className:
+                'mt-6 px-5 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
             },
-            busy ? 'Loading…' : 'Reload'
+            'Reload'
           )
-        ),
-        status.text
-          ? React.createElement(
-              'div',
-              { className: `mt-4 text-sm ${status.kind === 'err' ? 'text-red-600' : status.kind === 'ok' ? 'text-emerald-700' : 'text-gray-600'}` },
-              status.text
+        )
+      }
+
+      const Toggle = ({ label, value, onChange }) =>
+        React.createElement(
+          'div',
+          { className: 'flex items-center justify-between gap-4 rounded-2xl border border-gray-100 px-5 py-4' },
+          React.createElement('div', null, React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, label)),
+          React.createElement('input', { type: 'checkbox', checked: !!value, onChange: (e) => onChange(!!e.target.checked), disabled: busy, className: 'w-5 h-5 accent-[#4F3DDD]' })
+        )
+
+      const PriceRow = ({ title, obj, onUpdate }) =>
+        React.createElement(
+          'div',
+          { className: 'rounded-2xl border border-gray-100 px-5 py-4' },
+          React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, title),
+          React.createElement(
+            'div',
+            { className: 'mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3' },
+            ['eur', 'gbp', 'nok'].map((k) =>
+              React.createElement('input', {
+                key: k,
+                type: 'number',
+                step: '0.01',
+                value: String(obj?.[k] ?? ''),
+                onChange: (e) => onUpdate({ ...(obj || {}), [k]: Number(e.target.value) }),
+                disabled: busy,
+                className:
+                  'w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                placeholder: k.toUpperCase(),
+              })
             )
-          : null
+          )
+        )
+
+      return React.createElement(
+        'div',
+        { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+        React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Settings'),
+        React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, 'Global toggles for the portal and pricing.'),
+        React.createElement(
+          'div',
+          { className: 'mt-6 grid gap-4' },
+          Toggle({
+            label: 'Allow new signups',
+            value: cfg.allowSignups,
+            onChange: (v) => setAdminConfig((c) => ({ ...(c || {}), allowSignups: v })),
+          }),
+          Toggle({
+            label: 'Show Basic',
+            value: cfg.pricing?.showBasic,
+            onChange: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), showBasic: v } })),
+          }),
+          Toggle({
+            label: 'Show Trial',
+            value: cfg.pricing?.showTrial,
+            onChange: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), showTrial: v } })),
+          }),
+          Toggle({
+            label: 'Show Ordinary',
+            value: cfg.pricing?.showStandard,
+            onChange: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), showStandard: v } })),
+          }),
+          Toggle({
+            label: 'Show Pro',
+            value: cfg.pricing?.showPro,
+            onChange: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), showPro: v } })),
+          }),
+          Toggle({
+            label: 'Show Lifetime',
+            value: cfg.pricing?.showLifetime,
+            onChange: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), showLifetime: v } })),
+          }),
+          Toggle({
+            label: 'Show Accountant',
+            value: cfg.pricing?.showAccountant,
+            onChange: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), showAccountant: v } })),
+          }),
+          React.createElement(
+            'div',
+            { className: 'rounded-2xl border border-gray-100 px-5 py-4' },
+            React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Yearly factor'),
+            React.createElement('div', { className: 'mt-1 text-xs text-gray-600' }, 'Yearly price = monthly * factor.'),
+            React.createElement('input', {
+              type: 'number',
+              step: '1',
+              value: String(cfg.pricing?.yearlyFactor ?? ''),
+              onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), yearlyFactor: Number(e.target.value) } })),
+              disabled: busy,
+              className:
+                'mt-3 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+            })
+          ),
+          React.createElement(
+            'div',
+            { className: 'rounded-2xl border border-gray-100 px-5 py-4' },
+            React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Trial days'),
+            React.createElement('input', {
+              type: 'number',
+              step: '1',
+              value: String(cfg.pricing?.trialDays ?? ''),
+              onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), trialDays: Number(e.target.value) } })),
+              disabled: busy,
+              className:
+                'mt-3 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+            })
+          ),
+          PriceRow({
+            title: 'Ordinary monthly prices',
+            obj: cfg.pricing?.standardMonthly,
+            onUpdate: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), standardMonthly: v } })),
+          }),
+          PriceRow({
+            title: 'Pro monthly prices',
+            obj: cfg.pricing?.proMonthly,
+            onUpdate: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), proMonthly: v } })),
+          }),
+          React.createElement(
+            'div',
+            { className: 'flex items-center justify-end gap-3' },
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                onClick: () => saveAdminConfig(adminConfig),
+                disabled: busy,
+                className:
+                  'px-6 py-2.5 rounded-full text-[14px] font-semibold text-white bg-[#4F3DDD] hover:bg-[#3F2FCB] disabled:opacity-60 disabled:pointer-events-none',
+              },
+              'Save settings'
+            )
+          )
+        )
+      )
+    }
+
+    function OverviewPanel() {
+      return React.createElement(
+        React.Fragment,
+        null,
+        React.createElement('div', { className: 'text-4xl font-extrabold text-[#1B1748]', style: { fontFamily: 'Lora, serif' } }, 'Admin control panel'),
+        React.createElement('div', { className: 'mt-2 text-[15px] text-gray-600' }, 'User management, plan controls and inbound messages.'),
+        React.createElement(
+          'div',
+          { className: 'mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4' },
+          React.createElement(StatCard, { label: 'Users', value: adminUsers.length }),
+          React.createElement(StatCard, { label: 'Admins', value: adminsCount }),
+          React.createElement(StatCard, { label: 'Active plans', value: activePlansCount }),
+          React.createElement(StatCard, { label: 'New messages', value: newMessagesCount })
+        ),
+        React.createElement('div', { className: 'mt-8' }, React.createElement(MessagesTable, null)),
+        React.createElement('div', { className: 'mt-8' }, React.createElement(SettingsPanel, null))
+      )
+    }
+
+    const panel =
+      adminPage === 'overview'
+        ? React.createElement(OverviewPanel, null)
+        : adminPage === 'users'
+          ? React.createElement(UsersTable, null)
+          : adminPage === 'messages'
+            ? React.createElement(MessagesTable, null)
+            : React.createElement(SettingsPanel, null)
+
+    return React.createElement(
+      'div',
+      { className: 'flex flex-col lg:flex-row gap-8' },
+      React.createElement(
+        'aside',
+        { className: 'w-full lg:w-[260px] shrink-0' },
+        React.createElement(
+          'div',
+          { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-2' },
+          React.createElement(AdminNavItem, { id: 'overview', label: 'Overview' }),
+          React.createElement(AdminNavItem, { id: 'users', label: 'Users', count: adminUsers.length }),
+          React.createElement(AdminNavItem, { id: 'messages', label: 'Messages', count: newMessagesCount }),
+          React.createElement(AdminNavItem, { id: 'settings', label: 'Settings' })
+        )
       ),
-      React.createElement('div', null, usersView, messagesView)
+      React.createElement('div', { className: 'flex-1 min-w-0' }, panel)
     )
   }
 
@@ -2208,6 +2652,88 @@ function App() {
     )
   }
 
+  function MessageModal() {
+    if (!msgModal) return null
+    const id = String(msgModal.id || '')
+    const read = !!msgModal.isRead
+    const created = msgModal.createdAt ? formatRfc3339Short(msgModal.createdAt) : ''
+    const subject = String(msgModal.subject || '(no subject)')
+    const email = String(msgModal.email || '')
+    const name = String(msgModal.name || '')
+    const ip = String(msgModal.clientIp || '')
+    const message = String(msgModal.message || '')
+
+    return React.createElement(
+      'div',
+      { className: 'fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-6', onClick: () => setMsgModal(null), role: 'dialog', 'aria-modal': 'true' },
+      React.createElement(
+        'div',
+        { className: 'w-full max-w-3xl rounded-3xl bg-white shadow-xl border border-gray-100', onClick: (e) => e.stopPropagation() },
+        React.createElement(
+          'div',
+          { className: 'px-6 py-5 flex items-start justify-between gap-4 border-b border-gray-100' },
+          React.createElement(
+            'div',
+            null,
+            React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, subject),
+            React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, `${name || 'Unknown'} • ${email || '—'}${created ? ' • ' + created : ''}${ip ? ' • ' + ip : ''}`)
+          ),
+          React.createElement(
+            'button',
+            { className: 'w-10 h-10 rounded-full border border-gray-200 text-[#1B1748] hover:bg-gray-50', type: 'button', onClick: () => setMsgModal(null), disabled: busy },
+            '×'
+          )
+        ),
+        React.createElement(
+          'div',
+          { className: 'px-6 py-6' },
+          React.createElement(
+            'div',
+            { className: 'rounded-2xl border border-gray-100 bg-gray-50 p-5 whitespace-pre-wrap text-[14px] text-gray-800 leading-relaxed' },
+            message || '—'
+          )
+        ),
+        React.createElement(
+          'div',
+          { className: 'px-6 pb-6 flex items-center justify-between gap-3 flex-wrap' },
+          React.createElement('div', null, read ? React.createElement(Pill, { kind: 'muted' }, 'ARCHIVED') : React.createElement(Pill, { kind: 'warn' }, 'NEW')),
+          React.createElement(
+            'div',
+            { className: 'flex items-center gap-3 flex-wrap justify-end' },
+            React.createElement(
+              'button',
+              {
+                className:
+                  'px-5 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
+                type: 'button',
+                onClick: async () => {
+                  await adminMark(id, read ? false : true)
+                  setMsgModal(null)
+                },
+                disabled: busy,
+              },
+              read ? 'Unarchive' : 'Archive'
+            ),
+            React.createElement(
+              'button',
+              {
+                className:
+                  'px-5 py-2.5 rounded-full text-[14px] font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none',
+                type: 'button',
+                onClick: async () => {
+                  await adminDeleteMsg(id)
+                  setMsgModal(null)
+                },
+                disabled: busy,
+              },
+              'Delete'
+            )
+          )
+        )
+      )
+    )
+  }
+
   const content =
     view === 'auth'
       ? React.createElement(AuthCard, null)
@@ -2229,7 +2755,8 @@ function App() {
     React.createElement('div', { className: 'max-w-7xl mx-auto px-6 lg:px-10 pb-10 text-sm text-gray-500' }, `© ${new Date().getFullYear()} Kivana`),
     React.createElement(AdminModal, null),
     React.createElement(PasswordModal, null),
-    React.createElement(DeleteModal, null)
+    React.createElement(DeleteModal, null),
+    React.createElement(MessageModal, null)
   )
 }
 

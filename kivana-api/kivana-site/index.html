@@ -518,6 +518,63 @@
             .catch(function () {})
         }
 
+        function detectCurrency() {
+          var langs = (navigator && navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language]
+          var lang = String(langs[0] || "").toUpperCase()
+          var tz = ""
+          try { tz = String(Intl.DateTimeFormat().resolvedOptions().timeZone || "") } catch (err) {}
+          var isNorway = lang.indexOf("-NO") >= 0 || lang.indexOf("NB") === 0 || lang.indexOf("NN") === 0 || /OSLO/i.test(tz)
+          var isUk = lang.indexOf("-GB") >= 0 || /LONDON/i.test(tz)
+          if (isNorway) return { code: "NOK", symbol: "kr", key: "nok" }
+          if (isUk) return { code: "GBP", symbol: "£", key: "gbp" }
+          return { code: "EUR", symbol: "€", key: "eur" }
+        }
+
+        function formatPrice(curr, amount) {
+          var n = Number(amount || 0)
+          if (curr.code === "NOK") return curr.symbol + " " + String(Math.round(n))
+          var s = n.toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1")
+          return curr.symbol + s
+        }
+
+        function applyTextReplace(root, from, to) {
+          var nodes = root.querySelectorAll("*")
+          for (var i = 0; i < nodes.length; i++) {
+            var el = nodes[i]
+            if (el.children && el.children.length) continue
+            var t = (el.textContent || "").trim()
+            if (t === from) el.textContent = to
+          }
+        }
+
+        function applyMarketingPricing(cfg) {
+          try {
+            var sec = document.getElementById("plans") || document.querySelector("section#plans") || document.body
+            if (!sec || !cfg || !cfg.pricing) return false
+            var curr = detectCurrency()
+            var yf = Number(cfg.pricing.yearlyFactor || 11)
+            var mStd = cfg.pricing.standardMonthly && cfg.pricing.standardMonthly[curr.key]
+            var mPro = cfg.pricing.proMonthly && cfg.pricing.proMonthly[curr.key]
+            if (mStd == null || mPro == null) return false
+            var yStd = curr.code === "NOK" ? Number(mStd) * yf : Number((Number(mStd) * yf).toFixed(2))
+            var yPro = curr.code === "NOK" ? Number(mPro) * yf : Number((Number(mPro) * yf).toFixed(2))
+
+            applyTextReplace(sec, "€9.99", formatPrice(curr, mStd))
+            applyTextReplace(sec, "€109.89", formatPrice(curr, yStd))
+            applyTextReplace(sec, "€29.90", formatPrice(curr, mPro))
+            applyTextReplace(sec, "€328.90", formatPrice(curr, yPro))
+            return true
+          } catch (err) {
+            return false
+          }
+        }
+
+        function loadPublicConfig() {
+          return fetch("/v1/public/config", { cache: "no-store" })
+            .then(function (r) { return r.ok ? r.json() : null })
+            .catch(function () { return null })
+        }
+
         function els() {
           return {
             modal: document.getElementById("authModal"),
@@ -704,6 +761,13 @@
 
         function init() {
           loadReactBuild()
+          loadPublicConfig().then(function (cfg) {
+            var tries = 0
+            var timer = setInterval(function () {
+              tries++
+              if (applyMarketingPricing(cfg) || tries > 20) clearInterval(timer)
+            }, 350)
+          })
           var e = els()
           if (e.tabLogin) e.tabLogin.addEventListener("click", function () { setMode("login") })
           if (e.tabSignup) e.tabSignup.addEventListener("click", function () { setMode("signup") })
