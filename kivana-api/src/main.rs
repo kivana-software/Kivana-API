@@ -395,11 +395,12 @@ async fn sitemap_xml() -> impl IntoResponse {
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://{}/</loc></url>
+  <url><loc>https://{}/learn.html</loc></url>
   <url><loc>https://{}/privacy.html</loc></url>
   <url><loc>https://{}/terms.html</loc></url>
 </urlset>
 "#,
-        domain, domain, domain
+        domain, domain, domain, domain
     );
     ([(axum::http::header::CONTENT_TYPE, "application/xml; charset=utf-8")], body)
 }

@@ -1742,6 +1742,11 @@ applyTheme(getTheme())
 async function goToPublicSection(id) {
   if (isAuthed() || !fullLanding) return
   if (id === 'pricing') return
+  const exists = !!document.getElementById(id)
+  if (!exists) {
+    window.location.href = `/learn.html#${encodeURIComponent(String(id || '').trim() || 'how')}`
+    return
+  }
   pendingPlanSelection = null
   await showDashboard()
   if (window.location.hash !== `#${id}`) window.location.hash = id
@@ -1874,6 +1879,10 @@ async function applyHashNav() {
     : id
   const allow = new Set(['benefits', 'how', 'preview', 'why', 'fit', 'trust', 'coming'])
   if (!allow.has(normalized)) return
+  if (!document.getElementById(normalized)) {
+    window.location.href = `/learn.html#${encodeURIComponent(normalized)}`
+    return
+  }
   await showDashboard()
   setTimeout(() => document.getElementById(normalized)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
 }

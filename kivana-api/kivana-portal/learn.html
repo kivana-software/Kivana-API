@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="icon" type="image/png" href="/kivana-logo.png" />
+  <link rel="apple-touch-icon" href="/kivana-logo.png" />
+  <title>Kivana | Learn</title>
+  <meta name="description" content="Learn how Kivana works. Offline-first, your data stays on your device. MIT-licensed core." />
+  <link rel="canonical" href="https://kivana.eu/learn.html" />
+  <meta name="robots" content="index,follow" />
+  <meta property="og:title" content="Kivana | Learn" />
+  <meta property="og:description" content="Learn how Kivana works. Offline-first, your data stays on your device. MIT-licensed core." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://kivana.eu/learn.html" />
+  <meta property="og:image" content="https://kivana.eu/kivana-logo.png" />
+  <meta name="twitter:card" content="summary" />
+  <script>
+    ;(() => {
+      try {
+        const t = localStorage.getItem('kivanaPortal/theme')
+        document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark')
+      } catch {
+        document.documentElement.setAttribute('data-theme', 'dark')
+      }
+    })()
+  </script>
+  <link rel="stylesheet" href="portal.css?v=0.4.19" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app">
+    <div id="navbar">
+      <div class="logo">
+        <img class="logoImg" src="/kivana-logo.png" alt="Kivana logo" />
+        <span class="logoText">Kivana</span>
+      </div>
+      <div class="nav-links">
+        <div class="nav-main" id="navLearn">
+          <a class="nav-anchor" href="/">Home</a>
+          <a class="nav-anchor" href="/learn.html">Learn</a>
+          <a class="nav-anchor" href="/learn.html#preview">Preview</a>
+        </div>
+        <div class="nav-actions">
+          <button id="btnThemeToggle" class="btn btn-secondary themeToggle" type="button">Theme</button>
+          <a class="btn btn-secondary" href="/?portal=1">Sign in</a>
+          <a class="btn btn-primary" href="/?portal=1">Create account</a>
+        </div>
+        <button class="nav-menu-btn" id="btnMenu" type="button" aria-label="Open menu" aria-expanded="false">☰</button>
+      </div>
+    </div>
+
+    <div class="mobile-menu hidden" id="mobileMenu" role="dialog" aria-modal="true" aria-label="Menu">
+      <div class="mobile-menu-panel">
+        <div class="mobile-menu-top">
+          <div class="mobile-menu-title">Menu</div>
+          <button class="mobile-menu-close" id="btnCloseMenu" type="button" aria-label="Close menu">✕</button>
+        </div>
+        <div class="mobile-menu-links" id="mobileMenuPublic">
+          <a class="mobile-menu-link" href="/">Home</a>
+          <a class="mobile-menu-link" href="/learn.html">Learn</a>
+          <a class="mobile-menu-link" href="/learn.html#preview">Preview</a>
+          <a class="mobile-menu-link" href="/privacy.html">Privacy</a>
+          <a class="mobile-menu-link" href="/terms.html">Terms</a>
+        </div>
+        <div class="mobile-menu-actions" id="mobileMenuPublicActions">
+          <button class="btn btn-secondary w-full themeToggle" id="mThemeToggle" type="button">Theme</button>
+          <a class="btn btn-secondary w-full" href="/?portal=1">Sign in</a>
+          <a class="btn btn-primary w-full" href="/?portal=1">Create account</a>
+        </div>
+      </div>
+      <div class="mobile-menu-backdrop" id="menuBackdrop"></div>
+    </div>
+
+    <div class="hero hero-solo">
+      <div>
+        <h2 class="hero-title">Everything about Kivana — in one place.</h2>
+        <p class="hero-subtitle">Offline-first. Your data is stored locally on your device. MIT-licensed core.</p>
+        <div class="hero-ctas">
+          <a class="btn btn-primary btn-hero" href="/?portal=1">Create account</a>
+          <a class="btn btn-secondary btn-hero" href="/">Back to home</a>
+        </div>
+        <div class="hero-badges" aria-label="Trust signals">
+          <span class="badge-chip">No cloud required</span>
+          <span class="badge-chip">Offline-first</span>
+          <span class="badge-chip">MIT-licensed core</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="trust-strip" aria-label="Trust">
+      Built as an alternative to bloated cloud tools • No enterprise complexity
+    </div>
+
+    <section class="section" id="why">
+      <div class="section-title">Why switch</div>
+      <div class="section-subtitle">Trade-offs, clearly.</div>
+      <div class="compare-grid">
+        <div class="compare-card">
+          <div class="compare-kicker">Typical cloud tools</div>
+          <ul class="compare-list">
+            <li>Data stored on servers</li>
+            <li>Subscription never ends</li>
+            <li>Requires internet</li>
+          </ul>
+        </div>
+        <div class="compare-card compare-card-primary">
+          <div class="compare-kicker">Kivana</div>
+          <ul class="compare-list">
+            <li>Your data stays on your device</li>
+            <li>Works offline</li>
+            <li>Desktop-first productivity</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="fit">
+      <div class="section-title">Who this is for</div>
+      <div class="section-subtitle">A great fit for some, not for everyone.</div>
+      <div class="compare-grid">
+        <div class="compare-card compare-card-primary">
+          <div class="compare-kicker">Built for</div>
+          <ul class="compare-list">
+            <li>Freelancers and small businesses</li>
+            <li>Privacy-focused users</li>
+            <li>People who want a simple workflow</li>
+          </ul>
+        </div>
+        <div class="compare-card">
+          <div class="compare-kicker">Not for</div>
+          <ul class="compare-list">
+            <li>Large companies with enterprise compliance needs</li>
+            <li>Teams that require cloud-first collaboration</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="trust">
+      <div class="section-title">Trust & transparency</div>
+      <div class="section-subtitle">Finance software needs trust.</div>
+      <div class="compare-grid">
+        <div class="compare-card compare-card-primary">
+          <div class="compare-kicker">Your data</div>
+          <div class="diff-desc">Your data never leaves your device unless you choose.</div>
+          <div class="pricing-points">
+            <span class="pricing-point">Offline-first</span>
+            <span class="pricing-point">Local storage</span>
+            <span class="pricing-point">Optional account</span>
+          </div>
+        </div>
+        <div class="compare-card">
+          <div class="compare-kicker">Public releases</div>
+          <div class="diff-desc">You can verify builds and follow updates on GitHub.</div>
+          <div class="resource-grid">
+            <a class="resource-card" href="https://github.com/kivana-software/Kivana/releases" target="_blank" rel="noopener">
+              <div class="resource-t">Releases</div>
+              <div class="resource-d">Download builds and changelogs.</div>
+            </a>
+            <a class="resource-card" href="https://github.com/kivana-software/Kivana" target="_blank" rel="noopener">
+              <div class="resource-t">Source</div>
+              <div class="resource-d">Follow development on GitHub.</div>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="coming">
+      <div class="section-title">What’s coming</div>
+      <div class="section-subtitle">Under production. Clear direction.</div>
+      <div class="benefits-grid">
+        <div class="benefit-card">
+          <div class="benefit-title">Ordinary</div>
+          <div class="benefit-desc">More tools for growing workflows.</div>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-title">Pro</div>
+          <div class="benefit-desc">Advanced workflows and exports.</div>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-title">Accountant</div>
+          <div class="benefit-desc">Professional help when needed.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="benefits">
+      <div class="section-title">3 core benefits</div>
+      <div class="benefits-grid">
+        <div class="benefit-card">
+          <div class="benefit-title">Own your data</div>
+          <div class="benefit-desc">Local-first by design. No forced cloud.</div>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-title">Works offline</div>
+          <div class="benefit-desc">Fast, reliable, and always available.</div>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-title">No bloat</div>
+          <div class="benefit-desc">Designed for people who hate complex accounting systems.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="how">
+      <div class="section-title">How it works</div>
+      <div class="section-subtitle">A simple flow. Desktop-first.</div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-n">1</div>
+          <div>
+            <div class="step-t">Download</div>
+            <div class="step-d">Install the Basic app (free to test).</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-n">2</div>
+          <div>
+            <div class="step-t">Use it locally</div>
+            <div class="step-d">Work offline with your data on your device.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-n">3</div>
+          <div>
+            <div class="step-t">Optional account</div>
+            <div class="step-d">Use an account only for updates and future plans.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="preview">
+      <div class="section-title">Product preview</div>
+      <div class="section-subtitle">Clean workflow. Built for speed.</div>
+      <div class="previewGrid" aria-label="Kivana screenshots">
+        <figure class="previewShot">
+          <img class="previewImg" src="/dashbord1.png" alt="Kivana dashboard screenshot" loading="lazy" />
+          <figcaption class="previewCaption">Dashboard</figcaption>
+        </figure>
+        <figure class="previewShot">
+          <img class="previewImg" src="/Report.png" alt="Kivana reports screenshot" loading="lazy" />
+          <figcaption class="previewCaption">Reports</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <div class="footer">
+      <div>© 2026 Kivana</div>
+      <div>
+        <a href="/privacy.html">Privacy</a>
+        <span class="footerSep">•</span>
+        <a href="/terms.html">Terms</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    ;(() => {
+      const getTheme = () => {
+        try {
+          const t = String(localStorage.getItem('kivanaPortal/theme') || '').trim().toLowerCase()
+          return t === 'light' ? 'light' : 'dark'
+        } catch {
+          return 'dark'
+        }
+      }
+      const setTheme = (theme) => {
+        const t = theme === 'dark' ? 'dark' : 'light'
+        document.documentElement.setAttribute('data-theme', t)
+        try {
+          localStorage.setItem('kivanaPortal/theme', t)
+        } catch {
+          void 0
+        }
+      }
+      const toggleTheme = () => {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+        setTheme(isDark ? 'light' : 'dark')
+        updateThemeButtons()
+      }
+      const updateThemeButtons = () => {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+        const label = isDark ? 'Theme: Light' : 'Theme: Dark'
+        const btn = document.getElementById('btnThemeToggle')
+        const m = document.getElementById('mThemeToggle')
+        if (btn) btn.textContent = label
+        if (m) m.textContent = label
+      }
+
+      const mobileMenu = document.getElementById('mobileMenu')
+      const btnMenu = document.getElementById('btnMenu')
+      const btnClose = document.getElementById('btnCloseMenu')
+      const backdrop = document.getElementById('menuBackdrop')
+      const openMenu = () => {
+        if (!mobileMenu) return
+        mobileMenu.classList.remove('hidden')
+        if (btnMenu) btnMenu.setAttribute('aria-expanded', 'true')
+      }
+      const closeMenu = () => {
+        if (!mobileMenu) return
+        mobileMenu.classList.add('hidden')
+        if (btnMenu) btnMenu.setAttribute('aria-expanded', 'false')
+      }
+
+      if (btnMenu) btnMenu.addEventListener('click', () => {
+        if (!mobileMenu) return
+        const open = !mobileMenu.classList.contains('hidden')
+        if (open) closeMenu()
+        else openMenu()
+      })
+      if (btnClose) btnClose.addEventListener('click', closeMenu)
+      if (backdrop) backdrop.addEventListener('click', closeMenu)
+
+      const btnTheme = document.getElementById('btnThemeToggle')
+      const mTheme = document.getElementById('mThemeToggle')
+      if (btnTheme) btnTheme.addEventListener('click', toggleTheme)
+      if (mTheme) mTheme.addEventListener('click', () => {
+        toggleTheme()
+        closeMenu()
+      })
+
+      setTheme(getTheme())
+      updateThemeButtons()
+    })()
+  </script>
+</body>
+</html>
