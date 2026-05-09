@@ -1194,6 +1194,39 @@ html[data-theme="dark"] .btn-secondary:hover {
   background: #0b1322;
 }
 
+.previewGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 900px) {
+  .previewGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.previewShot {
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 22px 70px rgba(0,0,0,0.55);
+  background: #0b1322;
+}
+
+.previewImg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.previewCaption {
+  padding: 0.75rem 1rem;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  color: rgba(229,231,235,0.80);
+  font-weight: 800;
+}
+
 .preview-svg {
   width: 100%;
   height: auto;
