@@ -9,45 +9,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:ital,wght@0,500;0,600;0,700;1,500&display=swap" rel="stylesheet" />
     <link href="/static/css/main.2a5ca006.css" rel="stylesheet" />
-    <style>
-      #portalQuickLinks {
-        position: fixed;
-        top: 16px;
-        right: 16px;
-        z-index: 9998;
-        display: flex;
-        gap: 10px;
-      }
-      #portalQuickLinks a {
-        font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-        font-weight: 700;
-        font-size: 14px;
-        line-height: 1;
-        text-decoration: none;
-        border-radius: 999px;
-        padding: 12px 16px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-      }
-      #portalQuickLinks .portalSignIn {
-        background: #fff;
-        border: 2px solid #1b1748;
-        color: #1b1748;
-      }
-      #portalQuickLinks .portalSignIn:hover {
-        background: #f0eefc;
-      }
-      #portalQuickLinks .portalCreate {
-        background: #4f3ddd;
-        color: #fff;
-        border: 2px solid #4f3ddd;
-      }
-      #portalQuickLinks .portalCreate:hover {
-        background: #3f2fcb;
-        border-color: #3f2fcb;
-      }
-    </style>
     <script>
       window.addEventListener(
         "error",
@@ -65,14 +26,68 @@
         true
       )
     </script>
+    <script>
+      ;(function () {
+        var targetUrl = "/portal/?portal=1"
+        var downloadUrl = "https://github.com/kivana-software/Kivana/releases/latest"
+        function normalizeText(s) {
+          return String(s || "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .toLowerCase()
+        }
+        function getCtaTarget(el) {
+          if (!el) return false
+          var t = normalizeText(el.textContent)
+          if (t === "sign in" || t === "try free" || t === "create account") return targetUrl
+          if (t.includes("download") && (t.includes("mac") || t.includes("windows") || t.includes("win"))) return downloadUrl
+          if (t === "download" || t === "download now" || t === "download app") return downloadUrl
+          return ""
+        }
+        function wireLinks() {
+          var candidates = document.querySelectorAll("button,a")
+          for (var i = 0; i < candidates.length; i++) {
+            var el = candidates[i]
+            var dest = getCtaTarget(el)
+            if (!dest) continue
+            if (el.tagName === "A") {
+              el.setAttribute("href", dest)
+              if (dest.indexOf("https://") === 0) {
+                el.setAttribute("target", "_blank")
+                el.setAttribute("rel", "noopener")
+              }
+            }
+          }
+        }
+        document.addEventListener(
+          "click",
+          function (e) {
+            var el = e.target && e.target.closest ? e.target.closest("button,a") : null
+            var dest = getCtaTarget(el)
+            if (!dest) return
+            e.preventDefault()
+            e.stopPropagation()
+            window.location.href = dest
+          },
+          true
+        )
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", wireLinks)
+        } else {
+          wireLinks()
+        }
+        try {
+          var obs = new MutationObserver(function () {
+            wireLinks()
+          })
+          obs.observe(document.documentElement, { childList: true, subtree: true })
+        } catch (err) {}
+      })()
+    </script>
     <script defer="defer" src="/static/js/main.e964d4c9.js"></script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="portalQuickLinks">
-      <a class="portalSignIn" href="/portal/?portal=1">Sign in</a>
-      <a class="portalCreate" href="/portal/?portal=1">Create account</a>
-    </div>
     <div id="root"></div>
   </body>
 </html>
