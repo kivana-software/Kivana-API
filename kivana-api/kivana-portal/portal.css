@@ -2472,6 +2472,23 @@ html:not([data-theme="dark"]) .wipBanner {
   border-bottom-color: rgba(163,230,53,0.22);
 }
 
+html:not([data-theme="dark"]) .clarity-strip,
+html:not([data-theme="dark"]) .section {
+  background: rgba(255,255,255,0.78);
+  border-color: rgba(2, 6, 23, 0.10);
+  box-shadow: 0 18px 70px rgba(2, 6, 23, 0.06);
+}
+
+html:not([data-theme="dark"]) .clarity-item,
+html:not([data-theme="dark"]) .benefit-card,
+html:not([data-theme="dark"]) .diff-card,
+html:not([data-theme="dark"]) .step,
+html:not([data-theme="dark"]) .security-item,
+html:not([data-theme="dark"]) .faq-item {
+  background: rgba(255,255,255,0.92);
+  border-color: rgba(2, 6, 23, 0.10);
+}
+
 html:not([data-theme="dark"]) .tableWrap {
   border-color: rgba(2, 6, 23, 0.10);
 }

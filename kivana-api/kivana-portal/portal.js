@@ -54,6 +54,7 @@ const els = {
   btnPrebetaDownloadMac: document.getElementById('btnPrebetaDownloadMac'),
   btnPrebetaDownloadWin: document.getElementById('btnPrebetaDownloadWin'),
   btnMacGuide: document.getElementById('btnMacGuide'),
+  macUnsignedNote: document.getElementById('macUnsignedNote'),
   downloadStatus: document.getElementById('downloadStatus'),
   navFullLanding: document.getElementById('navFullLanding'),
   btnDownloadPrimary: document.getElementById('btnDownloadPrimary'),
@@ -145,10 +146,12 @@ let currentEntitlement = null
 let pendingPlanSelection = null
 const sp = new URLSearchParams(window.location.search)
 const startInAuth = sp.get('portal') === '1'
-const fullLanding = sp.get('full') === '1'
+const fullLanding = sp.get('full') !== '0'
 let adminUsersCache = []
 let adminActiveTab = 'users'
-const LATEST_JSON_URL = 'https://github.com/kivana-software/Kivana/releases/latest/download/latest.json'
+const BASIC_RELEASE_URL = 'https://github.com/kivana-software/Kivana/releases/tag/v0.4.15-basic'
+const BASIC_MAC_URL = 'https://github.com/kivana-software/Kivana/releases/download/v0.4.15-basic/Kivana_0.4.15_aarch64.dmg'
+const BASIC_WIN_URL = 'https://github.com/kivana-software/Kivana/releases/download/v0.4.15-basic/Kivana_0.4.15_x64_en-US.msi'
 const MAC_GUIDE_MD_URL = 'https://raw.githubusercontent.com/kivana-software/Kivana/main/readmemac.md'
 const LS_THEME = 'kivanaPortal/theme'
 
@@ -513,32 +516,15 @@ async function refreshAccessToken() {
   setTokens(json.accessToken, json.refreshToken)
 }
 
-async function getLatestDownloadUrl(platformKey) {
-  const res = await fetch(LATEST_JSON_URL, { cache: 'no-store' })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const json = await res.json()
-  const platforms = json && typeof json === 'object' ? json.platforms : null
-  const entry = platforms && typeof platforms === 'object' ? platforms[platformKey] : null
-  const url = entry && typeof entry === 'object' ? entry.url : null
-  if (!url || typeof url !== 'string') throw new Error('missing_url')
-  return url
-}
-
 async function startPrebetaDownload(platformKey) {
-  const ok = await confirmAction({
-    title: 'Download pre-beta build',
-    message: 'This is a pre-beta build. Download anyway?',
-    okText: 'Download',
-  })
-  if (!ok) return
-  if (els.downloadStatus) els.downloadStatus.textContent = 'Preparing download…'
+  if (els.downloadStatus) els.downloadStatus.textContent = 'Opening download…'
   try {
-    const url = await getLatestDownloadUrl(platformKey)
+    const url = String(platformKey || '').startsWith('darwin') ? BASIC_MAC_URL : BASIC_WIN_URL
     window.open(url, '_blank', 'noopener')
-    if (els.downloadStatus) els.downloadStatus.textContent = 'Download started in a new tab.'
+    if (els.downloadStatus) els.downloadStatus.textContent = 'Download opened in a new tab.'
   } catch {
-    window.open('https://github.com/kivana-software/Kivana/releases', '_blank', 'noopener')
-    if (els.downloadStatus) els.downloadStatus.textContent = 'Could not start download automatically. Opened releases page.'
+    window.open(BASIC_RELEASE_URL, '_blank', 'noopener')
+    if (els.downloadStatus) els.downloadStatus.textContent = 'Could not open the download automatically. Opened release page.'
   }
 }
 
@@ -1459,6 +1445,9 @@ if (els.macGuideBackdrop) els.macGuideBackdrop.addEventListener('click', closeMa
 if (els.btnMacGuide) {
   els.btnMacGuide.classList.toggle('hidden', !isMacOs())
 }
+if (els.macUnsignedNote) {
+  els.macUnsignedNote.classList.toggle('hidden', !isMacOs())
+}
 
 applyTheme(getTheme())
 
@@ -1539,12 +1528,10 @@ if (els.btnHeroStartFree) els.btnHeroStartFree.addEventListener('click', startFr
 if (els.btnHeroViewPlans) els.btnHeroViewPlans.addEventListener('click', () => void goToPublicSection('pricing'))
 if (els.btnAccountantService) els.btnAccountantService.addEventListener('click', startFree)
 if (els.btnCtaDownloadMac) els.btnCtaDownloadMac.addEventListener('click', () => {
-  setSelectedOs('mac')
-  void handleDownloadClick()
+  void startPrebetaDownload('darwin-aarch64')
 })
 if (els.btnCtaDownloadWin) els.btnCtaDownloadWin.addEventListener('click', () => {
-  setSelectedOs('win')
-  void handleDownloadClick()
+  void startPrebetaDownload('windows-x86_64')
 })
 
 let selectedOs = 'mac'
