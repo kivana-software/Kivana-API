@@ -1440,7 +1440,7 @@ function App() {
         ),
         React.createElement(
           'div',
-          { className: 'mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4' },
+          { className: 'mt-6 kp-grid kp-plan-grid' },
           cfgPricing?.showBasic !== false
             ? React.createElement(PlanCard, { id: 'basic', title: 'Basic', price: 'Free', meta: 'Local-only, no account features', actionLabel: 'Choose', disabled: false })
             : null,
@@ -1632,7 +1632,7 @@ function App() {
           React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, 'This section only covers your account profile and subscription.'),
           React.createElement(
             'div',
-            { className: 'mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4' },
+            { className: 'mt-6 kp-grid kp-two-col' },
             React.createElement(
               'div',
               { className: 'rounded-3xl border border-gray-100 bg-white p-6' },
@@ -1747,10 +1747,10 @@ function App() {
 
     return React.createElement(
       'div',
-      { className: 'flex flex-col lg:flex-row gap-8' },
+      { className: 'kp-shell' },
       React.createElement(
         'aside',
-        { className: 'w-full lg:w-[260px] shrink-0' },
+        { className: 'kp-aside shrink-0' },
         React.createElement(
           'div',
           { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-2' },
@@ -1795,7 +1795,7 @@ function App() {
       ),
       React.createElement(
         'div',
-        { className: 'flex-1 min-w-0' },
+        { className: 'kp-main' },
         React.createElement('div', { className: 'text-3xl font-extrabold text-[#1B1748]', style: { fontFamily: 'Lora, serif' } }, 'Account portal'),
         React.createElement(
           'div',
@@ -1804,7 +1804,7 @@ function App() {
         ),
         React.createElement(
           'div',
-          { className: 'mt-6 grid grid-cols-1 md:grid-cols-3 gap-4' },
+          { className: 'mt-6 kp-grid kp-user-stats' },
           React.createElement(
             'div',
             { className: 'rounded-3xl border border-gray-100 bg-white p-6' },
@@ -2440,7 +2440,7 @@ function App() {
         React.createElement('div', { className: 'mt-2 text-[15px] text-gray-600' }, 'User management, plan controls and inbound messages.'),
         React.createElement(
           'div',
-          { className: 'mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4' },
+          { className: 'mt-6 kp-grid kp-admin-stats' },
           React.createElement(StatCard, { label: 'Users', value: adminUsers.length }),
           React.createElement(StatCard, { label: 'Admins', value: adminsCount }),
           React.createElement(StatCard, { label: 'Active plans', value: activePlansCount }),
@@ -2462,10 +2462,10 @@ function App() {
 
     return React.createElement(
       'div',
-      { className: 'flex flex-col lg:flex-row gap-8' },
+      { className: 'kp-shell' },
       React.createElement(
         'aside',
-        { className: 'w-full lg:w-[260px] shrink-0' },
+        { className: 'kp-aside shrink-0' },
         React.createElement(
           'div',
           { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-2' },
@@ -2475,7 +2475,7 @@ function App() {
           React.createElement(AdminNavItem, { id: 'settings', label: 'Settings' })
         )
       ),
-      React.createElement('div', { className: 'flex-1 min-w-0' }, panel)
+      React.createElement('div', { className: 'kp-main' }, panel)
     )
   }
 

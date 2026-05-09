@@ -15,6 +15,78 @@
       tailwind.config = { corePlugins: { preflight: false } }
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      .kp-shell {
+        display: flex;
+        flex-direction: column;
+        gap: 32px;
+      }
+      .kp-aside {
+        width: 100%;
+      }
+      .kp-main {
+        flex: 1;
+        min-width: 0;
+      }
+      @media (min-width: 1024px) {
+        .kp-shell {
+          flex-direction: row;
+          align-items: flex-start;
+        }
+        .kp-aside {
+          width: 260px;
+          flex: 0 0 260px;
+          position: sticky;
+          top: 92px;
+        }
+      }
+      .kp-grid {
+        display: grid;
+        gap: 16px;
+      }
+      .kp-user-stats {
+        grid-template-columns: 1fr;
+      }
+      @media (min-width: 768px) {
+        .kp-user-stats {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+      .kp-admin-stats {
+        grid-template-columns: 1fr;
+      }
+      @media (min-width: 640px) {
+        .kp-admin-stats {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (min-width: 1024px) {
+        .kp-admin-stats {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+      }
+      .kp-plan-grid {
+        grid-template-columns: 1fr;
+      }
+      @media (min-width: 640px) {
+        .kp-plan-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (min-width: 1024px) {
+        .kp-plan-grid {
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+        }
+      }
+      .kp-two-col {
+        grid-template-columns: 1fr;
+      }
+      @media (min-width: 1024px) {
+        .kp-two-col {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+    </style>
     <script>
       ;(() => {
         fetch('/asset-manifest.json', { cache: 'no-store' })
@@ -31,10 +103,10 @@
           .catch(() => {})
       })()
     </script>
-    <link rel="stylesheet" href="/account/app.css?v=0.2.0" />
+    <link rel="stylesheet" href="/account/app.css?v=0.2.1" />
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/account/app.js?v=0.2.0"></script>
+    <script type="module" src="/account/app.js?v=0.2.1"></script>
   </body>
 </html>
