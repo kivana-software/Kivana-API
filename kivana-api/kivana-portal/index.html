@@ -6,11 +6,11 @@
   <link rel="icon" type="image/png" href="/kivana-logo.png" />
   <link rel="apple-touch-icon" href="/kivana-logo.png" />
   <title>Kivana | Personal Finance & Accounting</title>
-  <meta name="description" content="Kivana is finance software that works without the cloud. Offline-first, with your data stored locally on your device. Open-source core (MIT)." />
+  <meta name="description" content="Kivana is finance software that works without the cloud. Offline-first, with your data stored locally on your device. MIT-licensed core." />
   <link rel="canonical" href="https://kivana.eu/" />
   <meta name="robots" content="index,follow" />
   <meta property="og:title" content="Kivana Personal Finance & Accounting" />
-  <meta property="og:description" content="Finance software that works without the cloud. Offline-first, with your data stored locally on your device. Open-source core (MIT)." />
+  <meta property="og:description" content="Finance software that works without the cloud. Offline-first, with your data stored locally on your device. MIT-licensed core." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://kivana.eu/" />
   <meta property="og:image" content="https://kivana.eu/kivana-logo.png" />
@@ -190,6 +190,7 @@
                   <span>Download Windows</span>
                 </button>
                 <button class="btn btn-secondary" id="btnMacGuide">macOS setup guide</button>
+                <button class="btn btn-secondary" id="btnPrebetaContact">Contact now</button>
                 <a class="prebetaLink" href="https://github.com/kivana-software/Kivana/releases" target="_blank" rel="noopener">All releases</a>
               </div>
               <div id="downloadStatus" class="status-msg"></div>
@@ -211,7 +212,7 @@
           <div class="hero hero-solo">
             <div>
               <h2 class="hero-title">Finance software that works without the cloud.</h2>
-              <p class="hero-subtitle">Offline-first. Your data is stored locally on your device. Open-source core (MIT).</p>
+              <p class="hero-subtitle">Offline-first. Your data is stored locally on your device. MIT-licensed core.</p>
               <div class="hero-ctas">
                 <button class="btn btn-primary btn-hero" id="btnCtaDownloadWin">
                   <span class="btnIcon" aria-hidden="true">
@@ -233,7 +234,7 @@
               <div class="hero-badges" aria-label="Trust signals">
                 <span class="badge-chip">No cloud required</span>
                 <span class="badge-chip">Offline-first</span>
-                <span class="badge-chip">MIT licensed</span>
+                <span class="badge-chip">MIT-licensed core</span>
               </div>
               <div class="hero-meta">
                 <span class="text-muted hidden" id="macUnsignedNote">macOS build is unsigned. If blocked: right-click the app → Open.</span>
@@ -503,6 +504,7 @@
             <div class="cta-actions">
             <button class="btn btn-primary btn-hero" id="btnFooterDownloadWin">Download Windows</button>
             <button class="btn btn-secondary btn-hero" id="btnFooterDownloadMac">Download macOS</button>
+            <button class="btn btn-secondary btn-hero" id="btnFooterContact">Contact now</button>
             </div>
           </div>
         </section>
@@ -571,7 +573,7 @@
         <aside class="adminSidebar" aria-label="Admin navigation">
           <div class="adminSidebarTitle">Control panel</div>
           <button class="adminNavItem active" id="adminTabUsers" type="button">Users</button>
-          <button class="adminNavItem" id="adminTabAccess" type="button">Access</button>
+          <button class="adminNavItem" id="adminTabAccess" type="button">Messages</button>
           <button class="adminNavItem" id="adminTabSettings" type="button">Settings</button>
         </aside>
 
@@ -630,11 +632,22 @@
             </div>
 
             <div id="adminTabAccessView" class="hidden">
-              <div class="adminPlaceholder">
-                <div class="adminPlaceholderTitle">Access controls</div>
-                <div class="adminPlaceholderText">
-                  Coming soon.
-                </div>
+              <div class="tableWrap" aria-label="Contact messages table">
+                <table class="adminTable">
+                  <thead>
+                    <tr>
+                      <th>Created</th>
+                      <th>Status</th>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Subject</th>
+                      <th>Message</th>
+                      <th>IP</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminContactBody"></tbody>
+                </table>
               </div>
             </div>
 
@@ -695,6 +708,38 @@
         </div>
       </div>
       <div class="modalBackdrop" id="actionModalBackdrop"></div>
+    </div>
+
+    <div class="modal hidden" id="contactModal" role="dialog" aria-modal="true" aria-label="Contact">
+      <div class="modalPanel" id="contactModalPanel">
+        <div class="modalTop">
+          <div class="modalTitle">Contact</div>
+          <button class="modalClose" id="btnCloseContactModal" type="button" aria-label="Close">✕</button>
+        </div>
+        <div class="modalBody">
+          <form id="contactForm">
+            <div class="input-group">
+              <label for="contactName">Name</label>
+              <input type="text" id="contactName" autocomplete="name" required />
+            </div>
+            <div class="input-group">
+              <label for="contactEmail">Email</label>
+              <input type="email" id="contactEmail" autocomplete="email" required />
+            </div>
+            <div class="input-group">
+              <label for="contactSubject">Subject</label>
+              <input type="text" id="contactSubject" placeholder="Optional" />
+            </div>
+            <div class="input-group">
+              <label for="contactMessage">Message</label>
+              <textarea id="contactMessage" rows="6" required></textarea>
+            </div>
+            <div id="contactStatus" class="status-msg"></div>
+            <button type="submit" class="btn btn-primary w-full" id="btnSendContact">Send message</button>
+          </form>
+        </div>
+      </div>
+      <div class="modalBackdrop" id="contactModalBackdrop"></div>
     </div>
 
     <div class="portalBottomFooter">

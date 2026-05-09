@@ -123,6 +123,35 @@ struct LogoutRequest {
     refresh_token: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ContactRequest {
+    name: String,
+    email: String,
+    subject: Option<String>,
+    message: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AdminContactMessagesResponse {
+    messages: Vec<AdminContactMessageRow>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AdminContactMessageRow {
+    id: String,
+    created_at: String,
+    name: String,
+    email: String,
+    subject: Option<String>,
+    message: String,
+    client_ip: Option<String>,
+    is_read: bool,
+    read_at: Option<String>,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AuthResponse {
@@ -273,7 +302,7 @@ async fn main() -> anyhow::Result<()> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_headers(Any)
-        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
         .allow_credentials(false);
 
     let app = Router::new()
@@ -281,6 +310,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/favicon.ico", get(|| async { Redirect::permanent("/kivana-logo.png") }))
         .route("/robots.txt", get(robots_txt))
         .route("/sitemap.xml", get(sitemap_xml))
+        .route("/v1/contact", post(contact))
         .route("/v1/auth/signup", post(signup))
         .route("/v1/auth/login", post(login))
         .route("/v1/auth/refresh", post(refresh))
@@ -290,6 +320,19 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/entitlements", get(entitlements))
         .route("/v1/admin/bootstrap", post(admin_bootstrap))
         .route("/v1/admin/users", get(admin_users))
+        .route("/v1/admin/contact-messages", get(admin_contact_messages))
+        .route(
+            "/v1/admin/contact-messages/:id/read",
+            post(admin_contact_mark_read),
+        )
+        .route(
+            "/v1/admin/contact-messages/:id/unread",
+            post(admin_contact_mark_unread),
+        )
+        .route(
+            "/v1/admin/contact-messages/:id",
+            delete(admin_contact_delete),
+        )
         .route("/v1/admin/users/:id", delete(admin_delete_user))
         .route("/v1/admin/users/:id/password", post(admin_set_password))
         .route("/v1/admin/moderator", post(admin_set_moderator))
@@ -359,6 +402,204 @@ async fn sitemap_xml() -> impl IntoResponse {
         domain, domain, domain
     );
     ([(axum::http::header::CONTENT_TYPE, "application/xml; charset=utf-8")], body)
+}
+
+async fn contact(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    Json(req): Json<ContactRequest>,
+) -> axum::response::Response {
+    let client_ip = get_client_ip(&headers, connect_info);
+    if !state
+        .rate_limiter
+        .allow(
+            format!(
+                "contact:{}",
+                client_ip.clone().unwrap_or_else(|| "unknown".to_string())
+            ),
+            StdDuration::from_secs(10 * 60),
+            5,
+        )
+        .await
+    {
+        return err(StatusCode::TOO_MANY_REQUESTS, "too_many_requests").into_response();
+    }
+
+    let name = req.name.trim().to_string();
+    if name.is_empty() || name.len() > 120 {
+        return err(StatusCode::BAD_REQUEST, "invalid_name").into_response();
+    }
+    let email = normalize_email(&req.email);
+    if !is_valid_email(&email) {
+        return err(StatusCode::BAD_REQUEST, "invalid_email").into_response();
+    }
+    let message = req.message.trim().to_string();
+    if message.len() < 10 || message.len() > 8000 {
+        return err(StatusCode::BAD_REQUEST, "invalid_message").into_response();
+    }
+
+    let subject = req.subject.map(|s| {
+        let mut v = s.trim().to_string();
+        v.retain(|c| c != '\r' && c != '\n');
+        if v.is_empty() {
+            return "".to_string();
+        }
+        if v.len() > 140 {
+            v.truncate(140);
+        }
+        v
+    });
+    let subject = subject.and_then(|s| if s.is_empty() { None } else { Some(s) });
+
+    let id = Uuid::new_v4();
+    let res = sqlx::query(
+        r#"
+      INSERT INTO contact_messages (id, name, email, subject, message, client_ip)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    "#,
+    )
+    .bind(id)
+    .bind(&name)
+    .bind(&email)
+    .bind(&subject)
+    .bind(&message)
+    .bind(&client_ip)
+    .execute(&state.pool)
+    .await;
+
+    match res {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
+}
+
+async fn admin_contact_messages(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+
+    let rows = sqlx::query(
+        r#"
+      SELECT
+        id,
+        created_at,
+        name,
+        email,
+        subject,
+        message,
+        client_ip,
+        is_read,
+        read_at
+      FROM contact_messages
+      ORDER BY created_at DESC
+      LIMIT 200
+    "#,
+    )
+    .fetch_all(&state.pool)
+    .await;
+
+    let rows = match rows {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    let mut messages: Vec<AdminContactMessageRow> = Vec::with_capacity(rows.len());
+    for r in rows {
+        let id: Uuid = r.get("id");
+        let created_at: sqlx::types::time::OffsetDateTime = r.get("created_at");
+        let read_at: Option<sqlx::types::time::OffsetDateTime> = r.try_get("read_at").ok();
+
+        messages.push(AdminContactMessageRow {
+            id: id.to_string(),
+            created_at: created_at
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default(),
+            name: r.get::<String, _>("name"),
+            email: r.get::<String, _>("email"),
+            subject: r.try_get::<Option<String>, _>("subject").ok().flatten(),
+            message: r.get::<String, _>("message"),
+            client_ip: r.try_get::<Option<String>, _>("client_ip").ok().flatten(),
+            is_read: r.get::<bool, _>("is_read"),
+            read_at: read_at.map(|t| {
+                t.format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default()
+            }),
+        });
+    }
+
+    (StatusCode::OK, Json(AdminContactMessagesResponse { messages })).into_response()
+}
+
+async fn admin_contact_mark_read(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+
+    let res = sqlx::query(
+        "UPDATE contact_messages SET is_read = TRUE, read_at = now() WHERE id = $1 AND is_read = FALSE",
+    )
+    .bind(id)
+    .execute(&state.pool)
+    .await;
+
+    match res {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
+}
+
+async fn admin_contact_mark_unread(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+
+    let res = sqlx::query(
+        "UPDATE contact_messages SET is_read = FALSE, read_at = NULL WHERE id = $1 AND is_read = TRUE",
+    )
+    .bind(id)
+    .execute(&state.pool)
+    .await;
+
+    match res {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
+}
+
+async fn admin_contact_delete(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+
+    let res = sqlx::query("DELETE FROM contact_messages WHERE id = $1")
+        .bind(id)
+        .execute(&state.pool)
+        .await;
+
+    match res {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
 }
 
 async fn signup(

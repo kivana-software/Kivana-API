@@ -54,6 +54,7 @@ const els = {
   btnPrebetaDownloadMac: document.getElementById('btnPrebetaDownloadMac'),
   btnPrebetaDownloadWin: document.getElementById('btnPrebetaDownloadWin'),
   btnMacGuide: document.getElementById('btnMacGuide'),
+  btnPrebetaContact: document.getElementById('btnPrebetaContact'),
   macUnsignedNote: document.getElementById('macUnsignedNote'),
   downloadStatus: document.getElementById('downloadStatus'),
   navFullLanding: document.getElementById('navFullLanding'),
@@ -68,6 +69,7 @@ const els = {
   btnCtaViewPlans: document.getElementById('btnCtaViewPlans'),
   btnFooterDownloadMac: document.getElementById('btnFooterDownloadMac'),
   btnFooterDownloadWin: document.getElementById('btnFooterDownloadWin'),
+  btnFooterContact: document.getElementById('btnFooterContact'),
   btnAccountantService: document.getElementById('btnAccountantService'),
   btnBackToWebsite: document.getElementById('btnBackToWebsite'),
   footerYear: document.getElementById('footerYear'),
@@ -88,6 +90,7 @@ const els = {
   adminStatUsers: document.getElementById('adminStatUsers'),
   adminStatAdmins: document.getElementById('adminStatAdmins'),
   adminStatActivePlans: document.getElementById('adminStatActivePlans'),
+  adminContactBody: document.getElementById('adminContactBody'),
 
   macGuideModal: document.getElementById('macGuideModal'),
   btnCloseMacGuide: document.getElementById('btnCloseMacGuide'),
@@ -107,6 +110,17 @@ const els = {
   actionModalCancel: document.getElementById('actionModalCancel'),
   btnCloseActionModal: document.getElementById('btnCloseActionModal'),
   actionModalBackdrop: document.getElementById('actionModalBackdrop'),
+
+  contactModal: document.getElementById('contactModal'),
+  btnCloseContactModal: document.getElementById('btnCloseContactModal'),
+  contactModalBackdrop: document.getElementById('contactModalBackdrop'),
+  contactForm: document.getElementById('contactForm'),
+  contactName: document.getElementById('contactName'),
+  contactEmail: document.getElementById('contactEmail'),
+  contactSubject: document.getElementById('contactSubject'),
+  contactMessage: document.getElementById('contactMessage'),
+  contactStatus: document.getElementById('contactStatus'),
+  btnSendContact: document.getElementById('btnSendContact'),
 
   authForm: document.getElementById('authForm'),
   authTitle: document.getElementById('authTitle'),
@@ -156,6 +170,7 @@ const sp = new URLSearchParams(window.location.search)
 const startInAuth = sp.get('portal') === '1'
 const fullLanding = sp.get('full') !== '0'
 let adminUsersCache = []
+let adminContactCache = []
 let adminActiveTab = 'users'
 const BASIC_RELEASE_URL = 'https://github.com/kivana-software/Kivana/releases/tag/v0.4.15-basic'
 const BASIC_MAC_URL = 'https://github.com/kivana-software/Kivana/releases/download/v0.4.15-basic/Kivana_0.4.15_aarch64.dmg'
@@ -570,6 +585,52 @@ function closePreviewModal() {
   if (!els.previewModal) return
   els.previewModal.classList.add('hidden')
   if (els.previewModalImg) els.previewModalImg.src = ''
+}
+
+function openContactModal() {
+  if (!els.contactModal) return
+  if (els.contactStatus) els.contactStatus.textContent = ''
+  if (els.btnSendContact) els.btnSendContact.disabled = false
+  if (els.contactForm) els.contactForm.reset()
+  if (els.contactEmail && currentMe && currentMe.email) els.contactEmail.value = String(currentMe.email || '')
+  if (els.contactName && currentMe && currentMe.displayName) els.contactName.value = String(currentMe.displayName || '')
+  els.contactModal.classList.remove('hidden')
+}
+
+function closeContactModal() {
+  if (!els.contactModal) return
+  els.contactModal.classList.add('hidden')
+}
+
+async function handleContactSubmit(e) {
+  e.preventDefault()
+  if (!els.contactStatus) return
+  if (!els.contactName || !els.contactEmail || !els.contactMessage) return
+
+  const name = String(els.contactName.value || '').trim()
+  const email = String(els.contactEmail.value || '').trim()
+  const subject = els.contactSubject ? String(els.contactSubject.value || '').trim() : ''
+  const message = String(els.contactMessage.value || '').trim()
+
+  els.contactStatus.textContent = 'Sending…'
+  if (els.btnSendContact) els.btnSendContact.disabled = true
+
+  try {
+    const payload = {
+      name,
+      email,
+      subject: subject || undefined,
+      message,
+    }
+    const res = await apiFetch('/v1/contact', { method: 'POST', body: JSON.stringify(payload) })
+    await res.json().catch(() => void 0)
+    els.contactStatus.textContent = 'Sent. Thanks — I’ll reply to your email.'
+    setTimeout(() => closeContactModal(), 900)
+  } catch (err) {
+    els.contactStatus.textContent = String(err && err.message ? err.message : err || 'Failed to send.')
+  } finally {
+    if (els.btnSendContact) els.btnSendContact.disabled = false
+  }
 }
 
 function profileKey(userId) {
@@ -1001,6 +1062,12 @@ async function loadAdminUsers() {
   return Array.isArray(json.users) ? json.users : []
 }
 
+async function loadAdminContactMessages() {
+  const res = await apiFetch('/v1/admin/contact-messages', { method: 'GET' })
+  const json = await res.json()
+  return Array.isArray(json.messages) ? json.messages : []
+}
+
 function setAdminTab(tab) {
   const next = tab === 'access' ? 'access' : tab === 'settings' ? 'settings' : 'users'
   adminActiveTab = next
@@ -1010,13 +1077,13 @@ function setAdminTab(tab) {
   if (els.adminTabUsersView) els.adminTabUsersView.classList.toggle('hidden', next !== 'users')
   if (els.adminTabAccessView) els.adminTabAccessView.classList.toggle('hidden', next !== 'access')
   if (els.adminTabSettingsView) els.adminTabSettingsView.classList.toggle('hidden', next !== 'settings')
-  if (els.adminSectionTitle) els.adminSectionTitle.textContent = next === 'users' ? 'Users' : next === 'access' ? 'Access' : 'Settings'
+  if (els.adminSectionTitle) els.adminSectionTitle.textContent = next === 'users' ? 'Users' : next === 'access' ? 'Messages' : 'Settings'
   if (els.adminSectionSub) {
     els.adminSectionSub.textContent =
       next === 'users'
         ? 'Manage accounts and plans.'
         : next === 'access'
-          ? 'Protect admin access and review access policies.'
+          ? 'Inbox from the contact form.'
           : 'Service configuration and maintenance.'
   }
 }
@@ -1263,6 +1330,178 @@ async function renderAdminUsers() {
   }
 }
 
+async function renderAdminContactMessages() {
+  if (!els.adminContactBody || !els.adminStatus) return
+  try {
+    if (!adminContactCache.length) {
+      els.adminStatus.textContent = 'Loading…'
+      adminContactCache = await loadAdminContactMessages()
+    }
+
+    const q = String(els.adminSearch?.value || '').trim().toLowerCase()
+    const messages = q
+      ? adminContactCache.filter((m) => {
+        const hay = [
+          String(m?.name || ''),
+          String(m?.email || ''),
+          String(m?.subject || ''),
+          String(m?.message || ''),
+          String(m?.clientIp || m?.client_ip || ''),
+        ].join(' ').toLowerCase()
+        return hay.includes(q)
+      })
+      : adminContactCache
+
+    els.adminContactBody.innerHTML = ''
+    for (const m of messages) {
+      const tr = document.createElement('tr')
+
+      const createdTd = document.createElement('td')
+      createdTd.textContent = fmtDateTime(m.createdAt || m.created_at || '')
+      tr.appendChild(createdTd)
+
+      const statusTd = document.createElement('td')
+      statusTd.textContent = m.isRead ? 'Read' : 'New'
+      tr.appendChild(statusTd)
+
+      const nameTd = document.createElement('td')
+      nameTd.textContent = m.name || ''
+      tr.appendChild(nameTd)
+
+      const emailTd = document.createElement('td')
+      emailTd.textContent = m.email || ''
+      tr.appendChild(emailTd)
+
+      const subjectTd = document.createElement('td')
+      subjectTd.textContent = m.subject || ''
+      tr.appendChild(subjectTd)
+
+      const msgTd = document.createElement('td')
+      const msg = String(m.message || '')
+      msgTd.textContent = msg.length > 90 ? `${msg.slice(0, 90)}…` : msg
+      tr.appendChild(msgTd)
+
+      const ipTd = document.createElement('td')
+      ipTd.textContent = m.clientIp || m.client_ip || ''
+      tr.appendChild(ipTd)
+
+      const actionTd = document.createElement('td')
+      const btnWrap = document.createElement('div')
+      btnWrap.style.display = 'flex'
+      btnWrap.style.flexWrap = 'wrap'
+      btnWrap.style.gap = '8px'
+
+      const viewBtn = document.createElement('button')
+      viewBtn.className = 'btn btn-secondary'
+      viewBtn.textContent = 'View'
+      viewBtn.addEventListener('click', async () => {
+        await openActionModal({
+          title: 'Contact message',
+          okText: 'Close',
+          cancelText: 'Close',
+          build: (body) => {
+            const wrap = document.createElement('div')
+            wrap.className = 'modalForm'
+
+            const p1 = document.createElement('div')
+            p1.className = 'modalText'
+            p1.textContent = `From: ${String(m.name || '')} <${String(m.email || '')}>`
+
+            const p2 = document.createElement('div')
+            p2.className = 'modalText'
+            p2.textContent = `Subject: ${String(m.subject || '')}`
+
+            const p3 = document.createElement('div')
+            p3.className = 'modalText'
+            p3.textContent = `Created: ${fmtDateTime(m.createdAt || m.created_at || '')} • IP: ${String(m.clientIp || m.client_ip || '')}`
+
+            const pre = document.createElement('pre')
+            pre.className = 'mdPre'
+            pre.textContent = String(m.message || '')
+
+            wrap.appendChild(p1)
+            wrap.appendChild(p2)
+            wrap.appendChild(p3)
+            wrap.appendChild(pre)
+            body.appendChild(wrap)
+            return () => true
+          },
+        })
+
+        if (!m.isRead && (m.id || m.id === '')) {
+          try {
+            await apiFetch(`/v1/admin/contact-messages/${m.id}/read`, { method: 'POST' })
+            m.isRead = true
+            await renderAdminContactMessages()
+          } catch {
+            void 0
+          }
+        }
+      })
+
+      const toggleBtn = document.createElement('button')
+      toggleBtn.className = 'btn btn-secondary'
+      toggleBtn.textContent = m.isRead ? 'Unread' : 'Read'
+      toggleBtn.addEventListener('click', async () => {
+        toggleBtn.disabled = true
+        els.adminStatus.textContent = 'Saving…'
+        try {
+          if (m.isRead) {
+            await apiFetch(`/v1/admin/contact-messages/${m.id}/unread`, { method: 'POST' })
+            m.isRead = false
+          } else {
+            await apiFetch(`/v1/admin/contact-messages/${m.id}/read`, { method: 'POST' })
+            m.isRead = true
+          }
+          await renderAdminContactMessages()
+          els.adminStatus.textContent = ''
+        } catch (e) {
+          els.adminStatus.textContent = `Failed: ${String(e?.message || e)}`
+        } finally {
+          toggleBtn.disabled = false
+        }
+      })
+
+      const delBtn = document.createElement('button')
+      delBtn.className = 'btn btn-secondary'
+      delBtn.textContent = 'Delete'
+      delBtn.addEventListener('click', async () => {
+        const ok = await confirmAction({
+          title: 'Delete message',
+          message: `Delete message from ${String(m.email || '')}? This cannot be undone.`,
+          okText: 'Delete',
+        })
+        if (!ok) return
+        delBtn.disabled = true
+        els.adminStatus.textContent = 'Deleting…'
+        try {
+          await apiFetch(`/v1/admin/contact-messages/${m.id}`, { method: 'DELETE' })
+          adminContactCache = adminContactCache.filter((x) => x.id !== m.id)
+          await renderAdminContactMessages()
+          els.adminStatus.textContent = ''
+        } catch (e) {
+          els.adminStatus.textContent = `Failed: ${String(e?.message || e)}`
+        } finally {
+          delBtn.disabled = false
+        }
+      })
+
+      btnWrap.appendChild(viewBtn)
+      btnWrap.appendChild(toggleBtn)
+      btnWrap.appendChild(delBtn)
+      actionTd.appendChild(btnWrap)
+      tr.appendChild(actionTd)
+
+      els.adminContactBody.appendChild(tr)
+    }
+
+    if (q) els.adminStatus.textContent = `Showing ${messages.length} of ${adminContactCache.length}`
+    else els.adminStatus.textContent = adminContactCache.length ? '' : 'No messages yet.'
+  } catch (e) {
+    els.adminStatus.textContent = `Failed: ${String(e?.message || e)}`
+  }
+}
+
 async function showAdmin() {
   if (!isAuthed()) {
     pendingPlanSelection = null
@@ -1282,7 +1521,9 @@ async function showAdmin() {
   setAdminTab(adminActiveTab || 'users')
   showOnly('admin')
   adminUsersCache = []
-  await renderAdminUsers()
+  adminContactCache = []
+  if (adminActiveTab === 'access') await renderAdminContactMessages()
+  else await renderAdminUsers()
 }
 
 async function handleSelectPlan(payload, statusEl) {
@@ -1440,11 +1681,14 @@ if (els.adminTabUsers) els.adminTabUsers.addEventListener('click', () => {
   setAdminTab('users')
   void renderAdminUsers()
 })
-if (els.adminTabAccess) els.adminTabAccess.addEventListener('click', () => setAdminTab('access'))
+if (els.adminTabAccess) els.adminTabAccess.addEventListener('click', () => {
+  setAdminTab('access')
+  void renderAdminContactMessages()
+})
 if (els.adminTabSettings) els.adminTabSettings.addEventListener('click', () => setAdminTab('settings'))
 if (els.adminSearch) els.adminSearch.addEventListener('input', () => {
-  if (adminActiveTab !== 'users') return
-  void renderAdminUsers()
+  if (adminActiveTab === 'users') void renderAdminUsers()
+  else if (adminActiveTab === 'access') void renderAdminContactMessages()
 })
 if (els.btnSignIn) els.btnSignIn.addEventListener('click', () => {
   pendingPlanSelection = null
@@ -1461,10 +1705,14 @@ if (els.btnPrebetaSignIn) els.btnPrebetaSignIn.addEventListener('click', () => {
 if (els.btnPrebetaDownloadMac) els.btnPrebetaDownloadMac.addEventListener('click', () => void startPrebetaDownload('darwin-aarch64'))
 if (els.btnPrebetaDownloadWin) els.btnPrebetaDownloadWin.addEventListener('click', () => void startPrebetaDownload('windows-x86_64'))
 if (els.btnMacGuide) els.btnMacGuide.addEventListener('click', openMacGuide)
+if (els.btnPrebetaContact) els.btnPrebetaContact.addEventListener('click', openContactModal)
 if (els.btnCloseMacGuide) els.btnCloseMacGuide.addEventListener('click', closeMacGuide)
 if (els.macGuideBackdrop) els.macGuideBackdrop.addEventListener('click', closeMacGuide)
 if (els.btnClosePreviewModal) els.btnClosePreviewModal.addEventListener('click', closePreviewModal)
 if (els.previewModalBackdrop) els.previewModalBackdrop.addEventListener('click', closePreviewModal)
+if (els.btnCloseContactModal) els.btnCloseContactModal.addEventListener('click', closeContactModal)
+if (els.contactModalBackdrop) els.contactModalBackdrop.addEventListener('click', closeContactModal)
+if (els.contactForm) els.contactForm.addEventListener('submit', handleContactSubmit)
 
 document.querySelectorAll('.previewImg').forEach((img) => {
   img.addEventListener('click', () => {
@@ -1479,6 +1727,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return
   if (els.previewModal && !els.previewModal.classList.contains('hidden')) closePreviewModal()
   if (els.macGuideModal && !els.macGuideModal.classList.contains('hidden')) closeMacGuide()
+  if (els.contactModal && !els.contactModal.classList.contains('hidden')) closeContactModal()
 })
 
 if (els.btnMacGuide) {
@@ -1574,6 +1823,7 @@ if (els.btnCtaDownloadWin) els.btnCtaDownloadWin.addEventListener('click', () =>
 })
 if (els.btnFooterDownloadMac) els.btnFooterDownloadMac.addEventListener('click', () => void startPrebetaDownload('darwin-aarch64'))
 if (els.btnFooterDownloadWin) els.btnFooterDownloadWin.addEventListener('click', () => void startPrebetaDownload('windows-x86_64'))
+if (els.btnFooterContact) els.btnFooterContact.addEventListener('click', openContactModal)
 
 let selectedOs = 'mac'
 function setSelectedOs(os) {
