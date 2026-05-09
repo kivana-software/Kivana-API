@@ -23,10 +23,10 @@
         padding: 24px;
       }
       #authCard {
-        width: min(560px, 100%);
+        width: min(640px, 100%);
         background: #fff;
-        border-radius: 24px;
-        padding: 22px 20px;
+        border-radius: 28px;
+        padding: 22px 22px 24px;
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
         font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
       }
@@ -36,16 +36,37 @@
         justify-content: space-between;
         gap: 12px;
       }
-      #authTitle {
+      #authBrand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      #authBrandMark {
+        width: 44px;
+        height: 44px;
+        object-fit: contain;
+      }
+      #authBrandName {
+        font-family: Lora, serif;
         font-weight: 800;
-        font-size: 18px;
+        font-size: 22px;
+        letter-spacing: -0.01em;
+        color: #1b1748;
+        line-height: 1.1;
+      }
+      #authTitle {
+        margin-top: 18px;
+        font-family: Lora, serif;
+        font-weight: 800;
+        font-size: 34px;
+        letter-spacing: -0.02em;
         color: #1b1748;
       }
       #authClose {
         appearance: none;
         border: 0;
         background: transparent;
-        font-size: 22px;
+        font-size: 26px;
         line-height: 1;
         cursor: pointer;
         color: #1b1748;
@@ -53,28 +74,31 @@
       }
       #authTabs {
         display: flex;
-        gap: 10px;
-        margin-top: 14px;
+        gap: 8px;
+        margin-top: 18px;
+        padding: 6px;
+        border-radius: 999px;
+        background: rgba(27, 23, 72, 0.06);
       }
       .authTab {
         flex: 1;
-        padding: 10px 14px;
+        padding: 12px 14px;
         border-radius: 999px;
-        border: 2px solid #1b1748;
-        background: #fff;
-        color: #1b1748;
+        border: 0;
+        background: transparent;
+        color: rgba(27, 23, 72, 0.72);
         font-weight: 800;
         cursor: pointer;
       }
       .authTabActive {
-        border-color: #4f3ddd;
-        background: #4f3ddd;
-        color: #fff;
+        background: #fff;
+        color: #1b1748;
+        box-shadow: 0 10px 25px rgba(27, 23, 72, 0.12);
       }
       #authDesc {
         margin-top: 10px;
-        color: #4a4a6a;
-        font-size: 14px;
+        color: rgba(27, 23, 72, 0.7);
+        font-size: 15px;
         line-height: 1.5;
       }
       .authField {
@@ -87,18 +111,53 @@
         color: #1b1748;
         margin-bottom: 6px;
       }
+      .authInputWrap {
+        position: relative;
+      }
+      .authIcon {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 18px;
+        height: 18px;
+        color: rgba(27, 23, 72, 0.55);
+        pointer-events: none;
+      }
+      .authToggleBtn {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        border: 2px solid rgba(27, 23, 72, 0.12);
+        background: #fff;
+        color: rgba(27, 23, 72, 0.65);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .authToggleBtn:hover {
+        border-color: rgba(79, 61, 221, 0.25);
+        background: rgba(79, 61, 221, 0.06);
+        color: rgba(79, 61, 221, 0.95);
+      }
       .authInput {
         width: 100%;
         box-sizing: border-box;
-        padding: 12px 14px;
-        border-radius: 14px;
-        border: 2px solid rgba(27, 23, 72, 0.18);
+        padding: 13px 54px 13px 44px;
+        border-radius: 16px;
+        border: 1px solid rgba(27, 23, 72, 0.18);
         outline: none;
         font-size: 15px;
+        background: #fff;
       }
       .authInput:focus {
         border-color: rgba(79, 61, 221, 0.8);
-        box-shadow: 0 0 0 4px rgba(79, 61, 221, 0.15);
+        box-shadow: 0 0 0 4px rgba(79, 61, 221, 0.12);
       }
       #authError {
         margin-top: 10px;
@@ -107,8 +166,41 @@
         font-size: 13px;
         min-height: 18px;
       }
+      #authMetaRow {
+        margin-top: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .authHidden {
+        display: none !important;
+      }
+      .authRemember {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: rgba(27, 23, 72, 0.7);
+        font-size: 13px;
+        font-weight: 600;
+        user-select: none;
+      }
+      #authTermsWrap a {
+        color: #4f3ddd;
+        font-weight: 800;
+        text-decoration: none;
+      }
+      #authTermsWrap a:hover {
+        text-decoration: underline;
+      }
+      .authRemember input {
+        width: 16px;
+        height: 16px;
+        accent-color: #4f3ddd;
+      }
       #authActions {
-        margin-top: 14px;
+        margin-top: 16px;
         display: flex;
         gap: 10px;
         flex-wrap: wrap;
@@ -116,7 +208,7 @@
       #authSubmit {
         flex: 1;
         min-width: 200px;
-        padding: 12px 14px;
+        padding: 14px 16px;
         border-radius: 999px;
         border: 2px solid #4f3ddd;
         background: #4f3ddd;
@@ -128,17 +220,11 @@
         opacity: 0.65;
         cursor: not-allowed;
       }
-      #authOpenPortal {
-        flex: 1;
-        min-width: 200px;
-        padding: 12px 14px;
-        border-radius: 999px;
-        border: 2px solid #1b1748;
-        background: #fff;
-        color: #1b1748;
-        font-weight: 900;
-        cursor: pointer;
-        text-decoration: none;
+      #authNote {
+        margin-top: 12px;
+        color: rgba(27, 23, 72, 0.42);
+        font-weight: 700;
+        font-size: 13px;
         text-align: center;
       }
 
@@ -320,27 +406,77 @@
     <div id="authModal" aria-hidden="true">
       <div id="authCard" role="dialog" aria-modal="true">
         <div id="authHeader">
-          <div id="authTitle">Sign in</div>
+          <div id="authBrand">
+            <img id="authBrandMark" src="/kivana-logo.png" alt="Kivana" />
+            <div id="authBrandName">kivana</div>
+          </div>
           <button id="authClose" type="button">×</button>
         </div>
         <div id="authTabs">
-          <button id="authTabLogin" class="authTab authTabActive" type="button">Log in</button>
+          <button id="authTabLogin" class="authTab authTabActive" type="button">Sign in</button>
           <button id="authTabSignup" class="authTab" type="button">Create account</button>
         </div>
-        <div id="authDesc">Log in to manage your account, plans, and admin access.</div>
+        <div id="authTitle">Welcome back</div>
+        <div id="authDesc">Manage your plan and profile.</div>
         <form id="authForm" autocomplete="on">
+          <div class="authField authHidden" id="authNameField">
+            <div class="authInputWrap">
+              <svg class="authIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 12a4.5 4.5 0 1 0-4.5-4.5A4.5 4.5 0 0 0 12 12Z" stroke="currentColor" stroke-width="1.8" />
+                <path d="M4.5 20c1.8-3.2 5.1-5 7.5-5s5.7 1.8 7.5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+              <input class="authInput" id="authName" name="name" type="text" autocomplete="name" placeholder="Full name" />
+            </div>
+          </div>
           <div class="authField">
             <label class="authLabel" for="authEmail">Email</label>
-            <input class="authInput" id="authEmail" name="email" type="email" autocomplete="email" required />
+            <div class="authInputWrap">
+              <svg class="authIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 7.5C4 6.12 5.12 5 6.5 5H17.5C18.88 5 20 6.12 20 7.5V16.5C20 17.88 18.88 19 17.5 19H6.5C5.12 19 4 17.88 4 16.5V7.5Z" stroke="currentColor" stroke-width="1.8" />
+                <path d="M5.5 7L12 12L18.5 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <input class="authInput" id="authEmail" name="email" type="email" autocomplete="email" placeholder="Work or personal email" required />
+            </div>
           </div>
           <div class="authField">
             <label class="authLabel" for="authPassword">Password</label>
-            <input class="authInput" id="authPassword" name="password" type="password" autocomplete="current-password" required />
+            <div class="authInputWrap">
+              <svg class="authIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M7.5 11V8.5C7.5 6.02 9.52 4 12 4C14.48 4 16.5 6.02 16.5 8.5V11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                <path d="M7 11H17C18.1 11 19 11.9 19 13V18C19 19.1 18.1 20 17 20H7C5.9 20 5 19.1 5 18V13C5 11.9 5.9 11 7 11Z" stroke="currentColor" stroke-width="1.8" />
+              </svg>
+              <input class="authInput" id="authPassword" name="password" type="password" autocomplete="current-password" placeholder="Password" required />
+              <button class="authToggleBtn" id="authTogglePw" type="button" aria-label="Toggle password visibility">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
+                  <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" stroke="currentColor" stroke-width="1.8" />
+                  <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" stroke="currentColor" stroke-width="1.8" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="authField authHidden" id="authConfirmField">
+            <div class="authInputWrap">
+              <svg class="authIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M7.5 11V8.5C7.5 6.02 9.52 4 12 4C14.48 4 16.5 6.02 16.5 8.5V11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                <path d="M7 11H17C18.1 11 19 11.9 19 13V18C19 19.1 18.1 20 17 20H7C5.9 20 5 19.1 5 18V13C5 11.9 5.9 11 7 11Z" stroke="currentColor" stroke-width="1.8" />
+              </svg>
+              <input class="authInput" id="authConfirm" name="confirm" type="password" autocomplete="new-password" placeholder="Confirm password" />
+            </div>
+          </div>
+          <div id="authMetaRow">
+            <label class="authRemember" id="authRememberWrap"><input id="authRemember" type="checkbox" checked /> Remember me</label>
+            <label class="authRemember authHidden" id="authTermsWrap">
+              <input id="authTerms" type="checkbox" />
+              <span>
+                I agree to the <a href="/terms.html" target="_blank" rel="noopener">Terms</a> and <a href="/privacy.html" target="_blank" rel="noopener">Privacy</a>. My finance data stays on my device.
+              </span>
+            </label>
           </div>
           <div id="authError"></div>
           <div id="authActions">
             <button id="authSubmit" type="submit">Continue</button>
           </div>
+          <div id="authNote" class="authHidden">You will land on a 14-day Trial of Ordinary. Cancel anytime, no charge.</div>
         </form>
       </div>
     </div>
@@ -391,10 +527,20 @@
             tabLogin: document.getElementById("authTabLogin"),
             tabSignup: document.getElementById("authTabSignup"),
             form: document.getElementById("authForm"),
+            nameField: document.getElementById("authNameField"),
+            name: document.getElementById("authName"),
             email: document.getElementById("authEmail"),
             password: document.getElementById("authPassword"),
+            confirmField: document.getElementById("authConfirmField"),
+            confirm: document.getElementById("authConfirm"),
             submit: document.getElementById("authSubmit"),
             error: document.getElementById("authError"),
+            note: document.getElementById("authNote"),
+            rememberWrap: document.getElementById("authRememberWrap"),
+            remember: document.getElementById("authRemember"),
+            termsWrap: document.getElementById("authTermsWrap"),
+            terms: document.getElementById("authTerms"),
+            togglePw: document.getElementById("authTogglePw"),
           }
         }
 
@@ -405,15 +551,36 @@
           if (mode === "login") {
             e.tabLogin.classList.add("authTabActive")
             e.tabSignup.classList.remove("authTabActive")
-            if (e.title) e.title.textContent = "Sign in"
-            if (e.desc) e.desc.textContent = "Log in to manage your account, plans, and admin access."
+            if (e.title) e.title.textContent = "Welcome back"
+            if (e.desc) e.desc.textContent = "Manage your plan and profile. Basic does not require an account."
             if (e.password) e.password.autocomplete = "current-password"
+            if (e.password) e.password.placeholder = "Password"
+            if (e.submit) e.submit.textContent = "Sign in"
+            if (e.nameField) e.nameField.classList.add("authHidden")
+            if (e.confirmField) e.confirmField.classList.add("authHidden")
+            if (e.termsWrap) e.termsWrap.classList.add("authHidden")
+            if (e.rememberWrap) e.rememberWrap.classList.remove("authHidden")
+            if (e.note) e.note.classList.add("authHidden")
+            if (e.name) e.name.required = false
+            if (e.confirm) e.confirm.required = false
+            if (e.terms) e.terms.required = false
           } else {
             e.tabSignup.classList.add("authTabActive")
             e.tabLogin.classList.remove("authTabActive")
-            if (e.title) e.title.textContent = "Create an account"
-            if (e.desc) e.desc.textContent = "Create your account first, then choose a trial or plan inside the portal."
+            if (e.title) e.title.textContent = "Create your account"
+            if (e.desc) e.desc.textContent = "An account is only required for paid tiers. Basic stays free, no signup needed."
             if (e.password) e.password.autocomplete = "new-password"
+            if (e.password) e.password.placeholder = "Choose a strong password"
+            if (e.confirm) e.confirm.autocomplete = "new-password"
+            if (e.submit) e.submit.textContent = "Create account"
+            if (e.nameField) e.nameField.classList.remove("authHidden")
+            if (e.confirmField) e.confirmField.classList.remove("authHidden")
+            if (e.termsWrap) e.termsWrap.classList.remove("authHidden")
+            if (e.rememberWrap) e.rememberWrap.classList.add("authHidden")
+            if (e.note) e.note.classList.remove("authHidden")
+            if (e.name) e.name.required = true
+            if (e.confirm) e.confirm.required = true
+            if (e.terms) e.terms.required = true
           }
           if (e.error) e.error.textContent = ""
         }
@@ -436,7 +603,7 @@
           e.modal.setAttribute("aria-hidden", "true")
           if (e.error) e.error.textContent = ""
           if (e.submit) e.submit.disabled = false
-          if (e.submit) e.submit.textContent = "Continue"
+          if (e.submit) e.submit.textContent = mode === "signup" ? "Create account" : "Sign in"
         }
 
         function getCta(el) {
@@ -461,15 +628,31 @@
           ev.preventDefault()
           var e = els()
           if (!e.email || !e.password || !e.submit) return
+          var fullName = e.name ? String(e.name.value || "").trim() : ""
           var email = String(e.email.value || "").trim()
           var password = String(e.password.value || "")
+          var confirm = e.confirm ? String(e.confirm.value || "") : ""
           if (!email || !password) {
             if (e.error) e.error.textContent = "Email and password are required."
             return
           }
-          if (mode === "signup" && password.length < 8) {
-            if (e.error) e.error.textContent = "Password must be at least 8 characters."
-            return
+          if (mode === "signup") {
+            if (!fullName || fullName.length < 2) {
+              if (e.error) e.error.textContent = "Full name is required."
+              return
+            }
+            if (password.length < 8) {
+              if (e.error) e.error.textContent = "Password must be at least 8 characters."
+              return
+            }
+            if (password !== confirm) {
+              if (e.error) e.error.textContent = "Passwords do not match."
+              return
+            }
+            if (e.terms && !e.terms.checked) {
+              if (e.error) e.error.textContent = "You must agree to Terms and Privacy."
+              return
+            }
           }
           e.submit.disabled = true
           e.submit.textContent = "Please wait..."
@@ -492,6 +675,18 @@
             })
             .then(function (j) {
               setTokens(j && j.accessToken, j && j.refreshToken)
+              if (mode === "signup" && fullName && j && j.accessToken) {
+                try {
+                  fetch("/v1/profile", {
+                    method: "POST",
+                    headers: {
+                      "content-type": "application/json",
+                      "authorization": "Bearer " + String(j.accessToken),
+                    },
+                    body: JSON.stringify({ displayName: fullName }),
+                  }).catch(function () {})
+                } catch (err) {}
+              }
               window.location.assign("/account/?portal=1")
             })
             .catch(function (err) {
@@ -503,7 +698,7 @@
               else if (msg === "too_many_requests") friendly = "Too many attempts. Please wait a moment and try again."
               if (e.error) e.error.textContent = friendly
               e.submit.disabled = false
-              e.submit.textContent = "Continue"
+              e.submit.textContent = mode === "signup" ? "Create account" : "Sign in"
             })
         }
 
@@ -513,6 +708,13 @@
           if (e.tabLogin) e.tabLogin.addEventListener("click", function () { setMode("login") })
           if (e.tabSignup) e.tabSignup.addEventListener("click", function () { setMode("signup") })
           if (e.close) e.close.addEventListener("click", closeModal)
+          if (e.togglePw && e.password) {
+            e.togglePw.addEventListener("click", function () {
+              try {
+                e.password.type = e.password.type === "password" ? "text" : "password"
+              } catch (err) {}
+            })
+          }
           if (e.form) e.form.addEventListener("submit", handleSubmit)
           if (e.modal) {
             e.modal.addEventListener("click", function (ev) {
