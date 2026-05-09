@@ -43,10 +43,6 @@
           <button class="nav-anchor" id="navResources">Preview</button>
         </div>
         <div class="nav-actions">
-          <div class="os-toggle" id="osToggle">
-            <button type="button" class="os-btn active" id="osMac">macOS</button>
-            <button type="button" class="os-btn" id="osWin">Windows</button>
-          </div>
           <button id="btnThemeToggle" class="btn btn-secondary themeToggle" type="button">Theme</button>
           <button id="btnSignIn" class="btn btn-secondary">Sign in</button>
           <button id="btnSignUp" class="btn btn-primary">Create account</button>
@@ -185,8 +181,22 @@
               <div class="prebetaPanelTitle">Download (Basic)</div>
               <div class="prebetaPanelText">Free version: v0.4.15-basic.</div>
               <div class="prebetaDownloads">
-                <button class="btn btn-secondary" id="btnPrebetaDownloadMac">Download macOS (Apple Silicon)</button>
-                <button class="btn btn-secondary" id="btnPrebetaDownloadWin">Download Windows</button>
+                <button class="btn btn-secondary" id="btnPrebetaDownloadMac">
+                  <span class="btnIcon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="">
+                      <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7A2.5 2.5 0 0 1 17.5 16h-11A2.5 2.5 0 0 1 4 13.5v-7Zm2.5-.5a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5h-11ZM9 18a1 1 0 0 0-1 1v1h8v-1a1 1 0 0 0-1-1H9Z"/>
+                    </svg>
+                  </span>
+                  <span>Download macOS (Apple Silicon)</span>
+                </button>
+                <button class="btn btn-secondary" id="btnPrebetaDownloadWin">
+                  <span class="btnIcon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="">
+                      <path d="M2 5.2 11 4v8H2V5.2Zm0 9.8h9v8L2 21.8V15Zm11-11 9-1v10h-9V4Zm0 11h9v10l-9-1v-9Z"/>
+                    </svg>
+                  </span>
+                  <span>Download Windows</span>
+                </button>
                 <button class="btn btn-secondary" id="btnMacGuide">macOS setup guide</button>
                 <a class="prebetaLink" href="https://github.com/kivana-software/Kivana/releases" target="_blank" rel="noopener">All releases</a>
               </div>
@@ -211,8 +221,22 @@
               <h2 class="hero-title">Your finances. On your device.</h2>
               <p class="hero-subtitle">Basic is free. Ordinary, Pro, and Accountant editions are coming soon.</p>
               <div class="hero-ctas">
-                <button class="btn btn-primary btn-hero" id="btnCtaDownloadWin">Download Windows</button>
-                <button class="btn btn-secondary btn-hero" id="btnCtaDownloadMac">Download macOS</button>
+                <button class="btn btn-primary btn-hero" id="btnCtaDownloadWin">
+                  <span class="btnIcon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="">
+                      <path d="M2 5.2 11 4v8H2V5.2Zm0 9.8h9v8L2 21.8V15Zm11-11 9-1v10h-9V4Zm0 11h9v10l-9-1v-9Z"/>
+                    </svg>
+                  </span>
+                  <span>Download Windows</span>
+                </button>
+                <button class="btn btn-secondary btn-hero" id="btnCtaDownloadMac">
+                  <span class="btnIcon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="">
+                      <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7A2.5 2.5 0 0 1 17.5 16h-11A2.5 2.5 0 0 1 4 13.5v-7Zm2.5-.5a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5h-11ZM9 18a1 1 0 0 0-1 1v1h8v-1a1 1 0 0 0-1-1H9Z"/>
+                    </svg>
+                  </span>
+                  <span>Download macOS</span>
+                </button>
                 <button class="btn btn-secondary btn-hero" id="btnHeroStartFree">Create account</button>
               </div>
               <div class="hero-meta">

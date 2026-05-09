@@ -692,6 +692,22 @@ body {
   transition: all 0.2s;
 }
 
+.btnIcon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0.5rem;
+  flex: 0 0 auto;
+}
+
+.btnIcon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
 .btn-primary {
   background-color: var(--primary);
   color: #06110A;
