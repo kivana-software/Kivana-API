@@ -251,6 +251,16 @@ function toggleTheme() {
   applyTheme(isDark ? 'light' : 'dark')
 }
 
+function enforceLoggedOutLanding() {
+  const path = String(window.location.pathname || '')
+  if (!(path.startsWith('/account') || path.startsWith('/portal'))) return
+  const params = new URLSearchParams(window.location.search)
+  const wantsPortalAuth = params.get('portal') === '1'
+  if (wantsPortalAuth) return
+  if (getAccessToken()) return
+  window.location.replace('/')
+}
+
 function openActionModal({ title, okText, cancelText, build }) {
   return new Promise((resolve) => {
     if (
@@ -1559,6 +1569,11 @@ async function handleSignOut() {
     void 0
   }
   clearTokens()
+  const path = String(window.location.pathname || '')
+  if (path.startsWith('/account') || path.startsWith('/portal')) {
+    window.location.assign('/')
+    return
+  }
   if (startInAuth) await showAuth()
   else await showDashboard()
 }
@@ -1729,6 +1744,10 @@ window.addEventListener('keydown', (e) => {
   if (els.previewModal && !els.previewModal.classList.contains('hidden')) closePreviewModal()
   if (els.macGuideModal && !els.macGuideModal.classList.contains('hidden')) closeMacGuide()
   if (els.contactModal && !els.contactModal.classList.contains('hidden')) closeContactModal()
+})
+
+window.addEventListener('pageshow', () => {
+  enforceLoggedOutLanding()
 })
 
 if (els.btnMacGuide) {
@@ -1938,6 +1957,14 @@ if (els.avatarFile) {
     } catch {
       clearTokens()
     }
+  }
+  enforceLoggedOutLanding()
+  if (
+    !startInAuth &&
+    !getAccessToken() &&
+    (String(window.location.pathname || '').startsWith('/account') || String(window.location.pathname || '').startsWith('/portal'))
+  ) {
+    return
   }
   if (startInAuth) {
     const startAsLogin = !(startAuthMode === 'signup' || startAuthMode === 'create' || startAuthMode === 'register')

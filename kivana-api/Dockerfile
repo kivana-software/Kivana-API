@@ -15,6 +15,7 @@ WORKDIR /app
 COPY --from=build /app/target/release/kivana-api /app/kivana-api
 COPY --from=build /app/kivana-admin /app/kivana-admin
 COPY --from=build /app/kivana-portal /app/kivana-portal
+COPY --from=build /app/kivana-account /app/kivana-account
 COPY --from=build /app/kivana-site /app/kivana-site
 ENV RUST_LOG=info
 EXPOSE 8080

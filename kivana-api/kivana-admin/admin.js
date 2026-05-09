@@ -493,6 +493,7 @@ async function signOut() {
   } catch {
   }
   await showLoggedOut()
+  window.location.replace('/')
 }
 
 async function bootstrapAdmin() {
