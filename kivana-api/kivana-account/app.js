@@ -130,7 +130,14 @@ function useQueryMode() {
 }
 
 function Pill({ kind, children }) {
-  const cls = kind === 'ok' ? 'pill pillOk' : kind === 'warn' ? 'pill pillWarn' : kind === 'err' ? 'pill pillErr' : 'pill'
+  const cls =
+    kind === 'ok'
+      ? 'inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700'
+      : kind === 'warn'
+        ? 'inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700'
+        : kind === 'err'
+          ? 'inline-flex items-center rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700'
+          : 'inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-semibold text-gray-700'
   return React.createElement('span', { className: cls }, children)
 }
 
@@ -145,6 +152,7 @@ function App() {
   })
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState({ kind: 'muted', text: '' })
+  const [navScrolled, setNavScrolled] = useState(false)
 
   const [me, setMe] = useState(null)
   const [entitlement, setEntitlement] = useState(null)
@@ -177,6 +185,13 @@ function App() {
       }
       await loadSession()
     })()
+  }, [])
+
+  useEffect(() => {
+    const onScroll = () => setNavScrolled(window.scrollY > 10)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
   const yearlyFactor = 11
@@ -505,9 +520,10 @@ function App() {
         ? React.createElement(
             React.Fragment,
             null,
-            React.createElement('div', { className: 'fieldLabel' }, 'New password (min 8 chars)'),
+            React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'New password (min 8 chars)'),
             React.createElement('input', {
-              className: 'fieldInput',
+              className:
+                'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
               type: 'password',
               value: String(adminModal.password || ''),
               onChange: (e) => updateAdminModal({ password: e.target.value }),
@@ -515,9 +531,10 @@ function App() {
               autoComplete: 'new-password',
             }),
             React.createElement('div', { style: { height: 10 } }),
-            React.createElement('div', { className: 'fieldLabel' }, 'Confirm password'),
+            React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Confirm password'),
             React.createElement('input', {
-              className: 'fieldInput',
+              className:
+                'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
               type: 'password',
               value: String(adminModal.confirm || ''),
               onChange: (e) => updateAdminModal({ confirm: e.target.value }),
@@ -529,11 +546,12 @@ function App() {
           ? React.createElement(
               React.Fragment,
               null,
-              React.createElement('div', { className: 'fieldLabel' }, 'Plan'),
+              React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Plan'),
               React.createElement(
                 'select',
                 {
-                  className: 'fieldInput',
+                  className:
+                    'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
                   value: String(adminModal.planCode || 'basic'),
                   onChange: (e) => updateAdminModal({ planCode: e.target.value }),
                   disabled: busy,
@@ -544,23 +562,25 @@ function App() {
                 React.createElement('option', { value: 'lifetime' }, 'Lifetime')
               ),
               React.createElement('div', { style: { height: 10 } }),
-              React.createElement('div', { className: 'fieldLabel' }, 'Ends at (optional)'),
+              React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Ends at (optional)'),
               React.createElement('input', {
-                className: 'fieldInput',
+                className:
+                  'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
                 type: 'datetime-local',
                 value: String(adminModal.endsAtLocal || ''),
                 onChange: (e) => updateAdminModal({ endsAtLocal: e.target.value }),
                 disabled: busy,
               }),
-              React.createElement('div', { className: 'status' }, 'Leave empty for no end date. Uses your local time.')
+              React.createElement('div', { className: 'mt-2 text-sm text-gray-600' }, 'Leave empty for no end date. Uses your local time.')
             )
           : kind === 'discount'
             ? React.createElement(
                 React.Fragment,
                 null,
-                React.createElement('div', { className: 'fieldLabel' }, 'Percent (0–90)'),
+                React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Percent (0–90)'),
                 React.createElement('input', {
-                  className: 'fieldInput',
+                  className:
+                    'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
                   type: 'number',
                   min: 0,
                   max: 90,
@@ -570,26 +590,28 @@ function App() {
                   disabled: busy,
                 }),
                 React.createElement('div', { style: { height: 10 } }),
-                React.createElement('div', { className: 'fieldLabel' }, 'Label (optional)'),
+                React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Label (optional)'),
                 React.createElement('input', {
-                  className: 'fieldInput',
+                  className:
+                    'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
                   type: 'text',
                   value: String(adminModal.label || ''),
                   onChange: (e) => updateAdminModal({ label: e.target.value }),
                   disabled: busy,
                   placeholder: 'founder',
                 }),
-                React.createElement('div', { className: 'status' }, 'Set percent to 0 to remove the discount.')
+                React.createElement('div', { className: 'mt-2 text-sm text-gray-600' }, 'Set percent to 0 to remove the discount.')
               )
             : kind === 'deleteUser'
               ? React.createElement(
                   React.Fragment,
                   null,
-                  React.createElement('div', { className: 'cardSub' }, 'This permanently deletes the user and their sessions.'),
+                  React.createElement('div', { className: 'text-sm text-gray-600' }, 'This permanently deletes the user and their sessions.'),
                   React.createElement('div', { style: { height: 10 } }),
-                  React.createElement('div', { className: 'cardSub' }, 'Type DELETE to confirm:'),
+                  React.createElement('div', { className: 'text-sm text-gray-600' }, 'Type DELETE to confirm:'),
                   React.createElement('input', {
-                    className: 'fieldInput',
+                    className:
+                      'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
                     type: 'text',
                     value: String(adminModal.confirmText || ''),
                     onChange: (e) => updateAdminModal({ confirmText: e.target.value }),
@@ -600,7 +622,10 @@ function App() {
               : null
 
     const confirmLabel = kind === 'deleteUser' ? 'Delete' : 'Save'
-    const confirmKind = kind === 'deleteUser' ? 'btn btnDanger' : 'btn btnPrimary'
+    const confirmKind =
+      kind === 'deleteUser'
+        ? 'px-5 py-2.5 rounded-full text-[15px] font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none'
+        : 'px-5 py-2.5 rounded-full text-[15px] font-semibold text-white bg-[#4F3DDD] hover:bg-[#3F2FCB] disabled:opacity-60 disabled:pointer-events-none'
 
     const onConfirm = async () => {
       if (kind === 'password') {
@@ -638,7 +663,7 @@ function App() {
     return React.createElement(
       'div',
       {
-        className: 'modalBackdrop',
+        className: 'fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-6',
         onClick: () => closeAdminModal(),
         role: 'dialog',
         'aria-modal': 'true',
@@ -646,20 +671,40 @@ function App() {
       React.createElement(
         'div',
         {
-          className: 'modalCard',
+          className: 'w-full max-w-xl rounded-3xl bg-white shadow-xl border border-gray-100',
           onClick: (e) => e.stopPropagation(),
         },
         React.createElement(
           'div',
-          { className: 'modalHeader' },
-          React.createElement('div', { className: 'modalTitle' }, title),
-          React.createElement('button', { className: 'modalClose', type: 'button', onClick: closeAdminModal, disabled: busy }, '×')
+          { className: 'px-6 py-5 flex items-center justify-between gap-4 border-b border-gray-100' },
+          React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, title),
+          React.createElement(
+            'button',
+            {
+              className:
+                'w-10 h-10 rounded-full border border-gray-200 text-[#1B1748] hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
+              type: 'button',
+              onClick: closeAdminModal,
+              disabled: busy,
+            },
+            '×'
+          )
         ),
-        React.createElement('div', { className: 'modalBody' }, body),
+        React.createElement('div', { className: 'px-6 py-6' }, body),
         React.createElement(
           'div',
-          { className: 'modalActions' },
-          React.createElement('button', { className: 'btn', type: 'button', onClick: closeAdminModal, disabled: busy }, 'Cancel'),
+          { className: 'px-6 pb-6 flex items-center justify-end gap-3' },
+          React.createElement(
+            'button',
+            {
+              className:
+                'px-5 py-2.5 rounded-full text-[15px] font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+              type: 'button',
+              onClick: closeAdminModal,
+              disabled: busy,
+            },
+            'Cancel'
+          ),
           React.createElement('button', { className: confirmKind, type: 'button', onClick: onConfirm, disabled: busy }, busy ? 'Working…' : confirmLabel)
         )
       )
@@ -672,60 +717,107 @@ function App() {
     const statusText = planName ? `${planName}${planCode ? '' : ''}` : planCode ? planCode : ''
 
     return React.createElement(
-      'div',
-      { className: 'topbar' },
+      'header',
+      { className: `sticky top-0 z-50 bg-white transition-shadow duration-300 ${navScrolled ? 'shadow-sm' : ''}` },
       React.createElement(
         'div',
-        { className: 'topbarInner' },
+        { className: 'max-w-7xl mx-auto px-6 lg:px-10 py-5 flex items-center justify-between gap-4' },
         React.createElement(
           'div',
           {
-            className: 'brand',
+            className: 'flex items-center gap-2 cursor-pointer select-none',
             onClick: () => {
               window.location.href = '/'
             },
             role: 'button',
             tabIndex: 0,
           },
-          React.createElement('img', { className: 'brandLogo', src: '/kivana-logo.png', alt: 'Kivana logo' }),
-          React.createElement(
-            'div',
-            { className: 'brandText' },
-            React.createElement('div', { className: 'brandName' }, 'Kivana'),
-            React.createElement('div', { className: 'brandSub' }, 'Account portal')
-          )
+          React.createElement('img', { className: 'w-9 h-9 object-contain', src: '/kivana-logo.png', alt: 'Kivana' }),
+          React.createElement('span', { className: 'text-2xl font-bold text-[#1B1748] tracking-tight', style: { fontFamily: 'Lora, serif' } }, 'kivana')
         ),
         React.createElement(
           'div',
-          { className: 'nav' },
+          { className: 'flex items-center gap-3 flex-wrap justify-end' },
           me
             ? React.createElement(
                 React.Fragment,
                 null,
                 statusText ? React.createElement(Pill, { kind: 'ok' }, statusText) : null,
-                React.createElement('button', { className: 'btn', onClick: () => setView('dashboard'), disabled: busy }, 'Plans'),
-                React.createElement('button', { className: 'btn', onClick: () => setView('account'), disabled: busy }, 'Account'),
+                React.createElement(
+                  'button',
+                  {
+                    className:
+                      'px-5 py-2.5 rounded-full text-[15px] font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                    onClick: () => setView('dashboard'),
+                    disabled: busy,
+                    type: 'button',
+                  },
+                  'Plans'
+                ),
+                React.createElement(
+                  'button',
+                  {
+                    className:
+                      'px-5 py-2.5 rounded-full text-[15px] font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                    onClick: () => setView('account'),
+                    disabled: busy,
+                    type: 'button',
+                  },
+                  'Account'
+                ),
                 me.isAdmin
                   ? React.createElement(
                       'button',
                       {
-                        className: 'btn',
+                        className:
+                          'px-5 py-2.5 rounded-full text-[15px] font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
                         onClick: async () => {
                           setView('admin')
                           await loadAdmin()
                         },
                         disabled: busy,
+                        type: 'button',
                       },
                       'Admin'
                     )
                   : null,
-                React.createElement('button', { className: 'btn btnDanger', onClick: signOut, disabled: busy }, 'Sign out')
+                React.createElement(
+                  'button',
+                  {
+                    className:
+                      'px-5 py-2.5 rounded-full text-[15px] font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none',
+                    onClick: signOut,
+                    disabled: busy,
+                    type: 'button',
+                  },
+                  'Sign out'
+                )
               )
             : React.createElement(
                 React.Fragment,
                 null,
-                React.createElement('button', { className: 'btn', onClick: () => setAuthMode('login'), disabled: busy }, 'Sign in'),
-                React.createElement('button', { className: 'btn btnPrimary', onClick: () => setAuthMode('signup'), disabled: busy }, 'Create account')
+                React.createElement(
+                  'button',
+                  {
+                    className:
+                      'px-5 py-2.5 rounded-full text-[15px] font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                    onClick: () => setAuthMode('login'),
+                    disabled: busy,
+                    type: 'button',
+                  },
+                  'Sign in'
+                ),
+                React.createElement(
+                  'button',
+                  {
+                    className:
+                      'px-5 py-2.5 rounded-full text-[15px] font-semibold text-white bg-[#4F3DDD] hover:bg-[#3F2FCB] disabled:opacity-60 disabled:pointer-events-none',
+                    onClick: () => setAuthMode('signup'),
+                    disabled: busy,
+                    type: 'button',
+                  },
+                  'Try free'
+                )
               )
         )
       )
@@ -743,21 +835,22 @@ function App() {
 
     return React.createElement(
       'div',
-      { className: 'grid' },
+      { className: 'grid grid-cols-1 lg:grid-cols-2 gap-8' },
       React.createElement(
         'div',
-        { className: 'card' },
-        React.createElement('div', { className: 'sectionTitle' }, title),
-        React.createElement('div', { className: 'cardSub' }, sub),
+        { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+        React.createElement('div', { className: 'text-3xl font-bold text-[#1B1748] tracking-tight' }, title),
+        React.createElement('div', { className: 'mt-2 text-[15px] text-gray-600' }, sub),
         React.createElement(
           'form',
-          { className: 'form', onSubmit: submitAuth },
+          { className: 'mt-7 grid gap-5', onSubmit: submitAuth },
           React.createElement(
             'div',
             null,
-            React.createElement('div', { className: 'fieldLabel' }, 'Email'),
+            React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Email'),
             React.createElement('input', {
-              className: 'fieldInput',
+              className:
+                'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
               type: 'email',
               value: email,
               onChange: (e) => setEmail(e.target.value),
@@ -769,9 +862,10 @@ function App() {
           React.createElement(
             'div',
             null,
-            React.createElement('div', { className: 'fieldLabel' }, 'Password'),
+            React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Password'),
             React.createElement('input', {
-              className: 'fieldInput',
+              className:
+                'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
               type: 'password',
               value: password,
               onChange: (e) => setPassword(e.target.value),
@@ -780,16 +874,25 @@ function App() {
               disabled: busy,
             })
           ),
-          React.createElement('button', { className: 'btn btnPrimary', type: 'submit', disabled: busy }, busy ? 'Working…' : title),
+          React.createElement(
+            'button',
+            {
+              className:
+                'w-full px-5 py-3 rounded-full text-[15px] font-semibold text-white bg-[#4F3DDD] hover:bg-[#3F2FCB] disabled:opacity-60 disabled:pointer-events-none',
+              type: 'submit',
+              disabled: busy,
+            },
+            busy ? 'Working…' : 'Continue'
+          ),
           React.createElement(
             'div',
-            { className: 'status' },
-            React.createElement('span', { className: 'muted' }, toggleText),
+            { className: 'text-sm text-gray-600' },
+            React.createElement('span', null, toggleText),
             ' ',
             React.createElement(
               'button',
               {
-                className: 'btn',
+                className: 'text-sm font-semibold text-[#4F3DDD] hover:underline',
                 type: 'button',
                 onClick: () => setAuthMode(authMode === 'signup' ? 'login' : 'signup'),
                 disabled: busy,
@@ -798,68 +901,106 @@ function App() {
             )
           ),
           status.text
-            ? React.createElement('div', { className: `status ${status.kind === 'err' ? 'statusErr' : status.kind === 'ok' ? 'statusOk' : ''}` }, status.text)
+            ? React.createElement(
+                'div',
+                { className: `text-sm ${status.kind === 'err' ? 'text-red-600' : status.kind === 'ok' ? 'text-emerald-700' : 'text-gray-600'}` },
+                status.text
+              )
             : null
         )
       ),
       React.createElement(
         'div',
-        { className: 'card' },
-        React.createElement('div', { className: 'cardTitle' }, 'Pricing'),
+        { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+        React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Pricing'),
         React.createElement(
           'div',
-          { className: 'cardSub' },
+          { className: 'mt-2 text-[15px] text-gray-600' },
           `Currency auto-detected: ${pricing.code}. UK shows GBP, Scandinavia shows NOK, everyone else EUR.`
         ),
         React.createElement(
           'div',
-          { className: 'tabs' },
+          { className: 'mt-6 flex items-center gap-3 flex-wrap' },
           React.createElement(
             'button',
-            { className: `tab ${billingCycle === 'yearly' ? 'tabActive' : ''}`, type: 'button', onClick: () => setBillingCycle('yearly'), disabled: busy },
+            {
+              className: `px-4 py-2 rounded-full border-2 text-[13px] font-semibold transition-colors ${
+                billingCycle === 'yearly' ? 'border-[#4F3DDD] bg-[#F0EEFC] text-[#4F3DDD]' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+              } disabled:opacity-60 disabled:pointer-events-none`,
+              type: 'button',
+              onClick: () => setBillingCycle('yearly'),
+              disabled: busy,
+            },
             'Yearly'
           ),
           React.createElement(
             'button',
-            { className: `tab ${billingCycle === 'monthly' ? 'tabActive' : ''}`, type: 'button', onClick: () => setBillingCycle('monthly'), disabled: busy },
+            {
+              className: `px-4 py-2 rounded-full border-2 text-[13px] font-semibold transition-colors ${
+                billingCycle === 'monthly' ? 'border-[#4F3DDD] bg-[#F0EEFC] text-[#4F3DDD]' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+              } disabled:opacity-60 disabled:pointer-events-none`,
+              type: 'button',
+              onClick: () => setBillingCycle('monthly'),
+              disabled: busy,
+            },
             'Monthly'
           )
         ),
         React.createElement(
           'div',
-          { className: 'plans' },
+          { className: 'mt-6 grid gap-4' },
           React.createElement(
             'div',
-            { className: 'plan' },
-            React.createElement('div', { className: 'planTop' }, React.createElement('div', { className: 'planName' }, 'Basic'), React.createElement(Pill, { kind: 'ok' }, 'Free')),
-            React.createElement('div', { className: 'muted' }, 'Try Basic for free. Ordinary/Pro coming soon.'),
-            React.createElement('button', { className: 'btn btnPrimary', disabled: true }, 'Basic is active by default')
+            { className: 'rounded-3xl border border-gray-100 bg-white p-6' },
+            React.createElement('div', { className: 'flex items-center justify-between gap-4' }, React.createElement('div', { className: 'text-lg font-bold' }, 'Basic'), React.createElement(Pill, { kind: 'ok' }, 'Free')),
+            React.createElement('div', { className: 'mt-2 text-sm text-gray-600' }, 'Try Basic for free. Ordinary/Pro coming soon.'),
+            React.createElement('div', { className: 'mt-4 text-sm text-gray-600' }, 'Included by default after signup.')
           ),
           React.createElement(
             'div',
-            { className: 'plan' },
-            React.createElement('div', { className: 'planTop' }, React.createElement('div', { className: 'planName' }, 'Ordinary'), React.createElement(Pill, { kind: 'warn' }, 'Coming soon')),
+            { className: 'rounded-3xl border border-gray-100 bg-white p-6' },
+            React.createElement('div', { className: 'flex items-center justify-between gap-4' }, React.createElement('div', { className: 'text-lg font-bold' }, 'Ordinary'), React.createElement(Pill, { kind: 'warn' }, 'Coming soon')),
             React.createElement(
               'div',
-              { className: 'priceLine' },
-              React.createElement('div', { className: 'priceMain' }, formatMoney(pricing, billingCycle === 'yearly' ? yearlyStd : monthlyStd)),
-              React.createElement('div', { className: 'priceMeta' }, billingCycle === 'yearly' ? '/yr (1 month free)' : '/mo')
+              { className: 'mt-3 flex items-baseline gap-2 flex-wrap' },
+              React.createElement('div', { className: 'text-2xl font-extrabold tracking-tight' }, formatMoney(pricing, billingCycle === 'yearly' ? yearlyStd : monthlyStd)),
+              React.createElement('div', { className: 'text-sm text-gray-600' }, billingCycle === 'yearly' ? '/yr (1 month free)' : '/mo')
             ),
-            React.createElement('div', { className: 'muted' }, billingCycle === 'yearly' ? `${formatMoney(pricing, monthlyStd)}/mo` : `${formatMoney(pricing, yearlyStd)}/yr (1 month free)`),
-            React.createElement('button', { className: 'btn', type: 'button', onClick: () => selectPlan('standard'), disabled: busy || !me }, me ? 'Select Ordinary' : 'Sign in to select')
+            React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, billingCycle === 'yearly' ? `${formatMoney(pricing, monthlyStd)}/mo` : `${formatMoney(pricing, yearlyStd)}/yr (1 month free)`),
+            React.createElement(
+              'button',
+              {
+                className:
+                  'mt-4 px-5 py-2.5 rounded-full text-[15px] font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                type: 'button',
+                onClick: () => selectPlan('standard'),
+                disabled: busy || !me,
+              },
+              me ? 'Select Ordinary' : 'Sign in to select'
+            )
           ),
           React.createElement(
             'div',
-            { className: 'plan' },
-            React.createElement('div', { className: 'planTop' }, React.createElement('div', { className: 'planName' }, 'Pro'), React.createElement(Pill, { kind: 'warn' }, 'Coming soon')),
+            { className: 'rounded-3xl border border-gray-100 bg-white p-6' },
+            React.createElement('div', { className: 'flex items-center justify-between gap-4' }, React.createElement('div', { className: 'text-lg font-bold' }, 'Pro'), React.createElement(Pill, { kind: 'warn' }, 'Coming soon')),
             React.createElement(
               'div',
-              { className: 'priceLine' },
-              React.createElement('div', { className: 'priceMain' }, formatMoney(pricing, billingCycle === 'yearly' ? yearlyPro : monthlyPro)),
-              React.createElement('div', { className: 'priceMeta' }, billingCycle === 'yearly' ? '/yr (1 month free)' : '/mo')
+              { className: 'mt-3 flex items-baseline gap-2 flex-wrap' },
+              React.createElement('div', { className: 'text-2xl font-extrabold tracking-tight' }, formatMoney(pricing, billingCycle === 'yearly' ? yearlyPro : monthlyPro)),
+              React.createElement('div', { className: 'text-sm text-gray-600' }, billingCycle === 'yearly' ? '/yr (1 month free)' : '/mo')
             ),
-            React.createElement('div', { className: 'muted' }, billingCycle === 'yearly' ? `${formatMoney(pricing, monthlyPro)}/mo` : `${formatMoney(pricing, yearlyPro)}/yr (1 month free)`),
-            React.createElement('button', { className: 'btn', type: 'button', onClick: () => selectPlan('pro'), disabled: busy || !me }, me ? 'Select Pro' : 'Sign in to select')
+            React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, billingCycle === 'yearly' ? `${formatMoney(pricing, monthlyPro)}/mo` : `${formatMoney(pricing, yearlyPro)}/yr (1 month free)`),
+            React.createElement(
+              'button',
+              {
+                className:
+                  'mt-4 px-5 py-2.5 rounded-full text-[15px] font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                type: 'button',
+                onClick: () => selectPlan('pro'),
+                disabled: busy || !me,
+              },
+              me ? 'Select Pro' : 'Sign in to select'
+            )
           )
         )
       )
@@ -873,106 +1014,167 @@ function App() {
 
     return React.createElement(
       'div',
-      { className: 'grid' },
+      { className: 'grid grid-cols-1 lg:grid-cols-2 gap-8' },
       React.createElement(
         'div',
-        { className: 'card' },
-        React.createElement('div', { className: 'sectionTitle' }, 'Plans'),
-        React.createElement('div', { className: 'cardSub' }, 'Choose a plan. Pricing matches the website currency rules.'),
+        { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+        React.createElement('div', { className: 'text-2xl font-bold text-[#1B1748] tracking-tight' }, 'Plans'),
+        React.createElement('div', { className: 'mt-2 text-[15px] text-gray-600' }, 'Choose a plan. Pricing matches the website currency rules.'),
         React.createElement(
           'div',
-          { className: 'tabs' },
+          { className: 'mt-6 flex items-center gap-3 flex-wrap' },
           React.createElement(
             'button',
-            { className: `tab ${billingCycle === 'yearly' ? 'tabActive' : ''}`, type: 'button', onClick: () => setBillingCycle('yearly'), disabled: busy },
+            {
+              className: `px-4 py-2 rounded-full border-2 text-[13px] font-semibold transition-colors ${
+                billingCycle === 'yearly' ? 'border-[#4F3DDD] bg-[#F0EEFC] text-[#4F3DDD]' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+              } disabled:opacity-60 disabled:pointer-events-none`,
+              type: 'button',
+              onClick: () => setBillingCycle('yearly'),
+              disabled: busy,
+            },
             'Yearly'
           ),
           React.createElement(
             'button',
-            { className: `tab ${billingCycle === 'monthly' ? 'tabActive' : ''}`, type: 'button', onClick: () => setBillingCycle('monthly'), disabled: busy },
+            {
+              className: `px-4 py-2 rounded-full border-2 text-[13px] font-semibold transition-colors ${
+                billingCycle === 'monthly' ? 'border-[#4F3DDD] bg-[#F0EEFC] text-[#4F3DDD]' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+              } disabled:opacity-60 disabled:pointer-events-none`,
+              type: 'button',
+              onClick: () => setBillingCycle('monthly'),
+              disabled: busy,
+            },
             'Monthly'
           )
         ),
         React.createElement(
           'div',
-          { className: 'plans' },
+          { className: 'mt-6 grid gap-4' },
           React.createElement(
             'div',
-            { className: 'plan' },
-            React.createElement('div', { className: 'planTop' }, React.createElement('div', { className: 'planName' }, 'Basic'), planCode === 'basic' || !planCode ? React.createElement(Pill, { kind: 'ok' }, 'Current') : null),
-            React.createElement('div', { className: 'muted' }, 'Free.'),
-            React.createElement('button', { className: 'btn btnPrimary', disabled: true }, 'Basic')
+            { className: 'rounded-3xl border border-gray-100 bg-white p-6' },
+            React.createElement(
+              'div',
+              { className: 'flex items-center justify-between gap-4' },
+              React.createElement('div', { className: 'text-lg font-bold' }, 'Basic'),
+              planCode === 'basic' || !planCode ? React.createElement(Pill, { kind: 'ok' }, 'Current') : React.createElement(Pill, { kind: 'ok' }, 'Free')
+            ),
+            React.createElement('div', { className: 'mt-2 text-sm text-gray-600' }, 'Free.')
           ),
           React.createElement(
             'div',
-            { className: 'plan' },
-            React.createElement('div', { className: 'planTop' }, React.createElement('div', { className: 'planName' }, 'Ordinary'), planCode === 'standard' ? React.createElement(Pill, { kind: 'ok' }, 'Current') : React.createElement(Pill, { kind: 'warn' }, 'Coming soon')),
+            { className: 'rounded-3xl border border-gray-100 bg-white p-6' },
             React.createElement(
               'div',
-              { className: 'priceLine' },
-              React.createElement('div', { className: 'priceMain' }, formatMoney(pricing, billingCycle === 'yearly' ? yearlyStd : monthlyStd)),
-              React.createElement('div', { className: 'priceMeta' }, billingCycle === 'yearly' ? '/yr' : '/mo')
+              { className: 'flex items-center justify-between gap-4' },
+              React.createElement('div', { className: 'text-lg font-bold' }, 'Ordinary'),
+              planCode === 'standard' ? React.createElement(Pill, { kind: 'ok' }, 'Current') : React.createElement(Pill, { kind: 'warn' }, 'Coming soon')
             ),
-            React.createElement('div', { className: 'muted' }, billingCycle === 'yearly' ? `${formatMoney(pricing, monthlyStd)}/mo` : `${formatMoney(pricing, yearlyStd)}/yr`),
+            React.createElement(
+              'div',
+              { className: 'mt-3 flex items-baseline gap-2 flex-wrap' },
+              React.createElement('div', { className: 'text-2xl font-extrabold tracking-tight' }, formatMoney(pricing, billingCycle === 'yearly' ? yearlyStd : monthlyStd)),
+              React.createElement('div', { className: 'text-sm text-gray-600' }, billingCycle === 'yearly' ? '/yr' : '/mo')
+            ),
+            React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, billingCycle === 'yearly' ? `${formatMoney(pricing, monthlyStd)}/mo` : `${formatMoney(pricing, yearlyStd)}/yr`),
             React.createElement(
               'button',
-              { className: 'btn', type: 'button', onClick: () => selectPlan('standard'), disabled: busy || planCode === 'standard' },
+              {
+                className:
+                  'mt-4 px-5 py-2.5 rounded-full text-[15px] font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                type: 'button',
+                onClick: () => selectPlan('standard'),
+                disabled: busy || planCode === 'standard',
+              },
               planCode === 'standard' ? 'Current plan' : 'Select Ordinary'
             )
           ),
           React.createElement(
             'div',
-            { className: 'plan' },
-            React.createElement('div', { className: 'planTop' }, React.createElement('div', { className: 'planName' }, 'Pro'), planCode === 'pro' ? React.createElement(Pill, { kind: 'ok' }, 'Current') : React.createElement(Pill, { kind: 'warn' }, 'Coming soon')),
+            { className: 'rounded-3xl border border-gray-100 bg-white p-6' },
             React.createElement(
               'div',
-              { className: 'priceLine' },
-              React.createElement('div', { className: 'priceMain' }, formatMoney(pricing, billingCycle === 'yearly' ? yearlyPro : monthlyPro)),
-              React.createElement('div', { className: 'priceMeta' }, billingCycle === 'yearly' ? '/yr' : '/mo')
+              { className: 'flex items-center justify-between gap-4' },
+              React.createElement('div', { className: 'text-lg font-bold' }, 'Pro'),
+              planCode === 'pro' ? React.createElement(Pill, { kind: 'ok' }, 'Current') : React.createElement(Pill, { kind: 'warn' }, 'Coming soon')
             ),
-            React.createElement('div', { className: 'muted' }, billingCycle === 'yearly' ? `${formatMoney(pricing, monthlyPro)}/mo` : `${formatMoney(pricing, yearlyPro)}/yr`),
+            React.createElement(
+              'div',
+              { className: 'mt-3 flex items-baseline gap-2 flex-wrap' },
+              React.createElement('div', { className: 'text-2xl font-extrabold tracking-tight' }, formatMoney(pricing, billingCycle === 'yearly' ? yearlyPro : monthlyPro)),
+              React.createElement('div', { className: 'text-sm text-gray-600' }, billingCycle === 'yearly' ? '/yr' : '/mo')
+            ),
+            React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, billingCycle === 'yearly' ? `${formatMoney(pricing, monthlyPro)}/mo` : `${formatMoney(pricing, yearlyPro)}/yr`),
             React.createElement(
               'button',
-              { className: 'btn', type: 'button', onClick: () => selectPlan('pro'), disabled: busy || planCode === 'pro' },
+              {
+                className:
+                  'mt-4 px-5 py-2.5 rounded-full text-[15px] font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                type: 'button',
+                onClick: () => selectPlan('pro'),
+                disabled: busy || planCode === 'pro',
+              },
               planCode === 'pro' ? 'Current plan' : 'Select Pro'
             )
           )
         ),
         status.text
-          ? React.createElement('div', { className: `status ${status.kind === 'err' ? 'statusErr' : status.kind === 'ok' ? 'statusOk' : ''}` }, status.text)
+          ? React.createElement(
+              'div',
+              { className: `mt-4 text-sm ${status.kind === 'err' ? 'text-red-600' : status.kind === 'ok' ? 'text-emerald-700' : 'text-gray-600'}` },
+              status.text
+            )
           : null
       ),
       React.createElement(
         'div',
-        { className: 'card' },
-        React.createElement('div', { className: 'sectionTitle' }, 'Your account'),
-        React.createElement('div', { className: 'cardSub' }, 'Profile, entitlement status, and admin access.'),
+        { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+        React.createElement('div', { className: 'text-2xl font-bold text-[#1B1748] tracking-tight' }, 'Your account'),
+        React.createElement('div', { className: 'mt-2 text-[15px] text-gray-600' }, 'Profile, entitlement status, and admin access.'),
         React.createElement(
-          'table',
-          { className: 'table' },
+          'div',
+          { className: 'mt-6 grid gap-3 text-[15px]' },
           React.createElement(
-            'tbody',
+            'div',
             null,
-            React.createElement('tr', null, React.createElement('th', null, 'Email'), React.createElement('td', null, String(me?.email || ''))),
-            React.createElement('tr', null, React.createElement('th', null, 'Plan'), React.createElement('td', null, planName || planCode || 'Basic')),
-            React.createElement('tr', null, React.createElement('th', null, 'Ends'), React.createElement('td', null, endsAt || '—')),
-            React.createElement('tr', null, React.createElement('th', null, 'Admin'), React.createElement('td', null, me?.isAdmin ? React.createElement(Pill, { kind: 'ok' }, 'Yes') : React.createElement(Pill, { kind: 'muted' }, 'No')))
+            React.createElement('div', { className: 'flex items-center justify-between gap-4 border-b border-gray-100 pb-3' }, React.createElement('div', { className: 'text-gray-600' }, 'Email'), React.createElement('div', { className: 'font-semibold text-[#1B1748]' }, String(me?.email || ''))),
+            React.createElement('div', { className: 'flex items-center justify-between gap-4 border-b border-gray-100 pb-3' }, React.createElement('div', { className: 'text-gray-600' }, 'Plan'), React.createElement('div', { className: 'font-semibold text-[#1B1748]' }, planName || planCode || 'Basic')),
+            React.createElement('div', { className: 'flex items-center justify-between gap-4 border-b border-gray-100 pb-3' }, React.createElement('div', { className: 'text-gray-600' }, 'Ends'), React.createElement('div', { className: 'font-semibold text-[#1B1748]' }, endsAt || '—')),
+            React.createElement(
+              'div',
+              { className: 'flex items-center justify-between gap-4' },
+              React.createElement('div', { className: 'text-gray-600' }, 'Admin'),
+              React.createElement('div', null, me?.isAdmin ? React.createElement(Pill, { kind: 'ok' }, 'Yes') : React.createElement(Pill, { kind: 'muted' }, 'No'))
+            )
           )
         ),
         React.createElement(
           'div',
-          { className: 'tabs' },
-          React.createElement('button', { className: 'btn', onClick: () => setView('account'), disabled: busy }, 'Edit profile'),
+          { className: 'mt-6 flex items-center gap-3 flex-wrap' },
+          React.createElement(
+            'button',
+            {
+              className:
+                'px-5 py-2.5 rounded-full text-[15px] font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+              onClick: () => setView('account'),
+              disabled: busy,
+              type: 'button',
+            },
+            'Edit profile'
+          ),
           me?.isAdmin
             ? React.createElement(
                 'button',
                 {
-                  className: 'btn',
+                  className:
+                    'px-5 py-2.5 rounded-full text-[15px] font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
                   onClick: async () => {
                     setView('admin')
                     await loadAdmin()
                   },
                   disabled: busy,
+                  type: 'button',
                 },
                 'Open admin'
               )
@@ -985,39 +1187,64 @@ function App() {
   function Account() {
     return React.createElement(
       'div',
-      { className: 'grid' },
+      { className: 'grid grid-cols-1 lg:grid-cols-2 gap-8' },
       React.createElement(
         'div',
-        { className: 'card' },
-        React.createElement('div', { className: 'sectionTitle' }, 'Profile'),
-        React.createElement('div', { className: 'cardSub' }, 'This display name is shown in the portal.'),
+        { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+        React.createElement('div', { className: 'text-2xl font-bold text-[#1B1748] tracking-tight' }, 'Profile'),
+        React.createElement('div', { className: 'mt-2 text-[15px] text-gray-600' }, 'This display name is shown in the portal.'),
         React.createElement(
           'div',
-          { className: 'form' },
+          { className: 'mt-7 grid gap-5' },
           React.createElement(
             'div',
             null,
-            React.createElement('div', { className: 'fieldLabel' }, 'Display name'),
+            React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Display name'),
             React.createElement('input', {
-              className: 'fieldInput',
+              className:
+                'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
               ref: displayNameInputRef,
               defaultValue: displayName,
               placeholder: 'Your name',
               disabled: busy,
             })
           ),
-          React.createElement('button', { className: 'btn btnPrimary', onClick: saveProfile, disabled: busy }, busy ? 'Saving…' : 'Save profile'),
+          React.createElement(
+            'button',
+            {
+              className:
+                'w-full px-5 py-3 rounded-full text-[15px] font-semibold text-white bg-[#4F3DDD] hover:bg-[#3F2FCB] disabled:opacity-60 disabled:pointer-events-none',
+              onClick: saveProfile,
+              disabled: busy,
+              type: 'button',
+            },
+            busy ? 'Saving…' : 'Save profile'
+          ),
           status.text
-            ? React.createElement('div', { className: `status ${status.kind === 'err' ? 'statusErr' : status.kind === 'ok' ? 'statusOk' : ''}` }, status.text)
+            ? React.createElement(
+                'div',
+                { className: `text-sm ${status.kind === 'err' ? 'text-red-600' : status.kind === 'ok' ? 'text-emerald-700' : 'text-gray-600'}` },
+                status.text
+              )
             : null
         )
       ),
       React.createElement(
         'div',
-        { className: 'card' },
-        React.createElement('div', { className: 'sectionTitle' }, 'Back to website'),
-        React.createElement('div', { className: 'cardSub' }, 'Signing out always returns you to the main page.'),
-        React.createElement('button', { className: 'btn', onClick: () => (window.location.href = '/'), disabled: busy }, 'Open main page')
+        { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+        React.createElement('div', { className: 'text-2xl font-bold text-[#1B1748] tracking-tight' }, 'Back to website'),
+        React.createElement('div', { className: 'mt-2 text-[15px] text-gray-600' }, 'Signing out always returns you to the main page.'),
+        React.createElement(
+          'button',
+          {
+            className:
+              'mt-6 px-5 py-2.5 rounded-full text-[15px] font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+            onClick: () => (window.location.href = '/'),
+            disabled: busy,
+            type: 'button',
+          },
+          'Open main page'
+        )
       )
     )
   }
@@ -1027,9 +1254,9 @@ function App() {
     if (!isAdmin) {
       return React.createElement(
         'div',
-        { className: 'card' },
-        React.createElement('div', { className: 'sectionTitle' }, 'Admin'),
-        React.createElement('div', { className: 'cardSub' }, 'You are not an admin.')
+        { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+        React.createElement('div', { className: 'text-2xl font-bold text-[#1B1748] tracking-tight' }, 'Admin'),
+        React.createElement('div', { className: 'mt-2 text-[15px] text-gray-600' }, 'You are not an admin.')
       )
     }
 
@@ -1037,26 +1264,26 @@ function App() {
       adminTab === 'users'
         ? React.createElement(
             'div',
-            { className: 'card' },
-            React.createElement('div', { className: 'cardTitle' }, 'Users'),
-            React.createElement('div', { className: 'cardSub' }, `${adminUsers.length} users`),
+            { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+            React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Users'),
+            React.createElement('div', { className: 'mt-2 text-sm text-gray-600' }, `${adminUsers.length} users`),
             React.createElement(
               'table',
-              { className: 'table' },
+              { className: 'w-full text-sm mt-6' },
               React.createElement(
                 'thead',
                 null,
                 React.createElement(
                   'tr',
                   null,
-                  React.createElement('th', null, 'Email'),
-                  React.createElement('th', null, 'Created'),
-                  React.createElement('th', null, 'Plan'),
-                  React.createElement('th', null, 'Ends'),
-                  React.createElement('th', null, 'Discount'),
-                  React.createElement('th', null, 'Last IP'),
-                  React.createElement('th', null, 'Flags'),
-                  React.createElement('th', null, 'Actions')
+                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Email'),
+                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Created'),
+                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Plan'),
+                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Ends'),
+                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Discount'),
+                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Last IP'),
+                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Flags'),
+                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Actions')
                 )
               ),
               React.createElement(
@@ -1065,22 +1292,22 @@ function App() {
                 adminUsers.map((u) =>
                   React.createElement(
                     'tr',
-                    { key: String(u.id || u.email) },
-                    React.createElement('td', null, String(u.email || '')),
-                    React.createElement('td', null, String(u.createdAt || '')),
-                    React.createElement('td', null, String(u.kivanaPlanName || u.kivanaPlanCode || 'basic')),
-                    React.createElement('td', null, String(u.kivanaEndsAt || '—')),
+                    { key: String(u.id || u.email), className: 'border-t border-gray-100' },
+                    React.createElement('td', { className: 'py-3 pr-4 font-medium text-[#1B1748]' }, String(u.email || '')),
+                    React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, String(u.createdAt || '')),
+                    React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, String(u.kivanaPlanName || u.kivanaPlanCode || 'basic')),
+                    React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, String(u.kivanaEndsAt || '—')),
                     React.createElement(
                       'td',
-                      null,
+                      { className: 'py-3 pr-4 text-gray-600' },
                       u.discountPercent != null && Number(u.discountPercent) > 0
                         ? `${String(u.discountPercent)}%${u.discountLabel ? ` (${String(u.discountLabel)})` : ''}`
                         : '—'
                     ),
-                    React.createElement('td', null, String(u.lastIp || '—')),
+                    React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, String(u.lastIp || '—')),
                     React.createElement(
                       'td',
-                      null,
+                      { className: 'py-3 pr-4' },
                       u.isAdmin ? React.createElement(Pill, { kind: 'ok' }, 'admin') : null,
                       ' ',
                       u.isModerator ? React.createElement(Pill, { kind: 'warn' }, 'moderator') : null,
@@ -1089,29 +1316,48 @@ function App() {
                     ),
                     React.createElement(
                       'td',
-                      null,
+                      { className: 'py-3 pr-4' },
                       React.createElement(
                         'button',
-                        { className: 'btn', type: 'button', onClick: () => openPasswordModal(u), disabled: busy },
+                        {
+                          className:
+                            'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                          type: 'button',
+                          onClick: () => openPasswordModal(u),
+                          disabled: busy,
+                        },
                         'Password'
                       ),
                       ' ',
                       React.createElement(
                         'button',
-                        { className: 'btn', type: 'button', onClick: () => openGrantModal(u), disabled: busy },
+                        {
+                          className:
+                            'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                          type: 'button',
+                          onClick: () => openGrantModal(u),
+                          disabled: busy,
+                        },
                         'Plan'
                       ),
                       ' ',
                       React.createElement(
                         'button',
-                        { className: 'btn', type: 'button', onClick: () => openDiscountModal(u), disabled: busy },
+                        {
+                          className:
+                            'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                          type: 'button',
+                          onClick: () => openDiscountModal(u),
+                          disabled: busy,
+                        },
                         'Discount'
                       ),
                       ' ',
                       React.createElement(
                         'button',
                         {
-                          className: 'btn',
+                          className:
+                            'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
                           type: 'button',
                           onClick: () => adminToggleModerator(String(u.email || ''), !u.isModerator),
                           disabled: busy || !!u.isAdmin,
@@ -1121,7 +1367,13 @@ function App() {
                       ' ',
                       React.createElement(
                         'button',
-                        { className: 'btn btnDanger', type: 'button', onClick: () => openDeleteUserModal(u), disabled: busy || !!u.isAdmin },
+                        {
+                          className:
+                            'px-3 py-2 rounded-full text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none',
+                          type: 'button',
+                          onClick: () => openDeleteUserModal(u),
+                          disabled: busy || !!u.isAdmin,
+                        },
                         'Delete'
                       )
                     )
@@ -1136,22 +1388,22 @@ function App() {
       adminTab === 'messages'
         ? React.createElement(
             'div',
-            { className: 'card' },
-            React.createElement('div', { className: 'cardTitle' }, 'Messages'),
-            React.createElement('div', { className: 'cardSub' }, `${adminMessages.length} messages`),
+            { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+            React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Messages'),
+            React.createElement('div', { className: 'mt-2 text-sm text-gray-600' }, `${adminMessages.length} messages`),
             React.createElement(
               'table',
-              { className: 'table' },
+              { className: 'w-full text-sm mt-6' },
               React.createElement(
                 'thead',
                 null,
                 React.createElement(
                   'tr',
                   null,
-                  React.createElement('th', null, 'From'),
-                  React.createElement('th', null, 'Subject'),
-                  React.createElement('th', null, 'Status'),
-                  React.createElement('th', null, 'Actions')
+                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'From'),
+                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Subject'),
+                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Status'),
+                  React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Actions')
                 )
               ),
               React.createElement(
@@ -1162,25 +1414,41 @@ function App() {
                   const read = !!m.isRead
                   return React.createElement(
                     'tr',
-                    { key: id },
+                    { key: id, className: 'border-t border-gray-100' },
                     React.createElement(
                       'td',
-                      null,
-                      React.createElement('div', null, String(m.email || '')),
-                      React.createElement('div', { className: 'muted' }, String(m.name || ''))
+                      { className: 'py-3 pr-4' },
+                      React.createElement('div', { className: 'font-medium text-[#1B1748]' }, String(m.email || '')),
+                      React.createElement('div', { className: 'text-gray-600' }, String(m.name || ''))
                     ),
-                    React.createElement('td', null, String(m.subject || '')),
-                    React.createElement('td', null, read ? React.createElement(Pill, { kind: 'ok' }, 'read') : React.createElement(Pill, { kind: 'warn' }, 'unread')),
+                    React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, String(m.subject || '')),
+                    React.createElement('td', { className: 'py-3 pr-4' }, read ? React.createElement(Pill, { kind: 'ok' }, 'read') : React.createElement(Pill, { kind: 'warn' }, 'unread')),
                     React.createElement(
                       'td',
-                      null,
+                      { className: 'py-3 pr-4' },
                       React.createElement(
                         'button',
-                        { className: 'btn', type: 'button', onClick: () => adminMark(id, !read), disabled: busy },
+                        {
+                          className:
+                            'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                          type: 'button',
+                          onClick: () => adminMark(id, !read),
+                          disabled: busy,
+                        },
                         read ? 'Mark unread' : 'Mark read'
                       ),
                       ' ',
-                      React.createElement('button', { className: 'btn btnDanger', type: 'button', onClick: () => adminDeleteMsg(id), disabled: busy }, 'Delete')
+                      React.createElement(
+                        'button',
+                        {
+                          className:
+                            'px-3 py-2 rounded-full text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none',
+                          type: 'button',
+                          onClick: () => adminDeleteMsg(id),
+                          disabled: busy,
+                        },
+                        'Delete'
+                      )
                     )
                   )
                 })
@@ -1191,33 +1459,57 @@ function App() {
 
     return React.createElement(
       'div',
-      { className: 'grid' },
+      { className: 'grid grid-cols-1 lg:grid-cols-2 gap-8' },
       React.createElement(
         'div',
-        { className: 'card' },
-        React.createElement('div', { className: 'sectionTitle' }, 'Admin'),
-        React.createElement('div', { className: 'cardSub' }, 'User management and contact inbox.'),
+        { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+        React.createElement('div', { className: 'text-2xl font-bold text-[#1B1748] tracking-tight' }, 'Admin'),
+        React.createElement('div', { className: 'mt-2 text-[15px] text-gray-600' }, 'User management and contact inbox.'),
         React.createElement(
           'div',
-          { className: 'tabs' },
+          { className: 'mt-6 flex items-center gap-3 flex-wrap' },
           React.createElement(
             'button',
-            { className: `tab ${adminTab === 'users' ? 'tabActive' : ''}`, type: 'button', onClick: () => setAdminTab('users'), disabled: busy },
+            {
+              className: `px-4 py-2 rounded-full border-2 text-[13px] font-semibold transition-colors ${
+                adminTab === 'users' ? 'border-[#4F3DDD] bg-[#F0EEFC] text-[#4F3DDD]' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+              } disabled:opacity-60 disabled:pointer-events-none`,
+              type: 'button',
+              onClick: () => setAdminTab('users'),
+              disabled: busy,
+            },
             'Users'
           ),
           React.createElement(
             'button',
-            { className: `tab ${adminTab === 'messages' ? 'tabActive' : ''}`, type: 'button', onClick: () => setAdminTab('messages'), disabled: busy },
+            {
+              className: `px-4 py-2 rounded-full border-2 text-[13px] font-semibold transition-colors ${
+                adminTab === 'messages' ? 'border-[#4F3DDD] bg-[#F0EEFC] text-[#4F3DDD]' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+              } disabled:opacity-60 disabled:pointer-events-none`,
+              type: 'button',
+              onClick: () => setAdminTab('messages'),
+              disabled: busy,
+            },
             'Messages'
           ),
           React.createElement(
             'button',
-            { className: 'btn', type: 'button', onClick: loadAdmin, disabled: busy },
+            {
+              className:
+                'px-5 py-2.5 rounded-full text-[15px] font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+              type: 'button',
+              onClick: loadAdmin,
+              disabled: busy,
+            },
             busy ? 'Loading…' : 'Reload'
           )
         ),
         status.text
-          ? React.createElement('div', { className: `status ${status.kind === 'err' ? 'statusErr' : status.kind === 'ok' ? 'statusOk' : ''}` }, status.text)
+          ? React.createElement(
+              'div',
+              { className: `mt-4 text-sm ${status.kind === 'err' ? 'text-red-600' : status.kind === 'ok' ? 'text-emerald-700' : 'text-gray-600'}` },
+              status.text
+            )
           : null
       ),
       React.createElement('div', null, usersView, messagesView)
@@ -1235,10 +1527,14 @@ function App() {
 
   return React.createElement(
     'div',
-    { className: 'shell' },
+    { className: 'min-h-screen bg-white text-[#1B1748]' },
     React.createElement(Topbar, null),
-    React.createElement('div', { className: 'main' }, content),
-    React.createElement('div', { className: 'footer' }, `© ${new Date().getFullYear()} Kivana`),
+    React.createElement(
+      'main',
+      { className: 'max-w-7xl mx-auto px-6 lg:px-10 py-8' },
+      content
+    ),
+    React.createElement('div', { className: 'max-w-7xl mx-auto px-6 lg:px-10 pb-10 text-sm text-gray-500' }, `© ${new Date().getFullYear()} Kivana`),
     React.createElement(AdminModal, null)
   )
 }
