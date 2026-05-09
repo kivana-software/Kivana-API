@@ -9,6 +9,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:ital,wght@0,500;0,600;0,700;1,500&display=swap" rel="stylesheet" />
     <style>
+      #root footer {
+        display: none !important;
+      }
       #authModal {
         display: none;
         position: fixed;
@@ -138,6 +141,114 @@
         text-decoration: none;
         text-align: center;
       }
+
+      #kivanaFooter {
+        background: #1b1748;
+        color: #fff;
+        padding: 72px 24px 36px;
+        font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      }
+      #kivanaFooterInner {
+        max-width: 1120px;
+        margin: 0 auto;
+      }
+      #kivanaFooterTop {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr 1fr 1fr;
+        gap: 48px;
+        padding-bottom: 56px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      @media (max-width: 900px) {
+        #kivanaFooterTop {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      @media (max-width: 560px) {
+        #kivanaFooterTop {
+          grid-template-columns: 1fr;
+        }
+      }
+      #kivanaFooterBrandRow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      #kivanaFooterBrandRow img {
+        width: 36px;
+        height: 36px;
+        object-fit: contain;
+        background: #fff;
+        border-radius: 8px;
+        padding: 4px;
+      }
+      #kivanaFooterBrandName {
+        font-family: Lora, serif;
+        font-weight: 800;
+        font-size: 22px;
+        letter-spacing: -0.01em;
+      }
+      #kivanaFooterDesc {
+        margin-top: 14px;
+        font-size: 13px;
+        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.6);
+        max-width: 320px;
+      }
+      #kivanaFooterGithubBtn {
+        margin-top: 18px;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+        text-decoration: none;
+        font-weight: 800;
+        font-size: 13px;
+      }
+      #kivanaFooterGithubBtn:hover {
+        background: rgba(255, 255, 255, 0.14);
+      }
+      .kivanaFooterColTitle {
+        font-size: 13px;
+        font-weight: 800;
+        color: #fff;
+        margin: 6px 0 14px;
+      }
+      .kivanaFooterLinkList {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      .kivanaFooterLinkList li {
+        margin: 10px 0;
+      }
+      .kivanaFooterLinkList a {
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.6);
+        text-decoration: none;
+      }
+      .kivanaFooterLinkList a:hover {
+        color: #fff;
+      }
+      #kivanaFooterBottom {
+        padding-top: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      #kivanaFooterBottomLeft {
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.5);
+      }
+      #kivanaFooterBottomRight {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.4);
+      }
     </style>
     <script>
       window.addEventListener(
@@ -160,6 +271,52 @@
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
+    <footer id="kivanaFooter">
+      <div id="kivanaFooterInner">
+        <div id="kivanaFooterTop">
+          <div>
+            <div id="kivanaFooterBrandRow">
+              <img src="/kivana-logo.png" alt="Kivana" />
+              <div id="kivanaFooterBrandName">kivana</div>
+            </div>
+            <div id="kivanaFooterDesc">
+              Personal finance &amp; accounting that lives on your device. Offline-first, MIT-licensed core.
+            </div>
+            <a id="kivanaFooterGithubBtn" href="https://github.com/kivana-software/Kivana" target="_blank" rel="noopener">
+              GitHub
+            </a>
+          </div>
+          <div>
+            <div class="kivanaFooterColTitle">Product</div>
+            <ul class="kivanaFooterLinkList">
+              <li><a href="/#why">Why local-first</a></li>
+              <li><a href="/#features">Capabilities</a></li>
+              <li><a href="/#roadmap">Roadmap</a></li>
+              <li><a href="/portal/">Plans</a></li>
+              <li><a href="https://github.com/kivana-software/Kivana/releases" target="_blank" rel="noopener">Releases</a></li>
+            </ul>
+          </div>
+          <div>
+            <div class="kivanaFooterColTitle">Company</div>
+            <ul class="kivanaFooterLinkList">
+              <li><a href="/#about">About</a></li>
+              <li><a href="/portal/">Contact</a></li>
+            </ul>
+          </div>
+          <div>
+            <div class="kivanaFooterColTitle">Legal</div>
+            <ul class="kivanaFooterLinkList">
+              <li><a href="/privacy.html">Privacy</a></li>
+              <li><a href="/terms.html">Terms</a></li>
+            </ul>
+          </div>
+        </div>
+        <div id="kivanaFooterBottom">
+          <div id="kivanaFooterBottomLeft">kivana.eu • All rights reserved © 2026</div>
+          <div id="kivanaFooterBottomRight">Built with care, for people who own their data.</div>
+        </div>
+      </div>
+    </footer>
     <div id="authModal" aria-hidden="true">
       <div id="authCard" role="dialog" aria-modal="true">
         <div id="authHeader">
@@ -337,11 +494,16 @@
             })
             .then(function (j) {
               setTokens(j && j.accessToken, j && j.refreshToken)
-              window.location.href = portalUrl
+              window.location.assign(portalUrl)
             })
             .catch(function (err) {
               var msg = err && err.message ? String(err.message) : "Failed."
-              if (e.error) e.error.textContent = msg
+              var friendly = msg
+              if (msg === "invalid_credentials") friendly = "Wrong email or password."
+              else if (msg === "invalid_email") friendly = "Enter a valid email address."
+              else if (msg === "weak_password") friendly = "Password must be at least 8 characters."
+              else if (msg === "too_many_requests") friendly = "Too many attempts. Please wait a moment and try again."
+              if (e.error) e.error.textContent = friendly
               e.submit.disabled = false
               e.submit.textContent = "Continue"
             })

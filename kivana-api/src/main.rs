@@ -1,7 +1,7 @@
 use anyhow::Context;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::Argon2;
-use axum::extract::{ConnectInfo, FromRef, State};
+use axum::extract::{ConnectInfo, FromRef, OriginalUri, State};
 use axum::http::{Method, StatusCode};
 use axum::response::IntoResponse;
 use axum::response::Redirect;
@@ -345,7 +345,7 @@ async fn main() -> anyhow::Result<()> {
             "/admin/",
             ServeDir::new("kivana-admin").append_index_html_on_directories(true),
         )
-        .route("/portal", get(|| async { Redirect::permanent("/portal/") }))
+        .route("/portal", get(portal_redirect))
         .nest_service(
             "/portal/",
             ServeDir::new("kivana-portal").append_index_html_on_directories(true),
@@ -370,6 +370,12 @@ async fn main() -> anyhow::Result<()> {
 
 async fn healthz() -> impl IntoResponse {
     (StatusCode::OK, "ok")
+}
+
+async fn portal_redirect(uri: OriginalUri) -> impl IntoResponse {
+    let q = uri.0.query().map(|v| format!("?{}", v)).unwrap_or_default();
+    let target = format!("/portal/{}", q);
+    Redirect::permanent(&target)
 }
 
 async fn robots_txt() -> impl IntoResponse {
