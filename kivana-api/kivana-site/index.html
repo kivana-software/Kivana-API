@@ -39,6 +39,7 @@
         }
         function getCtaTarget(el) {
           if (!el) return false
+          if (el.closest && el.closest("#authChoiceModal")) return ""
           var t = normalizeText(el.textContent)
           if (t === "sign in") return "auth:login"
           if (t === "try free" || t === "create account") return "auth:signup"
