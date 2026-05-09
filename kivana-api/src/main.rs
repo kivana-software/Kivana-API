@@ -1232,10 +1232,13 @@ async fn admin_support_unread_count(
     let row = sqlx::query(
         r#"
       SELECT COUNT(*)::bigint AS cnt
-      FROM support_threads
-      WHERE status = 'open'
-        AND last_sender_role = 'user'
-        AND (admin_last_read_at IS NULL OR last_message_at > admin_last_read_at)
+      FROM support_threads t
+      LEFT JOIN users u ON u.id = t.user_id
+      WHERE t.status = 'open'
+        AND t.last_sender_role = 'user'
+        AND (t.admin_last_read_at IS NULL OR t.last_message_at > t.admin_last_read_at)
+        AND (u.is_admin IS DISTINCT FROM TRUE)
+        AND (u.is_moderator IS DISTINCT FROM TRUE)
     "#,
     )
     .fetch_optional(&state.pool)
@@ -1626,6 +1629,8 @@ async fn admin_support_list_threads(
         u.display_name AS u_name
       FROM support_threads t
       LEFT JOIN users u ON u.id = t.user_id
+      WHERE (u.is_admin IS DISTINCT FROM TRUE)
+        AND (u.is_moderator IS DISTINCT FROM TRUE)
       ORDER BY t.last_message_at DESC
       LIMIT 200
     "#,

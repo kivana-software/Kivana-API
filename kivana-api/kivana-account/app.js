@@ -304,6 +304,186 @@ async function e2eeDecryptMessage(body, myId, privateKey) {
   return td.decode(new Uint8Array(pt))
 }
 
+function SupportChatSection({
+  busy,
+  supportThreads,
+  supportThreadId,
+  supportThread,
+  supportMessages,
+  loadSupportThreads,
+  loadSupportThread,
+  sendSupportMessage,
+  setStatus,
+}) {
+  const [subject, setSubject] = useState('')
+  const [draft, setDraft] = useState('')
+  const scrollRef = useRef(null)
+
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      try {
+        const list = await loadSupportThreads()
+        if (!alive) return
+        const first = list.find((t) => String(t.status || '').toLowerCase() === 'open') || list[0] || null
+        if (first && String(first.id || '')) {
+          await loadSupportThread(String(first.id || ''))
+        }
+      } catch {
+        void 0
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }, [supportThreadId, supportMessages.length])
+
+  const canSend = String(draft || '').trim().length > 0
+  const active = supportThread || null
+  const threads = Array.isArray(supportThreads) ? supportThreads : []
+  const activeLabel = active?.subject ? String(active.subject) : supportThreadId ? 'Support' : 'New message'
+
+  const Bubble = (m) => {
+    const role = String(m.senderRole || m.sender_role || '').toLowerCase()
+    const mine = role !== 'admin'
+    const body = String(m.body || '').trim()
+    const when = m.createdAt ? formatRfc3339Short(m.createdAt) : ''
+    const wrapCls = mine ? 'flex justify-end' : 'flex justify-start'
+    const bubbleCls = mine
+      ? 'max-w-[80%] rounded-2xl bg-[#4F3DDD] text-white px-4 py-3 text-[14px] leading-relaxed'
+      : 'max-w-[80%] rounded-2xl bg-white border border-gray-200 text-gray-800 px-4 py-3 text-[14px] leading-relaxed'
+    return React.createElement(
+      'div',
+      { key: String(m.id || Math.random()), className: wrapCls },
+      React.createElement(
+        'div',
+        null,
+        React.createElement('div', { className: bubbleCls }, body || '—'),
+        when ? React.createElement('div', { className: `mt-1 text-[11px] ${mine ? 'text-right text-gray-500' : 'text-left text-gray-500'}` }, when) : null
+      )
+    )
+  }
+
+  return React.createElement(
+    'div',
+    { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+    React.createElement(
+      'div',
+      { className: 'flex items-start justify-between gap-4 flex-wrap' },
+      React.createElement(
+        'div',
+        null,
+        React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Support chat'),
+        React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, 'Talk with the team and keep the full history here.')
+      ),
+      React.createElement(
+        'div',
+        { className: 'flex items-center gap-3 flex-wrap' },
+        threads.length > 1
+          ? React.createElement(
+              'select',
+              {
+                value: supportThreadId || '',
+                onChange: async (e) => {
+                  const v = String(e.target.value || '')
+                  if (!v) return
+                  try {
+                    await loadSupportThread(v)
+                  } catch (err) {
+                    setStatus({ kind: 'err', text: String(err?.message || err) })
+                  }
+                },
+                className: 'px-4 py-2.5 rounded-full border border-gray-200 bg-white text-[14px] font-semibold text-[#1B1748]',
+                disabled: busy,
+              },
+              threads.map((t) =>
+                React.createElement('option', { key: String(t.id || ''), value: String(t.id || '') }, String(t.subject || 'Support'))
+              )
+            )
+          : null,
+        React.createElement(
+          'button',
+          {
+            type: 'button',
+            onClick: async () => {
+              try {
+                const list = await loadSupportThreads()
+                const first = list.find((t) => String(t.status || '').toLowerCase() === 'open') || list[0] || null
+                if (first && String(first.id || '')) {
+                  await loadSupportThread(String(first.id || ''))
+                }
+              } catch (err) {
+                setStatus({ kind: 'err', text: String(err?.message || err) })
+              }
+            },
+            disabled: busy,
+            className:
+              'px-5 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
+          },
+          'Reload'
+        )
+      )
+    ),
+    React.createElement(
+      'div',
+      { className: 'mt-6 rounded-3xl border border-gray-100 bg-[#F6F7FB] p-4' },
+      React.createElement(
+        'div',
+        { className: 'flex items-center justify-between gap-3 flex-wrap' },
+        React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, activeLabel),
+        supportThreadId
+          ? null
+          : React.createElement('input', {
+              className:
+                'w-full sm:w-auto sm:min-w-[260px] rounded-full border border-gray-200 bg-white px-4 py-2.5 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+              value: subject,
+              onChange: (e) => setSubject(e.target.value),
+              disabled: busy,
+              placeholder: 'Subject (optional)',
+            })
+      ),
+      React.createElement(
+        'div',
+        { ref: scrollRef, className: 'mt-4 h-[360px] overflow-y-auto grid gap-3 pr-1' },
+        supportMessages.length ? supportMessages.map(Bubble) : React.createElement('div', { className: 'text-sm text-gray-600 py-6 text-center' }, 'No messages yet.')
+      ),
+      React.createElement(
+        'div',
+        { className: 'mt-4 flex items-end gap-3' },
+        React.createElement('textarea', {
+          className:
+            'flex-1 min-h-[46px] max-h-[120px] rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+          value: draft,
+          onChange: (e) => setDraft(e.target.value),
+          disabled: busy,
+          placeholder: 'Write a message…',
+        }),
+        React.createElement(
+          'button',
+          {
+            type: 'button',
+            onClick: async () => {
+              await sendSupportMessage({ subject, message: draft })
+              setDraft('')
+              setSubject('')
+            },
+            disabled: busy || !canSend,
+            className:
+              'px-6 py-3 rounded-full text-[14px] font-semibold text-white bg-[#4F3DDD] hover:bg-[#3F2FCB] disabled:opacity-60 disabled:pointer-events-none',
+          },
+          busy ? 'Sending…' : 'Send'
+        )
+      )
+    )
+  )
+}
+
 function App() {
   const pricing = useMemo(() => detectPricingCurrency(), [])
   const query = useQueryMode()
@@ -1765,13 +1945,17 @@ function App() {
     const renews = isTrial ? (trialEndsAt ? formatRfc3339Short(trialEndsAt) : '—') : endsAt ? formatRfc3339Short(endsAt) : '—'
     const planLabel = isTrial ? 'Ordinary' : planName || normalizePlanLabel(planCode) || 'Basic'
 
-    function NavItem({ id, label, icon, count }) {
+    function NavItem({ id, label, icon, count, onSelect }) {
       const active = section === id
       return React.createElement(
         'button',
         {
           type: 'button',
           onClick: async () => {
+            if (onSelect) {
+              await onSelect()
+              return
+            }
             setSection(id)
             if (id === 'admin') await loadAdmin()
           },
@@ -2396,7 +2580,18 @@ function App() {
       if (section === 'billing') return React.createElement(SectionCard, { title: 'Plan & billing', subtitle: 'Switch tiers anytime. Your finance data is unaffected.' }, React.createElement(BillingSection, null))
       if (section === 'downloads') return React.createElement(DownloadsSection, null)
       if (section === 'security') return React.createElement(SecuritySection, null)
-      if (section === 'support') return React.createElement(SupportSection, null)
+      if (section === 'support')
+        return React.createElement(SupportChatSection, {
+          busy,
+          supportThreads,
+          supportThreadId,
+          supportThread,
+          supportMessages,
+          loadSupportThreads,
+          loadSupportThread,
+          sendSupportMessage,
+          setStatus,
+        })
       if (section === 'data') return React.createElement(DataSection, null)
       if (section === 'admin') return React.createElement(Admin, null)
       return React.createElement(ProfileSection, null)
@@ -2431,24 +2626,39 @@ function App() {
             label: 'Security',
             icon: React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none' }, React.createElement('path', { d: 'M7.5 11V8.5C7.5 6.02 9.52 4 12 4C14.48 4 16.5 6.02 16.5 8.5V11', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' }), React.createElement('path', { d: 'M7 11H17C18.1 11 19 11.9 19 13V18C19 19.1 18.1 20 17 20H7C5.9 20 5 19.1 5 18V13C5 11.9 5.9 11 7 11Z', stroke: 'currentColor', strokeWidth: 1.8 })),
           }),
-          React.createElement(NavItem, {
-            id: 'support',
-            label: 'Contact support',
-            count: supportUnreadCount,
-            icon: React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none' }, React.createElement('path', { d: 'M4 6.5C4 5.12 5.12 4 6.5 4H17.5C18.88 4 20 5.12 20 6.5V15.5C20 16.88 18.88 18 17.5 18H9l-5 3v-3.5C4 16.12 4 6.5 4 6.5Z', stroke: 'currentColor', strokeWidth: 1.8, strokeLinejoin: 'round' }), React.createElement('path', { d: 'M7 8h10M7 11h8', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' })),
-          }),
+          me?.isAdmin
+            ? React.createElement(NavItem, {
+                id: 'admin',
+                label: 'Messages',
+                count: adminSupportUnreadCount,
+                onSelect: async () => {
+                  setSection('admin')
+                  setAdminPage('messages')
+                  await loadAdmin()
+                },
+                icon: React.createElement(
+                  'svg',
+                  { viewBox: '0 0 24 24', fill: 'none' },
+                  React.createElement('path', { d: 'M4 6.5C4 5.12 5.12 4 6.5 4H17.5C18.88 4 20 5.12 20 6.5V15.5C20 16.88 18.88 18 17.5 18H9l-5 3v-3.5C4 16.12 4 6.5 4 6.5Z', stroke: 'currentColor', strokeWidth: 1.8, strokeLinejoin: 'round' }),
+                  React.createElement('path', { d: 'M7 8h10M7 11h8', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' })
+                ),
+              })
+            : React.createElement(NavItem, {
+                id: 'support',
+                label: 'Contact support',
+                count: supportUnreadCount,
+                icon: React.createElement(
+                  'svg',
+                  { viewBox: '0 0 24 24', fill: 'none' },
+                  React.createElement('path', { d: 'M4 6.5C4 5.12 5.12 4 6.5 4H17.5C18.88 4 20 5.12 20 6.5V15.5C20 16.88 18.88 18 17.5 18H9l-5 3v-3.5C4 16.12 4 6.5 4 6.5Z', stroke: 'currentColor', strokeWidth: 1.8, strokeLinejoin: 'round' }),
+                  React.createElement('path', { d: 'M7 8h10M7 11h8', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' })
+                ),
+              }),
           React.createElement(NavItem, {
             id: 'data',
             label: 'My data',
             icon: React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none' }, React.createElement('path', { d: 'M6 7c0-1.66 2.69-3 6-3s6 1.34 6 3-2.69 3-6 3-6-1.34-6-3Z', stroke: 'currentColor', strokeWidth: 1.8 }), React.createElement('path', { d: 'M6 7v10c0 1.66 2.69 3 6 3s6-1.34 6-3V7', stroke: 'currentColor', strokeWidth: 1.8 })),
-          }),
-          me?.isAdmin
-            ? React.createElement(NavItem, {
-                id: 'admin',
-                label: 'Admin',
-                icon: React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none' }, React.createElement('path', { d: 'M12 2l3 7h7l-5.5 4 2.5 7-7-4.5L5 20l2.5-7L2 9h7l3-7Z', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round' })),
-              })
-            : null
+          })
         )
       ),
       React.createElement(
