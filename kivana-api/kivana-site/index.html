@@ -28,7 +28,8 @@
     </script>
     <script>
       ;(function () {
-        var targetUrl = "/portal/?portal=1"
+        var loginUrl = "/portal/?portal=1&mode=login"
+        var signupUrl = "/portal/?portal=1&mode=signup"
         var downloadUrl = "https://github.com/kivana-software/Kivana/releases/latest"
         function normalizeText(s) {
           return String(s || "")
@@ -39,10 +40,32 @@
         function getCtaTarget(el) {
           if (!el) return false
           var t = normalizeText(el.textContent)
-          if (t === "sign in" || t === "try free" || t === "create account") return targetUrl
+          if (t === "sign in") return "auth:login"
+          if (t === "try free" || t === "create account") return "auth:signup"
           if (t.includes("download") && (t.includes("mac") || t.includes("windows") || t.includes("win"))) return downloadUrl
           if (t === "download" || t === "download now" || t === "download app") return downloadUrl
           return ""
+        }
+        function modalEls() {
+          return {
+            wrap: document.getElementById("authChoiceModal"),
+            card: document.getElementById("authChoiceCard"),
+            btnLogin: document.getElementById("authChoiceLogin"),
+            btnSignup: document.getElementById("authChoiceSignup"),
+            btnClose: document.getElementById("authChoiceClose"),
+          }
+        }
+        function openAuthChoice(pref) {
+          var m = modalEls()
+          if (!m.wrap) return
+          m.wrap.style.display = "flex"
+          m.wrap.setAttribute("data-pref", pref === "login" ? "login" : "signup")
+        }
+        function closeAuthChoice() {
+          var m = modalEls()
+          if (!m.wrap) return
+          m.wrap.style.display = "none"
+          m.wrap.removeAttribute("data-pref")
         }
         function wireLinks() {
           var candidates = document.querySelectorAll("button,a")
@@ -51,8 +74,10 @@
             var dest = getCtaTarget(el)
             if (!dest) continue
             if (el.tagName === "A") {
-              el.setAttribute("href", dest)
-              if (dest.indexOf("https://") === 0) {
+              if (dest === "auth:login") el.setAttribute("href", loginUrl)
+              else if (dest === "auth:signup") el.setAttribute("href", signupUrl)
+              else el.setAttribute("href", dest)
+              if (String(dest).indexOf("https://") === 0) {
                 el.setAttribute("target", "_blank")
                 el.setAttribute("rel", "noopener")
               }
@@ -67,6 +92,14 @@
             if (!dest) return
             e.preventDefault()
             e.stopPropagation()
+            if (dest === "auth:login") {
+              openAuthChoice("login")
+              return
+            }
+            if (dest === "auth:signup") {
+              openAuthChoice("signup")
+              return
+            }
             window.location.href = dest
           },
           true
@@ -82,12 +115,41 @@
           })
           obs.observe(document.documentElement, { childList: true, subtree: true })
         } catch (err) {}
+        document.addEventListener(
+          "keydown",
+          function (e) {
+            if (e.key === "Escape") closeAuthChoice()
+          },
+          true
+        )
+        var m = modalEls()
+        if (m.wrap) {
+          m.wrap.addEventListener("click", function (e) {
+            if (e.target === m.wrap) closeAuthChoice()
+          })
+        }
+        if (m.btnClose) m.btnClose.addEventListener("click", closeAuthChoice)
+        if (m.btnLogin) m.btnLogin.addEventListener("click", function () { window.location.href = loginUrl })
+        if (m.btnSignup) m.btnSignup.addEventListener("click", function () { window.location.href = signupUrl })
       })()
     </script>
     <script defer="defer" src="/static/js/main.e964d4c9.js"></script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="authChoiceModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;padding:24px;">
+      <div id="authChoiceCard" style="width:min(520px,100%);background:#fff;border-radius:24px;padding:22px 20px;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div style="font-weight:800;font-size:18px;color:#1B1748;">Continue to Kivana</div>
+          <button id="authChoiceClose" style="appearance:none;border:0;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:#1B1748;padding:6px 8px;">×</button>
+        </div>
+        <div style="margin-top:8px;color:#4A4A6A;font-size:14px;line-height:1.5;">Log in if you already have an account, or create one to start your trial.</div>
+        <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+          <button id="authChoiceLogin" style="flex:1;min-width:200px;padding:12px 14px;border-radius:999px;border:2px solid #1B1748;background:#fff;color:#1B1748;font-weight:800;cursor:pointer;">Log in</button>
+          <button id="authChoiceSignup" style="flex:1;min-width:200px;padding:12px 14px;border-radius:999px;border:2px solid #4F3DDD;background:#4F3DDD;color:#fff;font-weight:800;cursor:pointer;">Create account</button>
+        </div>
+      </div>
+    </div>
     <div id="root"></div>
   </body>
 </html>

@@ -168,6 +168,7 @@ let currentEntitlement = null
 let pendingPlanSelection = null
 const sp = new URLSearchParams(window.location.search)
 const startInAuth = sp.get('portal') === '1'
+const startAuthMode = String(sp.get('mode') || '').trim().toLowerCase()
 const fullLanding = sp.get('full') !== '0'
 let adminUsersCache = []
 let adminContactCache = []
@@ -1939,7 +1940,8 @@ if (els.avatarFile) {
     }
   }
   if (startInAuth) {
-    setAuthMode(true)
+    const startAsLogin = !(startAuthMode === 'signup' || startAuthMode === 'create' || startAuthMode === 'register')
+    setAuthMode(startAsLogin)
     await showAuth()
     return
   }
