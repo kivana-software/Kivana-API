@@ -15,11 +15,6 @@ success() { echo -e "${C_GREEN}[✓]${C_RESET} $1"; }
 error() { echo -e "${C_RED}[✗]${C_RESET} $1"; }
 warn() { echo -e "${C_YELLOW}[!]${C_RESET} $1"; }
 
-if [ "${EUID:-0}" -ne 0 ]; then
-  error "Run as root: sudo -i"
-  exit 1
-fi
-
 REPO_URL_DEFAULT="https://github.com/kivana-software/Kivana-API.git"
 BASE_DIR_DEFAULT="/opt/kivana"
 REPO_DIR_DEFAULT="${BASE_DIR_DEFAULT}/Kivana-API"
@@ -39,9 +34,11 @@ ADMIN_TOKEN=""
 INTERACTIVE="n"
 ADMIN_EMAIL="${KIVANA_ADMIN_EMAIL:-}"
 ADMIN_PASSWORD="${KIVANA_ADMIN_PASSWORD:-}"
+LOCAL_MODE="n"
 
 for arg in "$@"; do
   case "$arg" in
+    --local) LOCAL_MODE="y" ;;
     --interactive) INTERACTIVE="y" ;;
     --domain=*) DOMAIN_NAME="${arg#*=}" ;;
     --email=*) HTTPS_EMAIL="${arg#*=}" ;;
@@ -53,6 +50,11 @@ for arg in "$@"; do
     --admin-password=*) ADMIN_PASSWORD="${arg#*=}" ;;
   esac
 done
+
+if [ "$LOCAL_MODE" != "y" ] && [ "${EUID:-0}" -ne 0 ]; then
+  error "Run as root: sudo -i"
+  exit 1
+fi
 
 prompt() {
   local label="${C_PURPLE}[?]${C_RESET} $1"
@@ -140,6 +142,111 @@ EOF
 }
 
 banner
+
+run_local_mode() {
+  local script_dir api_dir env_file compose_cmd base_url
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  api_dir="$(cd "${script_dir}/.." && pwd)"
+  env_file="${api_dir}/.env"
+
+  info "Local mode: using Docker Compose in ${api_dir}"
+
+  if ! command -v docker >/dev/null 2>&1; then
+    warn "Docker not found."
+    if command -v brew >/dev/null 2>&1 && [ "$(uname -s)" = "Darwin" ]; then
+      warn "Trying to install Docker Desktop via Homebrew..."
+      brew install --cask docker || true
+      open -a Docker || true
+    fi
+  fi
+
+  if ! command -v docker >/dev/null 2>&1; then
+    error "Docker is required. Install Docker Desktop, start it, then re-run: ./scripts/setup-wizard.sh --local"
+    exit 1
+  fi
+
+  if docker compose version >/dev/null 2>&1; then
+    compose_cmd="docker compose"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    compose_cmd="docker-compose"
+  else
+    error "Docker Compose not found. Install Docker Compose (or Docker Desktop) and re-run."
+    exit 1
+  fi
+
+  if [ -z "$POSTGRES_PASSWORD" ]; then
+    POSTGRES_PASSWORD="$(rand_hex 24)"
+    success "Generated Postgres password."
+  fi
+  if [ -z "$JWT_SECRET" ]; then
+    JWT_SECRET="$(rand_hex 48)"
+    success "Generated JWT secret."
+  fi
+  if [ -z "$ADMIN_TOKEN" ]; then
+    ADMIN_TOKEN="$(rand_hex 24)"
+    success "Generated admin token."
+  fi
+  if [ -z "$DOMAIN_NAME" ]; then
+    DOMAIN_NAME="localhost"
+  fi
+  if [ -z "$HTTP_PORT" ]; then
+    HTTP_PORT="8080"
+  fi
+
+  info "Writing ${env_file}"
+  cat > "${env_file}" <<EOF
+DATABASE_URL=postgres://kivana:${POSTGRES_PASSWORD}@db:5432/kivana
+JWT_SECRET=${JWT_SECRET}
+ACCESS_TOKEN_TTL_SECONDS=900
+REFRESH_TOKEN_TTL_DAYS=30
+BIND_ADDR=0.0.0.0:8080
+ADMIN_TOKEN=${ADMIN_TOKEN}
+RUST_LOG=info
+KIVANA_HTTP_PORT=${HTTP_PORT}
+KIVANA_BIND_IP=127.0.0.1
+KIVANA_DOMAIN=${DOMAIN_NAME}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+EOF
+
+  info "Starting services with Docker Compose..."
+  (cd "${api_dir}" && ${compose_cmd} up -d --build)
+
+  base_url="http://localhost:${HTTP_PORT}"
+  info "Waiting for API health: ${base_url}/healthz"
+  for _ in $(seq 1 60); do
+    if curl -fsS "${base_url}/healthz" >/dev/null 2>&1; then
+      success "API is up: ${base_url}"
+      break
+    fi
+    sleep 2
+  done
+
+  if ! curl -fsS "${base_url}/healthz" >/dev/null 2>&1; then
+    warn "API did not become healthy yet. Check logs with: (cd ${api_dir} && ${compose_cmd} logs -f api)"
+  fi
+
+  if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
+    info "Creating admin user: ${ADMIN_EMAIL}"
+    curl -fsS -X POST "${base_url}/v1/auth/signup" \
+      -H "content-type: application/json" \
+      -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\"}" >/dev/null 2>&1 || true
+    curl -fsS -X POST "${base_url}/v1/admin/bootstrap" \
+      -H "x-admin-token: ${ADMIN_TOKEN}" \
+      -H "content-type: application/json" \
+      -d "{\"email\":\"${ADMIN_EMAIL}\"}" >/dev/null 2>&1 || true
+    success "Admin bootstrap attempted. Sign in at: ${base_url}/portal/"
+  else
+    warn "To auto-create an admin, re-run with: --admin-email=YOU --admin-password=STRONGPASS"
+  fi
+
+  success "Website: ${base_url}/"
+  success "Portal:   ${base_url}/portal/"
+  exit 0
+}
+
+if [ "$LOCAL_MODE" = "y" ]; then
+  run_local_mode
+fi
 
 APT_UPDATED="n"
 apt_update_once() {
