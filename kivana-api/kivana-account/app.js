@@ -839,7 +839,27 @@ function App() {
       React.createElement(
         'div',
         { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
-        React.createElement('div', { className: 'text-3xl font-bold text-[#1B1748] tracking-tight' }, title),
+        React.createElement(
+          'div',
+          { className: 'flex items-center justify-between gap-4' },
+          React.createElement(
+            'div',
+            { className: 'flex items-center gap-3' },
+            React.createElement('img', { src: '/kivana-logo.png', alt: 'Kivana', className: 'w-12 h-12 object-contain' }),
+            React.createElement(
+              'div',
+              null,
+              React.createElement(
+                'div',
+                { className: 'text-2xl font-bold text-[#1B1748] tracking-tight', style: { fontFamily: 'Lora, serif' } },
+                'kivana'
+              ),
+              React.createElement('div', { className: 'text-sm text-gray-600 -mt-0.5' }, 'Account portal')
+            )
+          ),
+          React.createElement(Pill, { kind: authMode === 'signup' ? 'ok' : 'muted' }, authMode === 'signup' ? 'New account' : 'Welcome back')
+        ),
+        React.createElement('div', { className: 'mt-6 text-3xl font-bold text-[#1B1748] tracking-tight' }, title),
         React.createElement('div', { className: 'mt-2 text-[15px] text-gray-600' }, sub),
         React.createElement(
           'form',
