@@ -48,6 +48,26 @@ function computeApiBaseUrl() {
 const apiBaseUrl = computeApiBaseUrl()
 const apiUrl = (path) => `${apiBaseUrl}${path}`
 
+function formatRfc3339Short(value) {
+  const s = String(value || '').trim()
+  if (!s) return ''
+  const d = new Date(s)
+  if (!Number.isFinite(d.getTime())) return s
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
+function normalizePlanLabel(planCode) {
+  const c = String(planCode || '').trim().toLowerCase()
+  if (c === 'lifetime_pro') return 'Lifetime'
+  if (c === 'standard') return 'Ordinary'
+  if (c === 'pro') return 'Pro'
+  if (c === 'basic') return 'Basic'
+  return c || ''
+}
+
 async function apiFetch(path, init = {}, { allowRetry = true } = {}) {
   const access = getAccessToken()
   const headers = new Headers(init.headers || {})
@@ -218,8 +238,8 @@ function App() {
   async function loadEntitlements() {
     const res = await apiFetch('/v1/entitlements', { method: 'GET' })
     const json = await res.json()
-    const list = Array.isArray(json?.entitlements) ? json.entitlements : []
-    const kivana = list.find((e) => String(e.productCode || '').toLowerCase() === 'kivana') || null
+    const products = Array.isArray(json?.products) ? json.products : []
+    const kivana = products.find((p) => String(p.productCode || '').toLowerCase() === 'kivana') || null
     setEntitlement(kivana)
     return kivana
   }
@@ -286,7 +306,11 @@ function App() {
     setBusy(true)
     setStatus({ kind: 'muted', text: '' })
     try {
-      await apiFetch('/v1/portal/select-plan', { method: 'POST', body: JSON.stringify({ planCode, billingCycle }) })
+      const c = String(planCode || '').trim().toLowerCase()
+      await apiFetch('/v1/portal/select-plan', {
+        method: 'POST',
+        body: JSON.stringify({ planCode: c === 'lifetime' ? 'lifetime_pro' : c, billingCycle }),
+      })
       setStatus({ kind: 'ok', text: 'Plan updated.' })
       await loadEntitlements()
     } catch (e) {
@@ -559,7 +583,7 @@ function App() {
                 React.createElement('option', { value: 'basic' }, 'Basic'),
                 React.createElement('option', { value: 'standard' }, 'Ordinary'),
                 React.createElement('option', { value: 'pro' }, 'Pro'),
-                React.createElement('option', { value: 'lifetime' }, 'Lifetime')
+                React.createElement('option', { value: 'lifetime_pro' }, 'Lifetime')
               ),
               React.createElement('div', { style: { height: 10 } }),
               React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Ends at (optional)'),
@@ -1159,8 +1183,18 @@ function App() {
             'div',
             null,
             React.createElement('div', { className: 'flex items-center justify-between gap-4 border-b border-gray-100 pb-3' }, React.createElement('div', { className: 'text-gray-600' }, 'Email'), React.createElement('div', { className: 'font-semibold text-[#1B1748]' }, String(me?.email || ''))),
-            React.createElement('div', { className: 'flex items-center justify-between gap-4 border-b border-gray-100 pb-3' }, React.createElement('div', { className: 'text-gray-600' }, 'Plan'), React.createElement('div', { className: 'font-semibold text-[#1B1748]' }, planName || planCode || 'Basic')),
-            React.createElement('div', { className: 'flex items-center justify-between gap-4 border-b border-gray-100 pb-3' }, React.createElement('div', { className: 'text-gray-600' }, 'Ends'), React.createElement('div', { className: 'font-semibold text-[#1B1748]' }, endsAt || '—')),
+            React.createElement(
+              'div',
+              { className: 'flex items-center justify-between gap-4 border-b border-gray-100 pb-3' },
+              React.createElement('div', { className: 'text-gray-600' }, 'Plan'),
+              React.createElement('div', { className: 'font-semibold text-[#1B1748]' }, planName || normalizePlanLabel(planCode) || 'Basic')
+            ),
+            React.createElement(
+              'div',
+              { className: 'flex items-center justify-between gap-4 border-b border-gray-100 pb-3' },
+              React.createElement('div', { className: 'text-gray-600' }, 'Ends'),
+              React.createElement('div', { className: 'font-semibold text-[#1B1748]' }, endsAt ? formatRfc3339Short(endsAt) : '—')
+            ),
             React.createElement(
               'div',
               { className: 'flex items-center justify-between gap-4' },
@@ -1288,8 +1322,11 @@ function App() {
             React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Users'),
             React.createElement('div', { className: 'mt-2 text-sm text-gray-600' }, `${adminUsers.length} users`),
             React.createElement(
+              'div',
+              { className: 'mt-6 overflow-x-auto' },
+            React.createElement(
               'table',
-              { className: 'w-full text-sm mt-6' },
+              { className: 'w-full text-sm min-w-[980px]' },
               React.createElement(
                 'thead',
                 null,
@@ -1314,9 +1351,9 @@ function App() {
                     'tr',
                     { key: String(u.id || u.email), className: 'border-t border-gray-100' },
                     React.createElement('td', { className: 'py-3 pr-4 font-medium text-[#1B1748]' }, String(u.email || '')),
-                    React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, String(u.createdAt || '')),
+                    React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, formatRfc3339Short(u.createdAt || '')),
                     React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, String(u.kivanaPlanName || u.kivanaPlanCode || 'basic')),
-                    React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, String(u.kivanaEndsAt || '—')),
+                    React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, u.kivanaEndsAt ? formatRfc3339Short(u.kivanaEndsAt) : '—'),
                     React.createElement(
                       'td',
                       { className: 'py-3 pr-4 text-gray-600' },
@@ -1401,6 +1438,7 @@ function App() {
                 )
               )
             )
+            )
           )
         : null
 
@@ -1412,8 +1450,11 @@ function App() {
             React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Messages'),
             React.createElement('div', { className: 'mt-2 text-sm text-gray-600' }, `${adminMessages.length} messages`),
             React.createElement(
+              'div',
+              { className: 'mt-6 overflow-x-auto' },
+            React.createElement(
               'table',
-              { className: 'w-full text-sm mt-6' },
+              { className: 'w-full text-sm min-w-[820px]' },
               React.createElement(
                 'thead',
                 null,
@@ -1473,6 +1514,7 @@ function App() {
                   )
                 })
               )
+            )
             )
           )
         : null
