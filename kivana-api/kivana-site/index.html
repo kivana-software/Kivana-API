@@ -8,7 +8,137 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:ital,wght@0,500;0,600;0,700;1,500&display=swap" rel="stylesheet" />
-    <link href="/static/css/main.2a5ca006.css" rel="stylesheet" />
+    <style>
+      #authModal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.55);
+        z-index: 9999;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      #authCard {
+        width: min(560px, 100%);
+        background: #fff;
+        border-radius: 24px;
+        padding: 22px 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+        font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      }
+      #authHeader {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      #authTitle {
+        font-weight: 800;
+        font-size: 18px;
+        color: #1b1748;
+      }
+      #authClose {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        font-size: 22px;
+        line-height: 1;
+        cursor: pointer;
+        color: #1b1748;
+        padding: 6px 8px;
+      }
+      #authTabs {
+        display: flex;
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .authTab {
+        flex: 1;
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: 2px solid #1b1748;
+        background: #fff;
+        color: #1b1748;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      .authTabActive {
+        border-color: #4f3ddd;
+        background: #4f3ddd;
+        color: #fff;
+      }
+      #authDesc {
+        margin-top: 10px;
+        color: #4a4a6a;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      .authField {
+        margin-top: 12px;
+      }
+      .authLabel {
+        display: block;
+        font-weight: 700;
+        font-size: 13px;
+        color: #1b1748;
+        margin-bottom: 6px;
+      }
+      .authInput {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 2px solid rgba(27, 23, 72, 0.18);
+        outline: none;
+        font-size: 15px;
+      }
+      .authInput:focus {
+        border-color: rgba(79, 61, 221, 0.8);
+        box-shadow: 0 0 0 4px rgba(79, 61, 221, 0.15);
+      }
+      #authError {
+        margin-top: 10px;
+        color: #b42318;
+        font-weight: 700;
+        font-size: 13px;
+        min-height: 18px;
+      }
+      #authActions {
+        margin-top: 14px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      #authSubmit {
+        flex: 1;
+        min-width: 200px;
+        padding: 12px 14px;
+        border-radius: 999px;
+        border: 2px solid #4f3ddd;
+        background: #4f3ddd;
+        color: #fff;
+        font-weight: 900;
+        cursor: pointer;
+      }
+      #authSubmit:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+      }
+      #authOpenPortal {
+        flex: 1;
+        min-width: 200px;
+        padding: 12px 14px;
+        border-radius: 999px;
+        border: 2px solid #1b1748;
+        background: #fff;
+        color: #1b1748;
+        font-weight: 900;
+        cursor: pointer;
+        text-decoration: none;
+        text-align: center;
+      }
+    </style>
     <script>
       window.addEventListener(
         "error",
@@ -26,131 +156,236 @@
         true
       )
     </script>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    <div id="authModal" aria-hidden="true">
+      <div id="authCard" role="dialog" aria-modal="true">
+        <div id="authHeader">
+          <div id="authTitle">Sign in</div>
+          <button id="authClose" type="button">×</button>
+        </div>
+        <div id="authTabs">
+          <button id="authTabLogin" class="authTab authTabActive" type="button">Log in</button>
+          <button id="authTabSignup" class="authTab" type="button">Create account</button>
+        </div>
+        <div id="authDesc">Log in to manage your account, plans, and admin access.</div>
+        <form id="authForm" autocomplete="on">
+          <div class="authField">
+            <label class="authLabel" for="authEmail">Email</label>
+            <input class="authInput" id="authEmail" name="email" type="email" autocomplete="email" required />
+          </div>
+          <div class="authField">
+            <label class="authLabel" for="authPassword">Password</label>
+            <input class="authInput" id="authPassword" name="password" type="password" autocomplete="current-password" required />
+          </div>
+          <div id="authError"></div>
+          <div id="authActions">
+            <button id="authSubmit" type="submit">Continue</button>
+            <a id="authOpenPortal" href="/portal/?portal=1" rel="noopener">Open portal</a>
+          </div>
+        </form>
+      </div>
+    </div>
     <script>
       ;(function () {
-        var loginUrl = "/portal/?portal=1&mode=login"
-        var signupUrl = "/portal/?portal=1&mode=signup"
-        var downloadUrl = "https://github.com/kivana-software/Kivana/releases/latest"
+        var releaseUrl = "https://github.com/kivana-software/Kivana/releases/latest"
+        var portalUrl = "/portal/?portal=1"
+        var accessKey = "kivanaPortal/accessToken"
+        var refreshKey = "kivanaPortal/refreshToken"
+        var mode = "login"
+
         function normalizeText(s) {
           return String(s || "")
             .replace(/\s+/g, " ")
             .trim()
             .toLowerCase()
         }
-        function getCtaTarget(el) {
-          if (!el) return false
-          if (el.closest && el.closest("#authChoiceModal")) return ""
+
+        function loadReactBuild() {
+          fetch("/asset-manifest.json", { cache: "no-store" })
+            .then(function (r) { return r.json() })
+            .then(function (m) {
+              var files = (m && m.files) || {}
+              var cssHref = files["main.css"]
+              var jsSrc = files["main.js"]
+              if (cssHref) {
+                var link = document.createElement("link")
+                link.rel = "stylesheet"
+                link.href = cssHref
+                document.head.appendChild(link)
+              }
+              if (jsSrc) {
+                var s = document.createElement("script")
+                s.defer = true
+                s.src = jsSrc
+                document.head.appendChild(s)
+              }
+            })
+            .catch(function () {})
+        }
+
+        function els() {
+          return {
+            modal: document.getElementById("authModal"),
+            close: document.getElementById("authClose"),
+            title: document.getElementById("authTitle"),
+            desc: document.getElementById("authDesc"),
+            tabLogin: document.getElementById("authTabLogin"),
+            tabSignup: document.getElementById("authTabSignup"),
+            form: document.getElementById("authForm"),
+            email: document.getElementById("authEmail"),
+            password: document.getElementById("authPassword"),
+            submit: document.getElementById("authSubmit"),
+            error: document.getElementById("authError"),
+            openPortal: document.getElementById("authOpenPortal"),
+          }
+        }
+
+        function setMode(nextMode) {
+          mode = nextMode === "signup" ? "signup" : "login"
+          var e = els()
+          if (!e.tabLogin || !e.tabSignup) return
+          if (mode === "login") {
+            e.tabLogin.classList.add("authTabActive")
+            e.tabSignup.classList.remove("authTabActive")
+            if (e.title) e.title.textContent = "Sign in"
+            if (e.desc) e.desc.textContent = "Log in to manage your account, plans, and admin access."
+            if (e.password) e.password.autocomplete = "current-password"
+          } else {
+            e.tabSignup.classList.add("authTabActive")
+            e.tabLogin.classList.remove("authTabActive")
+            if (e.title) e.title.textContent = "Create an account"
+            if (e.desc) e.desc.textContent = "Create your account first, then choose a trial or plan inside the portal."
+            if (e.password) e.password.autocomplete = "new-password"
+          }
+          if (e.error) e.error.textContent = ""
+        }
+
+        function openModal(prefMode) {
+          setMode(prefMode)
+          var e = els()
+          if (!e.modal) return
+          e.modal.style.display = "flex"
+          e.modal.setAttribute("aria-hidden", "false")
+          setTimeout(function () {
+            try { e.email && e.email.focus() } catch (err) {}
+          }, 0)
+        }
+
+        function closeModal() {
+          var e = els()
+          if (!e.modal) return
+          e.modal.style.display = "none"
+          e.modal.setAttribute("aria-hidden", "true")
+          if (e.error) e.error.textContent = ""
+          if (e.submit) e.submit.disabled = false
+          if (e.submit) e.submit.textContent = "Continue"
+        }
+
+        function getCta(el) {
+          if (!el) return ""
+          if (el.closest && el.closest("#authModal")) return ""
           var t = normalizeText(el.textContent)
           if (t === "sign in") return "auth:login"
           if (t === "try free" || t === "create account") return "auth:signup"
-          if (t.includes("download") && (t.includes("mac") || t.includes("windows") || t.includes("win"))) return downloadUrl
-          if (t === "download" || t === "download now" || t === "download app") return downloadUrl
+          if (t.includes("download") && (t.includes("mac") || t.includes("windows") || t.includes("win"))) return "download"
+          if (t === "download" || t === "download now" || t === "download app") return "download"
           return ""
         }
-        function modalEls() {
-          return {
-            wrap: document.getElementById("authChoiceModal"),
-            card: document.getElementById("authChoiceCard"),
-            btnLogin: document.getElementById("authChoiceLogin"),
-            btnSignup: document.getElementById("authChoiceSignup"),
-            btnClose: document.getElementById("authChoiceClose"),
+
+        function setTokens(access, refresh) {
+          try {
+            if (access) localStorage.setItem(accessKey, access)
+            if (refresh) localStorage.setItem(refreshKey, refresh)
+          } catch (err) {}
+        }
+
+        function handleSubmit(ev) {
+          ev.preventDefault()
+          var e = els()
+          if (!e.email || !e.password || !e.submit) return
+          var email = String(e.email.value || "").trim()
+          var password = String(e.password.value || "")
+          if (!email || !password) {
+            if (e.error) e.error.textContent = "Email and password are required."
+            return
           }
-        }
-        function openAuthChoice(pref) {
-          var m = modalEls()
-          if (!m.wrap) return
-          m.wrap.style.display = "flex"
-          m.wrap.setAttribute("data-pref", pref === "login" ? "login" : "signup")
-        }
-        function closeAuthChoice() {
-          var m = modalEls()
-          if (!m.wrap) return
-          m.wrap.style.display = "none"
-          m.wrap.removeAttribute("data-pref")
-        }
-        function wireLinks() {
-          var candidates = document.querySelectorAll("button,a")
-          for (var i = 0; i < candidates.length; i++) {
-            var el = candidates[i]
-            var dest = getCtaTarget(el)
-            if (!dest) continue
-            if (el.tagName === "A") {
-              if (dest === "auth:login") el.setAttribute("href", loginUrl)
-              else if (dest === "auth:signup") el.setAttribute("href", signupUrl)
-              else el.setAttribute("href", dest)
-              if (String(dest).indexOf("https://") === 0) {
-                el.setAttribute("target", "_blank")
-                el.setAttribute("rel", "noopener")
+          if (mode === "signup" && password.length < 8) {
+            if (e.error) e.error.textContent = "Password must be at least 8 characters."
+            return
+          }
+          e.submit.disabled = true
+          e.submit.textContent = "Please wait..."
+          if (e.error) e.error.textContent = ""
+
+          var endpoint = mode === "signup" ? "/v1/auth/signup" : "/v1/auth/login"
+          fetch(endpoint, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ email: email, password: password }),
+          })
+            .then(function (r) {
+              if (!r.ok) {
+                return r.json().catch(function () { return {} }).then(function (j) {
+                  var msg = (j && (j.error || j.message)) ? String(j.error || j.message) : ("HTTP " + r.status)
+                  throw new Error(msg)
+                })
               }
-            }
+              return r.json()
+            })
+            .then(function (j) {
+              setTokens(j && j.accessToken, j && j.refreshToken)
+              window.location.href = portalUrl
+            })
+            .catch(function (err) {
+              var msg = err && err.message ? String(err.message) : "Failed."
+              if (e.error) e.error.textContent = msg
+              e.submit.disabled = false
+              e.submit.textContent = "Continue"
+            })
+        }
+
+        function init() {
+          loadReactBuild()
+          var e = els()
+          if (e.openPortal) e.openPortal.setAttribute("href", portalUrl)
+          if (e.tabLogin) e.tabLogin.addEventListener("click", function () { setMode("login") })
+          if (e.tabSignup) e.tabSignup.addEventListener("click", function () { setMode("signup") })
+          if (e.close) e.close.addEventListener("click", closeModal)
+          if (e.form) e.form.addEventListener("submit", handleSubmit)
+          if (e.modal) {
+            e.modal.addEventListener("click", function (ev) {
+              if (ev.target === e.modal) closeModal()
+            })
           }
-        }
-        document.addEventListener(
-          "click",
-          function (e) {
-            var el = e.target && e.target.closest ? e.target.closest("button,a") : null
-            var dest = getCtaTarget(el)
-            if (!dest) return
-            e.preventDefault()
-            e.stopPropagation()
-            if (dest === "auth:login") {
-              openAuthChoice("login")
-              return
-            }
-            if (dest === "auth:signup") {
-              openAuthChoice("signup")
-              return
-            }
-            window.location.href = dest
-          },
-          true
-        )
-        if (document.readyState === "loading") {
-          document.addEventListener("DOMContentLoaded", wireLinks)
-        } else {
-          wireLinks()
-        }
-        try {
-          var obs = new MutationObserver(function () {
-            wireLinks()
+          document.addEventListener("keydown", function (ev) {
+            if (ev.key === "Escape") closeModal()
           })
-          obs.observe(document.documentElement, { childList: true, subtree: true })
-        } catch (err) {}
-        document.addEventListener(
-          "keydown",
-          function (e) {
-            if (e.key === "Escape") closeAuthChoice()
-          },
-          true
-        )
-        var m = modalEls()
-        if (m.wrap) {
-          m.wrap.addEventListener("click", function (e) {
-            if (e.target === m.wrap) closeAuthChoice()
-          })
+          document.addEventListener(
+            "click",
+            function (ev) {
+              var target = ev.target && ev.target.closest ? ev.target.closest("button,a") : null
+              var cta = getCta(target)
+              if (!cta) return
+              ev.preventDefault()
+              ev.stopPropagation()
+              if (cta === "auth:login") return openModal("login")
+              if (cta === "auth:signup") return openModal("signup")
+              if (cta === "download") return window.open(releaseUrl, "_blank", "noopener")
+            },
+            true
+          )
+          try {
+            var obs = new MutationObserver(function () {})
+            obs.observe(document.documentElement, { childList: true, subtree: true })
+          } catch (err) {}
         }
-        if (m.btnClose) m.btnClose.addEventListener("click", closeAuthChoice)
-        if (m.btnLogin) m.btnLogin.addEventListener("click", function () { window.location.href = loginUrl })
-        if (m.btnSignup) m.btnSignup.addEventListener("click", function () { window.location.href = signupUrl })
+
+        if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init)
+        else init()
       })()
     </script>
-    <script defer="defer" src="/static/js/main.e964d4c9.js"></script>
-  </head>
-  <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="authChoiceModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;padding:24px;">
-      <div id="authChoiceCard" style="width:min(520px,100%);background:#fff;border-radius:24px;padding:22px 20px;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-          <div style="font-weight:800;font-size:18px;color:#1B1748;">Continue to Kivana</div>
-          <button id="authChoiceClose" style="appearance:none;border:0;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:#1B1748;padding:6px 8px;">×</button>
-        </div>
-        <div style="margin-top:8px;color:#4A4A6A;font-size:14px;line-height:1.5;">Log in if you already have an account, or create one to start your trial.</div>
-        <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
-          <button id="authChoiceLogin" style="flex:1;min-width:200px;padding:12px 14px;border-radius:999px;border:2px solid #1B1748;background:#fff;color:#1B1748;font-weight:800;cursor:pointer;">Log in</button>
-          <button id="authChoiceSignup" style="flex:1;min-width:200px;padding:12px 14px;border-radius:999px;border:2px solid #4F3DDD;background:#4F3DDD;color:#fff;font-weight:800;cursor:pointer;">Create account</button>
-        </div>
-      </div>
-    </div>
-    <div id="root"></div>
   </body>
 </html>
