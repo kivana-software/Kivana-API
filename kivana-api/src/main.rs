@@ -1,7 +1,7 @@
 use anyhow::Context;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::Argon2;
-use axum::extract::{ConnectInfo, FromRef, OriginalUri, State};
+use axum::extract::{ConnectInfo, FromRef, OriginalUri, Query, State};
 use axum::http::{Method, StatusCode};
 use axum::response::IntoResponse;
 use axum::response::Redirect;
@@ -244,6 +244,13 @@ struct SupportMessageRow {
 #[serde(rename_all = "camelCase")]
 struct AdminSupportThreadsResponse {
     threads: Vec<AdminSupportThreadSummary>,
+}
+
+#[derive(Deserialize)]
+struct AdminSupportThreadsQuery {
+    status: Option<String>,
+    q: Option<String>,
+    user_id: Option<Uuid>,
 }
 
 #[derive(Serialize)]
@@ -592,6 +599,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/support/threads", get(admin_support_list_threads))
         .route("/v1/admin/support/threads/:id", get(admin_support_get_thread))
         .route(
+            "/v1/admin/support/threads/:id",
+            delete(admin_support_delete_thread),
+        )
+        .route(
             "/v1/admin/support/threads/:id/messages",
             post(admin_support_send_message),
         )
@@ -602,6 +613,14 @@ async fn main() -> anyhow::Result<()> {
         .route(
             "/v1/admin/support/threads/:id/unarchive",
             post(admin_support_unarchive_thread),
+        )
+        .route(
+            "/v1/admin/support/threads/:id/solve",
+            post(admin_support_solve_thread),
+        )
+        .route(
+            "/v1/admin/support/threads/:id/reopen",
+            post(admin_support_reopen_thread),
         )
         .route(
             "/v1/admin/contact-messages/:id/read",
@@ -1086,6 +1105,9 @@ fn validate_support_body(body: &str) -> Result<String, axum::response::Response>
     if v.is_empty() || v.len() > 50_000 {
         return Err(err(StatusCode::BAD_REQUEST, "invalid_message").into_response());
     }
+    if !v.starts_with("e2ee:") {
+        return Err(err(StatusCode::BAD_REQUEST, "encryption_required").into_response());
+    }
     Ok(v)
 }
 
@@ -1549,21 +1571,17 @@ async fn support_send_message(
         Err(r) => return r,
     };
 
-    let row = sqlx::query("SELECT status FROM support_threads WHERE id = $1 AND user_id = $2 LIMIT 1")
+    let row = sqlx::query("SELECT 1 AS ok FROM support_threads WHERE id = $1 AND user_id = $2 LIMIT 1")
         .bind(id)
         .bind(user_id)
         .fetch_optional(&state.pool)
         .await;
 
-    let status: String = match row {
-        Ok(Some(r)) => r.get("status"),
+    match row {
+        Ok(Some(_)) => {}
         Ok(None) => return err(StatusCode::NOT_FOUND, "thread_not_found").into_response(),
         Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
     };
-
-    if status != "open" {
-        return err(StatusCode::BAD_REQUEST, "thread_archived").into_response();
-    }
 
     let now = OffsetDateTime::now_utc();
     let msg_id = Uuid::new_v4();
@@ -1592,6 +1610,7 @@ async fn support_send_message(
          SET last_message_at = $1,
              last_sender_role = 'user',
              user_last_read_at = $1,
+             status = 'open',
              updated_at = $1
        WHERE id = $2
     "#,
@@ -1608,10 +1627,28 @@ async fn admin_support_list_threads(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
     connect_info: Option<ConnectInfo<SocketAddr>>,
+    Query(q): Query<AdminSupportThreadsQuery>,
 ) -> axum::response::Response {
     if let Err(r) = require_staff(&state, &headers, connect_info).await {
         return r;
     }
+
+    let status_filter = q.status.and_then(|s| {
+        let v = s.trim().to_lowercase();
+        if v.is_empty() || v == "all" {
+            None
+        } else {
+            Some(v)
+        }
+    });
+    let q_like = q.q.and_then(|s| {
+        let v = s.trim().to_string();
+        if v.is_empty() {
+            None
+        } else {
+            Some(format!("%{}%", v))
+        }
+    });
 
     let rows = sqlx::query(
         r#"
@@ -1631,10 +1668,23 @@ async fn admin_support_list_threads(
       LEFT JOIN users u ON u.id = t.user_id
       WHERE (u.is_admin IS DISTINCT FROM TRUE)
         AND (u.is_moderator IS DISTINCT FROM TRUE)
+        AND ($1::uuid IS NULL OR t.user_id = $1)
+        AND ($2::text IS NULL OR t.status = $2)
+        AND (
+          $3::text IS NULL
+          OR t.subject ILIKE $3
+          OR COALESCE(u.email, '') ILIKE $3
+          OR COALESCE(u.display_name, '') ILIKE $3
+          OR COALESCE(t.guest_email, '') ILIKE $3
+          OR COALESCE(t.guest_name, '') ILIKE $3
+        )
       ORDER BY t.last_message_at DESC
       LIMIT 200
     "#,
     )
+    .bind(q.user_id)
+    .bind(status_filter)
+    .bind(q_like)
     .fetch_all(&state.pool)
     .await;
 
@@ -1843,20 +1893,16 @@ async fn admin_support_send_message(
         Err(r) => return r,
     };
 
-    let row = sqlx::query("SELECT status FROM support_threads WHERE id = $1 LIMIT 1")
+    let row = sqlx::query("SELECT 1 AS ok FROM support_threads WHERE id = $1 LIMIT 1")
         .bind(id)
         .fetch_optional(&state.pool)
         .await;
 
-    let status: String = match row {
-        Ok(Some(r)) => r.get("status"),
+    match row {
+        Ok(Some(_)) => {}
         Ok(None) => return err(StatusCode::NOT_FOUND, "thread_not_found").into_response(),
         Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
     };
-
-    if status != "open" {
-        return err(StatusCode::BAD_REQUEST, "thread_archived").into_response();
-    }
 
     let now = OffsetDateTime::now_utc();
     let msg_id = Uuid::new_v4();
@@ -1885,6 +1931,7 @@ async fn admin_support_send_message(
          SET last_message_at = $1,
              last_sender_role = 'admin',
              admin_last_read_at = $1,
+             status = 'open',
              updated_at = $1
        WHERE id = $2
     "#,
@@ -1939,6 +1986,76 @@ async fn admin_support_unarchive_thread(
 
     match res {
         Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
+}
+
+async fn admin_support_solve_thread(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+
+    let now = OffsetDateTime::now_utc();
+    let res = sqlx::query("UPDATE support_threads SET status = 'solved', updated_at = $1 WHERE id = $2")
+        .bind(now)
+        .bind(id)
+        .execute(&state.pool)
+        .await;
+
+    match res {
+        Ok(r) if r.rows_affected() > 0 => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Ok(_) => err(StatusCode::NOT_FOUND, "thread_not_found").into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
+}
+
+async fn admin_support_reopen_thread(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+
+    let now = OffsetDateTime::now_utc();
+    let res = sqlx::query("UPDATE support_threads SET status = 'open', updated_at = $1 WHERE id = $2")
+        .bind(now)
+        .bind(id)
+        .execute(&state.pool)
+        .await;
+
+    match res {
+        Ok(r) if r.rows_affected() > 0 => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Ok(_) => err(StatusCode::NOT_FOUND, "thread_not_found").into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
+}
+
+async fn admin_support_delete_thread(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+
+    let res = sqlx::query("DELETE FROM support_threads WHERE id = $1")
+        .bind(id)
+        .execute(&state.pool)
+        .await;
+
+    match res {
+        Ok(r) if r.rows_affected() > 0 => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Ok(_) => err(StatusCode::NOT_FOUND, "thread_not_found").into_response(),
         Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
     }
 }

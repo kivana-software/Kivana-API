@@ -343,6 +343,12 @@ function SupportChatSection({
   const [draft, setDraft] = useState('')
   const scrollRef = useRef(null)
 
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }, [supportThreadId, supportMessages.length])
+
   const canSend = String(draft || '').trim().length > 0
   const active = supportThread || null
   const threads = Array.isArray(supportThreads) ? supportThreads : []
@@ -353,7 +359,7 @@ function SupportChatSection({
     const mine = role !== 'admin'
     const body = String(m.body || '').trim()
     const when = m.createdAt ? formatRfc3339Short(m.createdAt) : ''
-    const wrapCls = mine ? 'flex justify-end' : 'flex justify-start'
+    const wrapCls = mine ? 'w-full flex justify-end' : 'w-full flex justify-start'
     const bubbleCls = mine
       ? 'max-w-[80%] rounded-2xl bg-[#4F3DDD] text-white px-4 py-3 text-[14px] leading-relaxed'
       : 'max-w-[80%] rounded-2xl bg-white border border-gray-200 text-gray-800 px-4 py-3 text-[14px] leading-relaxed'
@@ -362,7 +368,7 @@ function SupportChatSection({
       { key: String(m.id || ''), className: wrapCls },
       React.createElement(
         'div',
-        null,
+        { className: mine ? 'flex flex-col items-end' : 'flex flex-col items-start' },
         React.createElement('div', { className: bubbleCls }, body || '—'),
         when ? React.createElement('div', { className: `mt-1 text-[11px] ${mine ? 'text-right text-gray-500' : 'text-left text-gray-500'}` }, when) : null
       )
@@ -446,7 +452,7 @@ function SupportChatSection({
       ),
       React.createElement(
         'div',
-        { ref: scrollRef, className: 'mt-4 h-[360px] overflow-y-auto grid gap-3 pr-1' },
+        { ref: scrollRef, className: 'mt-4 h-[360px] overflow-y-auto flex flex-col gap-3 pr-1' },
         supportMessages.length ? supportMessages.map(Bubble) : React.createElement('div', { className: 'text-sm text-gray-600 py-6 text-center' }, 'No messages yet.')
       ),
       React.createElement(
@@ -531,6 +537,7 @@ function App() {
   const [adminPage, setAdminPage] = useState('overview')
   const [msgModal, setMsgModal] = useState(null)
   const [adminMsgFilter, setAdminMsgFilter] = useState('new')
+  const [adminMsgQuery, setAdminMsgQuery] = useState('')
   const [adminUserQuery, setAdminUserQuery] = useState('')
 
   const displayNameInputRef = useRef(null)
@@ -563,6 +570,30 @@ function App() {
   useEffect(() => {
     closeAllPopups()
   }, [section])
+
+  useEffect(() => {
+    if (section !== 'support') return
+    if (!me?.id) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        await loadSupportAdminKeys().catch(() => null)
+        const list = await loadSupportThreads()
+        if (cancelled) return
+        const first = list.find((t) => String(t.status || '').toLowerCase() === 'open') || list[0] || null
+        if (!supportThreadId && first && String(first.id || '')) {
+          await loadSupportThread(String(first.id || ''))
+        } else if (supportThreadId) {
+          await loadSupportThread(String(supportThreadId))
+        }
+      } catch {
+        void 0
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [section, me?.id])
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -934,6 +965,40 @@ function App() {
     }
   }
 
+  async function adminSolveThread(id, solve) {
+    if (busy) return
+    setBusy(true)
+    setStatus({ kind: 'muted', text: '' })
+    try {
+      const endpoint = solve
+        ? `/v1/admin/support/threads/${encodeURIComponent(id)}/solve`
+        : `/v1/admin/support/threads/${encodeURIComponent(id)}/reopen`
+      await apiFetch(endpoint, { method: 'POST', body: JSON.stringify({}) })
+      await loadAdmin()
+    } catch (e) {
+      setStatus({ kind: 'err', text: String(e?.message || e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function adminDeleteSupportThread(id) {
+    if (busy) return
+    if (!window.confirm('Delete this support chat? This cannot be undone.')) return
+    setBusy(true)
+    setStatus({ kind: 'muted', text: '' })
+    try {
+      await apiFetch(`/v1/admin/support/threads/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      setMsgModal(null)
+      await loadAdmin()
+      setStatus({ kind: 'ok', text: 'Chat deleted.' })
+    } catch (e) {
+      setStatus({ kind: 'err', text: String(e?.message || e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function loadSupportThreads() {
     const res = await apiFetch('/v1/support/threads', { method: 'GET' })
     const json = await res.json()
@@ -961,24 +1026,17 @@ function App() {
   }
 
   async function createSupportThread(subject, message) {
-    let outMessage = String(message || '')
-    if (window.crypto && window.crypto.subtle) {
-      try {
-        const kp = await ensureChatKeys()
-        const admins = supportAdminKeys.length ? supportAdminKeys : await loadSupportAdminKeys()
-        if (kp?.userId && kp?.publicJwk && admins.length) {
-          const recipients = [{ id: kp.userId, publicJwk: kp.publicJwk }, ...admins]
-          outMessage = await e2eeEncryptMessage(outMessage, recipients)
-        }
-      } catch {
-        void 0
-      }
-    }
-    const res = await apiFetch('/v1/support/threads', { method: 'POST', body: JSON.stringify({ subject: subject || null, message: outMessage }) })
+    if (!(window.crypto && window.crypto.subtle)) throw new Error('crypto_unavailable')
+    const kp = await ensureChatKeys()
+    if (!kp?.userId || !kp?.publicJwk) throw new Error('crypto_key_missing')
+    const admins = supportAdminKeys.length ? supportAdminKeys : await loadSupportAdminKeys()
+    if (!admins.length) throw new Error('support_keys_missing')
+    const recipients = [{ id: kp.userId, publicJwk: kp.publicJwk }, ...admins]
+    const enc = await e2eeEncryptMessage(String(message || ''), recipients)
+    const res = await apiFetch('/v1/support/threads', { method: 'POST', body: JSON.stringify({ subject: subject || null, message: enc }) })
     const json = await res.json()
     setSupportThread(json?.thread || null)
     const msgs = Array.isArray(json?.messages) ? json.messages : []
-    const kp = await ensureChatKeys().catch(() => null)
     setSupportMessages(await decryptE2EEMessagesIfPossible(msgs, kp))
     setSupportThreadId(String(json?.thread?.id || ''))
     return json
@@ -987,20 +1045,14 @@ function App() {
   async function sendSupportThreadMessage(threadId, message) {
     const tid = String(threadId || '')
     if (!tid) throw new Error('Missing thread')
-    let outMessage = String(message || '')
-    if (window.crypto && window.crypto.subtle) {
-      try {
-        const kp = await ensureChatKeys()
-        const admins = supportAdminKeys.length ? supportAdminKeys : await loadSupportAdminKeys()
-        if (kp?.userId && kp?.publicJwk && admins.length) {
-          const recipients = [{ id: kp.userId, publicJwk: kp.publicJwk }, ...admins]
-          outMessage = await e2eeEncryptMessage(outMessage, recipients)
-        }
-      } catch {
-        void 0
-      }
-    }
-    await apiFetch(`/v1/support/threads/${encodeURIComponent(tid)}/messages`, { method: 'POST', body: JSON.stringify({ message: outMessage }) })
+    if (!(window.crypto && window.crypto.subtle)) throw new Error('crypto_unavailable')
+    const kp = await ensureChatKeys()
+    if (!kp?.userId || !kp?.publicJwk) throw new Error('crypto_key_missing')
+    const admins = supportAdminKeys.length ? supportAdminKeys : await loadSupportAdminKeys()
+    if (!admins.length) throw new Error('support_keys_missing')
+    const recipients = [{ id: kp.userId, publicJwk: kp.publicJwk }, ...admins]
+    const enc = await e2eeEncryptMessage(String(message || ''), recipients)
+    await apiFetch(`/v1/support/threads/${encodeURIComponent(tid)}/messages`, { method: 'POST', body: JSON.stringify({ message: enc }) })
   }
 
   async function adminLoadSupportThread(threadId) {
@@ -1011,6 +1063,14 @@ function App() {
     const kp = await ensureChatKeys().catch(() => null)
     if (kp?.privateKey && kp?.userId) return { ...json, messages: await decryptE2EEMessagesIfPossible(json?.messages, kp) }
     return json
+  }
+
+  async function adminListSupportThreadsByUser(userId) {
+    const uid = String(userId || '').trim()
+    if (!uid) return []
+    const res = await apiFetch(`/v1/admin/support/threads?user_id=${encodeURIComponent(uid)}&status=all`, { method: 'GET' })
+    const json = await res.json().catch(() => ({}))
+    return Array.isArray(json?.threads) ? json.threads : []
   }
 
   async function adminSendSupportThreadMessage(threadId, userId, message) {
@@ -1052,9 +1112,15 @@ function App() {
         text:
           msg === 'Missing fields'
             ? 'Message is required.'
-            : msg === 'support_keys_missing'
-              ? 'Encrypted support chat is not ready yet. Please ask an admin to sign in once to enable it.'
-              : msg,
+            : msg === 'crypto_unavailable'
+              ? 'Encrypted chat is not supported in this browser.'
+              : msg === 'crypto_key_missing'
+                ? 'Encrypted chat keys are missing. Refresh and try again.'
+                : msg === 'encryption_required'
+                  ? 'Encryption is required. Refresh and try again.'
+                  : msg === 'support_keys_missing'
+                    ? 'Encrypted support chat is not ready yet. Please ask an admin to sign in once to enable it.'
+                    : msg,
       })
     } finally {
       setBusy(false)
@@ -1096,7 +1162,26 @@ function App() {
 
   function openUserModal(user) {
     setStatus({ kind: 'muted', text: '' })
-    setAdminModal({ kind: 'user', user })
+    const uid = String(user?.id || '')
+    setAdminModal({ kind: 'user', user, supportThreads: [], supportThreadsLoading: true })
+    if (!uid) return
+    ;(async () => {
+      try {
+        const threads = await adminListSupportThreadsByUser(uid)
+        setAdminModal((m) => {
+          if (!m || String(m.kind || '') !== 'user') return m
+          if (String(m.user?.id || '') !== uid) return m
+          return { ...m, supportThreads: threads, supportThreadsLoading: false }
+        })
+      } catch (e) {
+        setAdminModal((m) => {
+          if (!m || String(m.kind || '') !== 'user') return m
+          if (String(m.user?.id || '') !== uid) return m
+          return { ...m, supportThreads: [], supportThreadsLoading: false }
+        })
+        setStatus({ kind: 'err', text: String(e?.message || e) })
+      }
+    })()
   }
 
   async function adminSetPassword(userId, password) {
@@ -1282,6 +1367,15 @@ function App() {
             const discountPct = user.discountPercent != null ? `${user.discountPercent}%` : '—'
             const discountLabel = String(user.discountLabel || '—')
             const discountUntil = user.discountExpiresAt ? formatRfc3339Short(user.discountExpiresAt) : '—'
+            const threadsLoading = !!adminModal.supportThreadsLoading
+            const threads = Array.isArray(adminModal.supportThreads) ? adminModal.supportThreads : []
+            const threadPill = (t) => {
+              const s = String(t?.status || '').toLowerCase()
+              if (s === 'solved') return React.createElement(Pill, { kind: 'ok' }, 'SOLVED')
+              if (s === 'archived') return React.createElement(Pill, { kind: 'muted' }, 'ARCHIVED')
+              if (t?.hasUnread) return React.createElement(Pill, { kind: 'warn' }, 'NEW')
+              return React.createElement(Pill, { kind: 'muted' }, 'OPEN')
+            }
 
             return React.createElement(
               'div',
@@ -1314,6 +1408,62 @@ function App() {
                 React.createElement('div', { className: 'mt-2 text-sm text-gray-700' }, `Percent: ${discountPct}`),
                 React.createElement('div', { className: 'mt-1 text-sm text-gray-700' }, `Label: ${discountLabel}`),
                 React.createElement('div', { className: 'mt-1 text-sm text-gray-700' }, `Expires: ${discountUntil}`)
+              ),
+              React.createElement(
+                'div',
+                { className: 'rounded-2xl border border-gray-100 px-5 py-4' },
+                React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Support history'),
+                threadsLoading
+                  ? React.createElement('div', { className: 'mt-2 text-sm text-gray-600' }, 'Loading…')
+                  : threads.length
+                    ? React.createElement(
+                        'div',
+                        { className: 'mt-3 grid gap-2' },
+                        threads.map((t) => {
+                          const tid = String(t.id || '')
+                          return React.createElement(
+                            'div',
+                            { key: tid, className: 'flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 flex-wrap' },
+                            React.createElement(
+                              'div',
+                              null,
+                              React.createElement('div', { className: 'text-sm font-semibold text-[#1B1748]' }, String(t.subject || 'Support')),
+                              React.createElement('div', { className: 'mt-0.5 text-xs text-gray-600' }, `Last: ${formatRfc3339Short(t.lastMessageAt || t.last_message_at || '')}`)
+                            ),
+                            React.createElement(
+                              'div',
+                              { className: 'flex items-center gap-3' },
+                              threadPill(t),
+                              React.createElement(
+                                'button',
+                                {
+                                  className:
+                                    'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                                  type: 'button',
+                                  onClick: async () => {
+                                    if (!tid) return
+                                    setMsgModal({ kind: 'support', threadId: tid, thread: t, messages: [], reply: '', loading: true })
+                                    try {
+                                      const json = await adminLoadSupportThread(tid)
+                                      setMsgModal((m) => {
+                                        if (!m || m.kind !== 'support' || String(m.threadId || '') !== tid) return m
+                                        return { ...m, thread: json?.thread || t, messages: Array.isArray(json?.messages) ? json.messages : [], loading: false }
+                                      })
+                                      await loadAdmin()
+                                    } catch (err) {
+                                      setMsgModal(null)
+                                      setStatus({ kind: 'err', text: String(err?.message || err) })
+                                    }
+                                  },
+                                  disabled: busy,
+                                },
+                                'Open'
+                              )
+                            )
+                          )
+                        })
+                      )
+                    : React.createElement('div', { className: 'mt-2 text-sm text-gray-600' }, 'No support chats for this user.')
               ),
               React.createElement(
                 'div',
@@ -2447,7 +2597,7 @@ function App() {
         const mine = role !== 'admin'
         const body = String(m.body || '').trim()
         const when = m.createdAt ? formatRfc3339Short(m.createdAt) : ''
-        const wrapCls = mine ? 'flex justify-end' : 'flex justify-start'
+        const wrapCls = mine ? 'w-full flex justify-end' : 'w-full flex justify-start'
         const bubbleCls = mine
           ? 'max-w-[80%] rounded-2xl bg-[#4F3DDD] text-white px-4 py-3 text-[14px] leading-relaxed'
           : 'max-w-[80%] rounded-2xl bg-white border border-gray-200 text-gray-800 px-4 py-3 text-[14px] leading-relaxed'
@@ -2456,7 +2606,7 @@ function App() {
           { key: String(m.id || Math.random()), className: wrapCls },
           React.createElement(
             'div',
-            null,
+            { className: mine ? 'flex flex-col items-end' : 'flex flex-col items-start' },
             React.createElement('div', { className: bubbleCls }, body || '—'),
             when ? React.createElement('div', { className: `mt-1 text-[11px] ${mine ? 'text-right text-gray-500' : 'text-left text-gray-500'}` }, when) : null
           )
@@ -2546,7 +2696,7 @@ function App() {
           ),
           React.createElement(
             'div',
-            { ref: scrollRef, className: 'mt-4 h-[360px] overflow-y-auto grid gap-3 pr-1' },
+            { ref: scrollRef, className: 'mt-4 h-[360px] overflow-y-auto flex flex-col gap-3 pr-1' },
             supportMessages.length ? supportMessages.map(Bubble) : React.createElement('div', { className: 'text-sm text-gray-600 py-6 text-center' }, 'No messages yet.')
           ),
           React.createElement(
@@ -2804,11 +2954,22 @@ function App() {
 
     const filteredMessages = adminMessages.filter((t) => {
       const status = String(t.status || '').toLowerCase()
-      const archived = status !== 'open'
+      const archived = status === 'archived'
+      const solved = status === 'solved'
+      const open = status === 'open'
       const unread = !!t.hasUnread
-      if (adminMsgFilter === 'new') return !archived && unread
+      if (adminMsgFilter === 'new') return open && unread
+      if (adminMsgFilter === 'open') return open
+      if (adminMsgFilter === 'solved') return solved
       if (adminMsgFilter === 'archived') return archived
       return true
+    }).filter((t) => {
+      const q = String(adminMsgQuery || '').trim().toLowerCase()
+      if (!q) return true
+      const subject = String(t.subject || '').toLowerCase()
+      const email = String(t.userEmail || '').toLowerCase()
+      const name = String(t.userName || '').toLowerCase()
+      return subject.includes(q) || email.includes(q) || name.includes(q)
     })
 
     function AdminNavItem({ id, label, count }) {
@@ -3025,10 +3186,14 @@ function App() {
     function MessagesTable() {
       const statusPill = (t) => {
         const status = String(t.status || '').toLowerCase()
-        if (status !== 'open') return React.createElement(Pill, { kind: 'muted' }, 'ARCHIVED')
+        if (status === 'solved') return React.createElement(Pill, { kind: 'ok' }, 'SOLVED')
+        if (status === 'archived') return React.createElement(Pill, { kind: 'muted' }, 'ARCHIVED')
         if (t.hasUnread) return React.createElement(Pill, { kind: 'warn' }, 'NEW')
         return React.createElement(Pill, { kind: 'muted' }, 'OPEN')
       }
+      const openCount = adminMessages.filter((t) => String(t.status || '').toLowerCase() === 'open').length
+      const solvedCount = adminMessages.filter((t) => String(t.status || '').toLowerCase() === 'solved').length
+      const archivedCount = adminMessages.filter((t) => String(t.status || '').toLowerCase() === 'archived').length
       return React.createElement(
         'div',
         { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
@@ -3044,6 +3209,13 @@ function App() {
           React.createElement(
             'div',
             { className: 'flex items-center gap-3 flex-wrap' },
+            React.createElement('input', {
+              value: adminMsgQuery,
+              onChange: (e) => setAdminMsgQuery(e.target.value),
+              placeholder: 'Search',
+              className:
+                'px-4 py-2.5 rounded-full border border-gray-200 bg-white text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+            }),
             React.createElement(
               'select',
               {
@@ -3053,7 +3225,9 @@ function App() {
                 disabled: busy,
               },
               React.createElement('option', { value: 'new' }, `New (${newMessagesCount})`),
-              React.createElement('option', { value: 'archived' }, 'Archived'),
+              React.createElement('option', { value: 'open' }, `Open (${openCount})`),
+              React.createElement('option', { value: 'solved' }, `Solved (${solvedCount})`),
+              React.createElement('option', { value: 'archived' }, `Archived (${archivedCount})`),
               React.createElement('option', { value: 'all' }, `All (${adminMessages.length})`)
             ),
             React.createElement(
@@ -3093,7 +3267,9 @@ function App() {
               null,
               filteredMessages.map((t) => {
                 const id = String(t.id || '')
-                const archived = String(t.status || '').toLowerCase() !== 'open'
+                const status = String(t.status || '').toLowerCase()
+                const archived = status === 'archived'
+                const solved = status === 'solved'
                 return React.createElement(
                   'tr',
                   { key: id, className: 'border-t border-gray-100' },
@@ -3144,6 +3320,36 @@ function App() {
                         disabled: busy,
                       },
                       archived ? 'Unarchive' : 'Archive'
+                    ),
+                    archived
+                      ? null
+                      : React.createElement(
+                          React.Fragment,
+                          null,
+                          ' ',
+                          React.createElement(
+                            'button',
+                            {
+                              className:
+                                'px-3 py-2 rounded-full text-xs font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
+                              type: 'button',
+                              onClick: () => adminSolveThread(id, solved ? false : true),
+                              disabled: busy,
+                            },
+                            solved ? 'Reopen' : 'Solve'
+                          )
+                        ),
+                    ' ',
+                    React.createElement(
+                      'button',
+                      {
+                        className:
+                          'px-3 py-2 rounded-full text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none',
+                        type: 'button',
+                        onClick: () => adminDeleteSupportThread(id),
+                        disabled: busy,
+                      },
+                      'Delete'
                     )
                   )
                 )
@@ -3536,7 +3742,8 @@ function App() {
     const thread = msgModal.thread || {}
     const subject = String(thread.subject || 'Support')
     const status = String(thread.status || '').toLowerCase()
-    const archived = status !== 'open'
+    const archived = status === 'archived'
+    const solved = status === 'solved'
     const userId = String(thread.userId || thread.user_id || '').trim()
     const userName = String(thread.userName || thread.user_name || '').trim()
     const userEmail = String(thread.userEmail || thread.user_email || '').trim()
@@ -3553,16 +3760,16 @@ function App() {
       const mine = role === 'admin'
       const body = String(m.body || '').trim()
       const when = m.createdAt ? formatRfc3339Short(m.createdAt) : ''
-      const wrapCls = mine ? 'flex justify-end' : 'flex justify-start'
+      const wrapCls = mine ? 'w-full flex justify-end' : 'w-full flex justify-start'
       const bubbleCls = mine
         ? 'max-w-[80%] rounded-2xl bg-[#1B1748] text-white px-4 py-3 text-[14px] leading-relaxed'
         : 'max-w-[80%] rounded-2xl bg-white border border-gray-200 text-gray-800 px-4 py-3 text-[14px] leading-relaxed'
       return React.createElement(
         'div',
-        { key: String(m.id || Math.random()), className: wrapCls },
+        { key: String(m.id || ''), className: wrapCls },
         React.createElement(
           'div',
-          null,
+          { className: mine ? 'flex flex-col items-end' : 'flex flex-col items-start' },
           React.createElement('div', { className: bubbleCls }, body || '—'),
           when ? React.createElement('div', { className: `mt-1 text-[11px] ${mine ? 'text-right text-gray-500' : 'text-left text-gray-500'}` }, when) : null
         )
@@ -3595,7 +3802,7 @@ function App() {
           { className: 'px-6 py-6' },
           React.createElement(
             'div',
-            { ref: scrollRef, className: 'h-[360px] overflow-y-auto rounded-2xl border border-gray-100 bg-[#F6F7FB] p-4 grid gap-3 pr-1' },
+            { ref: scrollRef, className: 'h-[360px] overflow-y-auto rounded-2xl border border-gray-100 bg-[#F6F7FB] p-4 flex flex-col gap-3 pr-1' },
             loading
               ? React.createElement('div', { className: 'text-sm text-gray-600 py-6 text-center' }, 'Loading…')
               : messages.length
@@ -3629,7 +3836,15 @@ function App() {
                     await loadAdmin()
                   } catch (err) {
                     const msg = String(err?.message || err)
-                    setStatus({ kind: 'err', text: msg === 'user_missing_key' ? 'User has not enabled encrypted chat yet.' : msg })
+                    setStatus({
+                      kind: 'err',
+                      text:
+                        msg === 'user_missing_key'
+                          ? 'User has not enabled encrypted chat yet.'
+                          : msg === 'encryption_required'
+                            ? 'Encryption is required.'
+                            : msg,
+                    })
                   }
                 },
                 disabled: busy || loading || !String(reply || '').trim(),
@@ -3643,7 +3858,17 @@ function App() {
         React.createElement(
           'div',
           { className: 'px-6 pb-6 flex items-center justify-between gap-3 flex-wrap' },
-          React.createElement('div', null, archived ? React.createElement(Pill, { kind: 'muted' }, 'ARCHIVED') : thread.hasUnread ? React.createElement(Pill, { kind: 'warn' }, 'NEW') : React.createElement(Pill, { kind: 'muted' }, 'OPEN')),
+          React.createElement(
+            'div',
+            null,
+            archived
+              ? React.createElement(Pill, { kind: 'muted' }, 'ARCHIVED')
+              : solved
+                ? React.createElement(Pill, { kind: 'ok' }, 'SOLVED')
+                : thread.hasUnread
+                  ? React.createElement(Pill, { kind: 'warn' }, 'NEW')
+                  : React.createElement(Pill, { kind: 'muted' }, 'OPEN')
+          ),
           React.createElement(
             'div',
             { className: 'flex items-center gap-3 flex-wrap justify-end' },
@@ -3662,6 +3887,34 @@ function App() {
                 disabled: busy,
               },
               archived ? 'Unarchive' : 'Archive'
+            ),
+            archived
+              ? null
+              : React.createElement(
+                  'button',
+                  {
+                    className:
+                      'px-5 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
+                    type: 'button',
+                    onClick: async () => {
+                      await adminSolveThread(threadId, solved ? false : true)
+                      const json = await adminLoadSupportThread(threadId).catch(() => null)
+                      setMsgModal((m) => (m && m.kind === 'support' && String(m.threadId || '') === threadId ? { ...m, thread: json?.thread || m.thread } : m))
+                    },
+                    disabled: busy,
+                  },
+                  solved ? 'Reopen' : 'Mark solved'
+                ),
+            React.createElement(
+              'button',
+              {
+                className:
+                  'px-5 py-2.5 rounded-full text-[14px] font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none',
+                type: 'button',
+                onClick: () => adminDeleteSupportThread(threadId),
+                disabled: busy,
+              },
+              'Delete'
             )
           )
         )
