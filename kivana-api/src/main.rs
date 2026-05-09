@@ -350,6 +350,11 @@ async fn main() -> anyhow::Result<()> {
             "/portal/",
             ServeDir::new("kivana-portal").append_index_html_on_directories(true),
         )
+        .route("/account", get(account_redirect))
+        .nest_service(
+            "/account/",
+            ServeDir::new("kivana-portal").append_index_html_on_directories(true),
+        )
         .nest_service(
             "/",
             ServeDir::new("kivana-site").append_index_html_on_directories(true),
@@ -375,6 +380,12 @@ async fn healthz() -> impl IntoResponse {
 async fn portal_redirect(uri: OriginalUri) -> impl IntoResponse {
     let q = uri.0.query().map(|v| format!("?{}", v)).unwrap_or_default();
     let target = format!("/portal/{}", q);
+    Redirect::permanent(&target)
+}
+
+async fn account_redirect(uri: OriginalUri) -> impl IntoResponse {
+    let q = uri.0.query().map(|v| format!("?{}", v)).unwrap_or_default();
+    let target = format!("/account/{}", q);
     Redirect::permanent(&target)
 }
 
