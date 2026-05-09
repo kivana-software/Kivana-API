@@ -152,6 +152,136 @@ struct AdminContactMessageRow {
     read_at: Option<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SupportCreateThreadRequest {
+    subject: Option<String>,
+    message: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SupportSendMessageRequest {
+    message: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetPublicKeyRequest {
+    public_jwk: serde_json::Value,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PublicKeyResponse {
+    public_jwk: Option<serde_json::Value>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AdminKeysResponse {
+    admins: Vec<AdminKeyRow>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AdminKeyRow {
+    id: String,
+    public_jwk: serde_json::Value,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UnreadCountResponse {
+    count: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SupportThreadsResponse {
+    threads: Vec<SupportThreadSummary>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SupportThreadSummary {
+    id: String,
+    subject: String,
+    status: String,
+    last_message_at: String,
+    last_sender_role: String,
+    has_unread: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SupportThreadResponse {
+    thread: SupportThreadDetail,
+    messages: Vec<SupportMessageRow>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SupportThreadDetail {
+    id: String,
+    subject: String,
+    status: String,
+    created_at: String,
+    last_message_at: String,
+    last_sender_role: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SupportMessageRow {
+    id: String,
+    sender_role: String,
+    body: String,
+    created_at: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AdminSupportThreadsResponse {
+    threads: Vec<AdminSupportThreadSummary>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AdminSupportThreadSummary {
+    id: String,
+    subject: String,
+    status: String,
+    last_message_at: String,
+    last_sender_role: String,
+    has_unread: bool,
+    user_email: String,
+    user_name: String,
+    user_id: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AdminSupportThreadResponse {
+    thread: AdminSupportThreadDetail,
+    messages: Vec<SupportMessageRow>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AdminSupportThreadDetail {
+    id: String,
+    subject: String,
+    status: String,
+    created_at: String,
+    last_message_at: String,
+    last_sender_role: String,
+    has_unread: bool,
+    user_email: String,
+    user_name: String,
+    user_id: Option<String>,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AuthResponse {
@@ -285,6 +415,12 @@ struct AdminSetDiscountRequest {
     label: Option<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AdminToggleFlagRequest {
+    enabled: bool,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AdminUserRow {
@@ -416,6 +552,17 @@ async fn main() -> anyhow::Result<()> {
         .route("/sitemap.xml", get(sitemap_xml))
         .route("/v1/public/config", get(public_config))
         .route("/v1/contact", post(contact))
+        .route("/v1/crypto/public-key", get(get_public_key))
+        .route("/v1/crypto/public-key", post(set_public_key))
+        .route("/v1/support/admin-keys", get(support_admin_keys))
+        .route("/v1/support/unread-count", get(support_unread_count))
+        .route("/v1/support/threads", get(support_list_threads))
+        .route("/v1/support/threads", post(support_create_thread))
+        .route("/v1/support/threads/:id", get(support_get_thread))
+        .route(
+            "/v1/support/threads/:id/messages",
+            post(support_send_message),
+        )
         .route("/v1/auth/signup", post(signup))
         .route("/v1/auth/login", post(login))
         .route("/v1/auth/refresh", post(refresh))
@@ -435,6 +582,28 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/users", get(admin_users))
         .route("/v1/admin/contact-messages", get(admin_contact_messages))
         .route(
+            "/v1/admin/users/:id/public-key",
+            get(admin_user_public_key),
+        )
+        .route(
+            "/v1/admin/support/unread-count",
+            get(admin_support_unread_count),
+        )
+        .route("/v1/admin/support/threads", get(admin_support_list_threads))
+        .route("/v1/admin/support/threads/:id", get(admin_support_get_thread))
+        .route(
+            "/v1/admin/support/threads/:id/messages",
+            post(admin_support_send_message),
+        )
+        .route(
+            "/v1/admin/support/threads/:id/archive",
+            post(admin_support_archive_thread),
+        )
+        .route(
+            "/v1/admin/support/threads/:id/unarchive",
+            post(admin_support_unarchive_thread),
+        )
+        .route(
             "/v1/admin/contact-messages/:id/read",
             post(admin_contact_mark_read),
         )
@@ -448,6 +617,8 @@ async fn main() -> anyhow::Result<()> {
         )
         .route("/v1/admin/users/:id", delete(admin_delete_user))
         .route("/v1/admin/users/:id/password", post(admin_set_password))
+        .route("/v1/admin/users/:id/admin", post(admin_set_admin_flag))
+        .route("/v1/admin/users/:id/founder", post(admin_set_founder_flag))
         .route("/v1/admin/moderator", post(admin_set_moderator))
         .route("/v1/admin/discount", post(admin_set_discount))
         .route("/v1/admin/grant", post(admin_grant))
@@ -677,7 +848,94 @@ async fn contact(
     .await;
 
     match res {
-        Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Ok(_) => {
+            let now = OffsetDateTime::now_utc();
+
+            let user_row = sqlx::query("SELECT id FROM users WHERE email = $1 LIMIT 1")
+                .bind(&email)
+                .fetch_optional(&state.pool)
+                .await
+                .ok()
+                .flatten();
+            let user_id: Option<Uuid> = user_row.as_ref().map(|r| r.get::<Uuid, _>("id"));
+
+            let thread_id: Option<Uuid> = if let Some(uid) = user_id {
+                sqlx::query(
+                    "SELECT id FROM support_threads WHERE user_id = $1 AND status = 'open' ORDER BY created_at ASC LIMIT 1",
+                )
+                .bind(uid)
+                .fetch_optional(&state.pool)
+                .await
+                .ok()
+                .flatten()
+                .map(|r| r.get::<Uuid, _>("id"))
+            } else {
+                sqlx::query(
+                    "SELECT id FROM support_threads WHERE guest_email = $1 AND status = 'open' ORDER BY created_at ASC LIMIT 1",
+                )
+                .bind(&email)
+                .fetch_optional(&state.pool)
+                .await
+                .ok()
+                .flatten()
+                .map(|r| r.get::<Uuid, _>("id"))
+            };
+
+            let thread_id = match thread_id {
+                Some(v) => v,
+                None => {
+                    let subject_v = subject
+                        .clone()
+                        .unwrap_or_else(|| "Support request".to_string());
+                    let _ = sqlx::query(
+                        r#"
+                      INSERT INTO support_threads (id, user_id, guest_email, guest_name, subject, status, last_message_at, last_sender_role, created_at, updated_at)
+                      VALUES ($1, $2, $3, $4, $5, 'open', $6, 'user', $6, $6)
+                    "#,
+                    )
+                    .bind(id)
+                    .bind(user_id)
+                    .bind(if user_id.is_some() { None::<String> } else { Some(email.clone()) })
+                    .bind(if user_id.is_some() { None::<String> } else { Some(name.clone()) })
+                    .bind(subject_v)
+                    .bind(now)
+                    .execute(&state.pool)
+                    .await;
+                    id
+                }
+            };
+
+            let _ = sqlx::query(
+                r#"
+              INSERT INTO support_messages (id, thread_id, sender_role, sender_user_id, body, created_at)
+              VALUES ($1, $2, 'user', $3, $4, $5)
+              ON CONFLICT (id) DO NOTHING
+            "#,
+            )
+            .bind(id)
+            .bind(thread_id)
+            .bind(user_id)
+            .bind(&message)
+            .bind(now)
+            .execute(&state.pool)
+            .await;
+
+            let _ = sqlx::query(
+                r#"
+              UPDATE support_threads
+                 SET last_message_at = $1,
+                     last_sender_role = 'user',
+                     updated_at = $1
+               WHERE id = $2
+            "#,
+            )
+            .bind(now)
+            .bind(thread_id)
+            .execute(&state.pool)
+            .await;
+
+            (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+        }
         Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
     }
 }
@@ -800,6 +1058,876 @@ async fn admin_contact_delete(
     }
 
     let res = sqlx::query("DELETE FROM contact_messages WHERE id = $1")
+        .bind(id)
+        .execute(&state.pool)
+        .await;
+
+    match res {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
+}
+
+fn clean_support_subject(subject: Option<String>) -> String {
+    let subject = subject.map(|s| {
+        let mut v = s.trim().to_string();
+        v.retain(|c| c != '\r' && c != '\n');
+        if v.len() > 140 {
+            v.truncate(140);
+        }
+        v
+    });
+    let subject = subject.and_then(|s| if s.is_empty() { None } else { Some(s) });
+    subject.unwrap_or_else(|| "Support".to_string())
+}
+
+fn validate_support_body(body: &str) -> Result<String, axum::response::Response> {
+    let v = body.trim().to_string();
+    if v.is_empty() || v.len() > 50_000 {
+        return Err(err(StatusCode::BAD_REQUEST, "invalid_message").into_response());
+    }
+    Ok(v)
+}
+
+async fn get_public_key(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> axum::response::Response {
+    let user_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+
+    let row = sqlx::query("SELECT chat_public_jwk FROM users WHERE id = $1 LIMIT 1")
+        .bind(user_id)
+        .fetch_optional(&state.pool)
+        .await;
+
+    let public_jwk: Option<serde_json::Value> = match row {
+        Ok(Some(r)) => r.try_get("chat_public_jwk").ok(),
+        Ok(None) => None,
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    (StatusCode::OK, Json(PublicKeyResponse { public_jwk })).into_response()
+}
+
+async fn set_public_key(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<SetPublicKeyRequest>,
+) -> axum::response::Response {
+    let user_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+
+    if !req.public_jwk.is_object() {
+        return err(StatusCode::BAD_REQUEST, "invalid_public_key").into_response();
+    }
+    let size = serde_json::to_string(&req.public_jwk)
+        .ok()
+        .map(|s| s.len())
+        .unwrap_or(0);
+    if size == 0 || size > 20_000 {
+        return err(StatusCode::BAD_REQUEST, "invalid_public_key").into_response();
+    }
+
+    let res = sqlx::query("UPDATE users SET chat_public_jwk = $1 WHERE id = $2")
+        .bind(req.public_jwk)
+        .bind(user_id)
+        .execute(&state.pool)
+        .await;
+
+    match res {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
+}
+
+async fn support_admin_keys(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> axum::response::Response {
+    let _user_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+
+    let rows = sqlx::query(
+        r#"
+      SELECT id, chat_public_jwk
+      FROM users
+      WHERE (is_admin = TRUE OR is_moderator = TRUE)
+        AND chat_public_jwk IS NOT NULL
+      ORDER BY created_at ASC
+      LIMIT 50
+    "#,
+    )
+    .fetch_all(&state.pool)
+    .await;
+
+    let rows = match rows {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    let mut admins = Vec::with_capacity(rows.len());
+    for r in rows {
+        let id: Uuid = r.get("id");
+        let public_jwk: serde_json::Value = match r.try_get("chat_public_jwk").ok() {
+            Some(v) => v,
+            None => continue,
+        };
+        admins.push(AdminKeyRow {
+            id: id.to_string(),
+            public_jwk,
+        });
+    }
+
+    (StatusCode::OK, Json(AdminKeysResponse { admins })).into_response()
+}
+
+async fn support_unread_count(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> axum::response::Response {
+    let user_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+
+    let row = sqlx::query(
+        r#"
+      SELECT COUNT(*)::bigint AS cnt
+      FROM support_threads
+      WHERE user_id = $1
+        AND status = 'open'
+        AND last_sender_role = 'admin'
+        AND (user_last_read_at IS NULL OR last_message_at > user_last_read_at)
+    "#,
+    )
+    .bind(user_id)
+    .fetch_optional(&state.pool)
+    .await;
+
+    let cnt: i64 = match row {
+        Ok(Some(r)) => r.try_get::<i64, _>("cnt").unwrap_or(0),
+        Ok(None) => 0,
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    (StatusCode::OK, Json(UnreadCountResponse { count: cnt })).into_response()
+}
+
+async fn admin_support_unread_count(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+
+    let row = sqlx::query(
+        r#"
+      SELECT COUNT(*)::bigint AS cnt
+      FROM support_threads
+      WHERE status = 'open'
+        AND last_sender_role = 'user'
+        AND (admin_last_read_at IS NULL OR last_message_at > admin_last_read_at)
+    "#,
+    )
+    .fetch_optional(&state.pool)
+    .await;
+
+    let cnt: i64 = match row {
+        Ok(Some(r)) => r.try_get::<i64, _>("cnt").unwrap_or(0),
+        Ok(None) => 0,
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    (StatusCode::OK, Json(UnreadCountResponse { count: cnt })).into_response()
+}
+
+async fn admin_user_public_key(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+
+    let row = sqlx::query("SELECT chat_public_jwk FROM users WHERE id = $1 LIMIT 1")
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await;
+
+    let public_jwk: Option<serde_json::Value> = match row {
+        Ok(Some(r)) => r.try_get("chat_public_jwk").ok(),
+        Ok(None) => return err(StatusCode::NOT_FOUND, "user_not_found").into_response(),
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    (StatusCode::OK, Json(PublicKeyResponse { public_jwk })).into_response()
+}
+
+async fn support_list_threads(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> axum::response::Response {
+    let user_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+
+    let rows = sqlx::query(
+        r#"
+      SELECT
+        id,
+        subject,
+        status,
+        last_message_at,
+        last_sender_role,
+        user_last_read_at
+      FROM support_threads
+      WHERE user_id = $1
+      ORDER BY last_message_at DESC
+      LIMIT 50
+    "#,
+    )
+    .bind(user_id)
+    .fetch_all(&state.pool)
+    .await;
+
+    let rows = match rows {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    let mut threads = Vec::with_capacity(rows.len());
+    for r in rows {
+        let id: Uuid = r.get("id");
+        let subject: String = r.get("subject");
+        let status: String = r.get("status");
+        let last_message_at: sqlx::types::time::OffsetDateTime = r.get("last_message_at");
+        let last_sender_role: String = r.get("last_sender_role");
+        let user_last_read_at: Option<sqlx::types::time::OffsetDateTime> =
+            r.try_get("user_last_read_at").ok().flatten();
+        let has_unread = last_sender_role == "admin"
+            && user_last_read_at
+                .map(|t| last_message_at > t)
+                .unwrap_or(true);
+
+        threads.push(SupportThreadSummary {
+            id: id.to_string(),
+            subject,
+            status,
+            last_message_at: last_message_at
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default(),
+            last_sender_role,
+            has_unread,
+        });
+    }
+
+    (StatusCode::OK, Json(SupportThreadsResponse { threads })).into_response()
+}
+
+async fn support_get_thread(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+) -> axum::response::Response {
+    let user_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+
+    let row = sqlx::query(
+        r#"
+      SELECT
+        id,
+        subject,
+        status,
+        created_at,
+        last_message_at,
+        last_sender_role
+      FROM support_threads
+      WHERE id = $1 AND user_id = $2
+      LIMIT 1
+    "#,
+    )
+    .bind(id)
+    .bind(user_id)
+    .fetch_optional(&state.pool)
+    .await;
+
+    let row = match row {
+        Ok(Some(r)) => r,
+        Ok(None) => return err(StatusCode::NOT_FOUND, "thread_not_found").into_response(),
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    let created_at: sqlx::types::time::OffsetDateTime = row.get("created_at");
+    let last_message_at: sqlx::types::time::OffsetDateTime = row.get("last_message_at");
+    let last_sender_role: String = row.get("last_sender_role");
+
+    let now = OffsetDateTime::now_utc();
+    let _ = sqlx::query("UPDATE support_threads SET user_last_read_at = $1 WHERE id = $2")
+        .bind(now)
+        .bind(id)
+        .execute(&state.pool)
+        .await;
+
+    let msg_rows = sqlx::query(
+        r#"
+      SELECT id, sender_role, body, created_at
+      FROM support_messages
+      WHERE thread_id = $1
+      ORDER BY created_at ASC
+      LIMIT 500
+    "#,
+    )
+    .bind(id)
+    .fetch_all(&state.pool)
+    .await;
+
+    let msg_rows = match msg_rows {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    let mut messages = Vec::with_capacity(msg_rows.len());
+    for r in msg_rows {
+        let mid: Uuid = r.get("id");
+        let created_at: sqlx::types::time::OffsetDateTime = r.get("created_at");
+        messages.push(SupportMessageRow {
+            id: mid.to_string(),
+            sender_role: r.get::<String, _>("sender_role"),
+            body: r.get::<String, _>("body"),
+            created_at: created_at
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default(),
+        });
+    }
+
+    let thread = SupportThreadDetail {
+        id: row.get::<Uuid, _>("id").to_string(),
+        subject: row.get::<String, _>("subject"),
+        status: row.get::<String, _>("status"),
+        created_at: created_at
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_default(),
+        last_message_at: last_message_at
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_default(),
+        last_sender_role,
+    };
+
+    (
+        StatusCode::OK,
+        Json(SupportThreadResponse { thread, messages }),
+    )
+        .into_response()
+}
+
+async fn support_create_thread(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<SupportCreateThreadRequest>,
+) -> axum::response::Response {
+    let user_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+
+    let body = match validate_support_body(&req.message) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    let subject = clean_support_subject(req.subject);
+
+    let now = OffsetDateTime::now_utc();
+    let thread_id = Uuid::new_v4();
+    let msg_id = Uuid::new_v4();
+
+    let tx = state.pool.begin().await;
+    let mut tx = match tx {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    let res = sqlx::query(
+        r#"
+      INSERT INTO support_threads (
+        id, user_id, subject, status, last_message_at, last_sender_role, user_last_read_at, created_at, updated_at
+      )
+      VALUES ($1, $2, $3, 'open', $4, 'user', $4, $4, $4)
+    "#,
+    )
+    .bind(thread_id)
+    .bind(user_id)
+    .bind(&subject)
+    .bind(now)
+    .execute(&mut *tx)
+    .await;
+
+    if res.is_err() {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+    }
+
+    let res = sqlx::query(
+        r#"
+      INSERT INTO support_messages (id, thread_id, sender_role, sender_user_id, body, created_at)
+      VALUES ($1, $2, 'user', $3, $4, $5)
+    "#,
+    )
+    .bind(msg_id)
+    .bind(thread_id)
+    .bind(user_id)
+    .bind(&body)
+    .bind(now)
+    .execute(&mut *tx)
+    .await;
+
+    if res.is_err() {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+    }
+
+    if tx.commit().await.is_err() {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+    }
+
+    let thread = SupportThreadDetail {
+        id: thread_id.to_string(),
+        subject,
+        status: "open".to_string(),
+        created_at: now
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_default(),
+        last_message_at: now
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_default(),
+        last_sender_role: "user".to_string(),
+    };
+
+    let messages = vec![SupportMessageRow {
+        id: msg_id.to_string(),
+        sender_role: "user".to_string(),
+        body,
+        created_at: now
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_default(),
+    }];
+
+    (
+        StatusCode::OK,
+        Json(SupportThreadResponse { thread, messages }),
+    )
+        .into_response()
+}
+
+async fn support_send_message(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+    Json(req): Json<SupportSendMessageRequest>,
+) -> axum::response::Response {
+    let user_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+
+    let body = match validate_support_body(&req.message) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+
+    let row = sqlx::query("SELECT status FROM support_threads WHERE id = $1 AND user_id = $2 LIMIT 1")
+        .bind(id)
+        .bind(user_id)
+        .fetch_optional(&state.pool)
+        .await;
+
+    let status: String = match row {
+        Ok(Some(r)) => r.get("status"),
+        Ok(None) => return err(StatusCode::NOT_FOUND, "thread_not_found").into_response(),
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    if status != "open" {
+        return err(StatusCode::BAD_REQUEST, "thread_archived").into_response();
+    }
+
+    let now = OffsetDateTime::now_utc();
+    let msg_id = Uuid::new_v4();
+
+    let res = sqlx::query(
+        r#"
+      INSERT INTO support_messages (id, thread_id, sender_role, sender_user_id, body, created_at)
+      VALUES ($1, $2, 'user', $3, $4, $5)
+    "#,
+    )
+    .bind(msg_id)
+    .bind(id)
+    .bind(user_id)
+    .bind(&body)
+    .bind(now)
+    .execute(&state.pool)
+    .await;
+
+    if res.is_err() {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+    }
+
+    let _ = sqlx::query(
+        r#"
+      UPDATE support_threads
+         SET last_message_at = $1,
+             last_sender_role = 'user',
+             user_last_read_at = $1,
+             updated_at = $1
+       WHERE id = $2
+    "#,
+    )
+    .bind(now)
+    .bind(id)
+    .execute(&state.pool)
+    .await;
+
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+}
+
+async fn admin_support_list_threads(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+
+    let rows = sqlx::query(
+        r#"
+      SELECT
+        t.id AS id,
+        t.subject AS subject,
+        t.status AS status,
+        t.last_message_at AS last_message_at,
+        t.last_sender_role AS last_sender_role,
+        t.admin_last_read_at AS admin_last_read_at,
+        t.user_id AS user_id,
+        t.guest_email AS guest_email,
+        t.guest_name AS guest_name,
+        u.email AS u_email,
+        u.display_name AS u_name
+      FROM support_threads t
+      LEFT JOIN users u ON u.id = t.user_id
+      ORDER BY t.last_message_at DESC
+      LIMIT 200
+    "#,
+    )
+    .fetch_all(&state.pool)
+    .await;
+
+    let rows = match rows {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    let mut threads = Vec::with_capacity(rows.len());
+    for r in rows {
+        let id: Uuid = r.get("id");
+        let last_message_at: sqlx::types::time::OffsetDateTime = r.get("last_message_at");
+        let last_sender_role: String = r.get("last_sender_role");
+        let admin_last_read_at: Option<sqlx::types::time::OffsetDateTime> =
+            r.try_get("admin_last_read_at").ok().flatten();
+        let status: String = r.get("status");
+        let has_unread = status == "open"
+            && last_sender_role == "user"
+            && admin_last_read_at
+                .map(|t| last_message_at > t)
+                .unwrap_or(true);
+
+        let user_id: Option<Uuid> = r.try_get("user_id").ok();
+        let u_email: Option<String> = r.try_get("u_email").ok().flatten();
+        let u_name: Option<String> = r.try_get("u_name").ok().flatten();
+        let guest_email: Option<String> = r.try_get("guest_email").ok().flatten();
+        let guest_name: Option<String> = r.try_get("guest_name").ok().flatten();
+
+        let user_email = u_email
+            .clone()
+            .or(guest_email)
+            .unwrap_or_else(|| "".to_string());
+        let user_name = u_name
+            .clone()
+            .filter(|s| !s.trim().is_empty())
+            .or(guest_name)
+            .unwrap_or_else(|| "".to_string());
+
+        threads.push(AdminSupportThreadSummary {
+            id: id.to_string(),
+            subject: r.get::<String, _>("subject"),
+            status,
+            last_message_at: last_message_at
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default(),
+            last_sender_role,
+            has_unread,
+            user_email,
+            user_name,
+            user_id: user_id.map(|u| u.to_string()),
+        });
+    }
+
+    (StatusCode::OK, Json(AdminSupportThreadsResponse { threads })).into_response()
+}
+
+async fn admin_support_get_thread(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+
+    let row = sqlx::query(
+        r#"
+      SELECT
+        t.id AS id,
+        t.subject AS subject,
+        t.status AS status,
+        t.created_at AS created_at,
+        t.last_message_at AS last_message_at,
+        t.last_sender_role AS last_sender_role,
+        t.admin_last_read_at AS admin_last_read_at,
+        t.user_id AS user_id,
+        t.guest_email AS guest_email,
+        t.guest_name AS guest_name,
+        u.email AS u_email,
+        u.display_name AS u_name
+      FROM support_threads t
+      LEFT JOIN users u ON u.id = t.user_id
+      WHERE t.id = $1
+      LIMIT 1
+    "#,
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await;
+
+    let row = match row {
+        Ok(Some(r)) => r,
+        Ok(None) => return err(StatusCode::NOT_FOUND, "thread_not_found").into_response(),
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    let created_at: sqlx::types::time::OffsetDateTime = row.get("created_at");
+    let last_message_at: sqlx::types::time::OffsetDateTime = row.get("last_message_at");
+    let last_sender_role: String = row.get("last_sender_role");
+    let admin_last_read_at: Option<sqlx::types::time::OffsetDateTime> =
+        row.try_get("admin_last_read_at").ok().flatten();
+    let status: String = row.get("status");
+    let has_unread = status == "open"
+        && last_sender_role == "user"
+        && admin_last_read_at
+            .map(|t| last_message_at > t)
+            .unwrap_or(true);
+
+    let user_id: Option<Uuid> = row.try_get("user_id").ok();
+    let u_email: Option<String> = row.try_get("u_email").ok().flatten();
+    let u_name: Option<String> = row.try_get("u_name").ok().flatten();
+    let guest_email: Option<String> = row.try_get("guest_email").ok().flatten();
+    let guest_name: Option<String> = row.try_get("guest_name").ok().flatten();
+
+    let user_email = u_email
+        .clone()
+        .or(guest_email)
+        .unwrap_or_else(|| "".to_string());
+    let user_name = u_name
+        .clone()
+        .filter(|s| !s.trim().is_empty())
+        .or(guest_name)
+        .unwrap_or_else(|| "".to_string());
+
+    let now = OffsetDateTime::now_utc();
+    let _ = sqlx::query("UPDATE support_threads SET admin_last_read_at = $1 WHERE id = $2")
+        .bind(now)
+        .bind(id)
+        .execute(&state.pool)
+        .await;
+
+    let msg_rows = sqlx::query(
+        r#"
+      SELECT id, sender_role, body, created_at
+      FROM support_messages
+      WHERE thread_id = $1
+      ORDER BY created_at ASC
+      LIMIT 500
+    "#,
+    )
+    .bind(id)
+    .fetch_all(&state.pool)
+    .await;
+
+    let msg_rows = match msg_rows {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    let mut messages = Vec::with_capacity(msg_rows.len());
+    for r in msg_rows {
+        let mid: Uuid = r.get("id");
+        let created_at: sqlx::types::time::OffsetDateTime = r.get("created_at");
+        messages.push(SupportMessageRow {
+            id: mid.to_string(),
+            sender_role: r.get::<String, _>("sender_role"),
+            body: r.get::<String, _>("body"),
+            created_at: created_at
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default(),
+        });
+    }
+
+    let thread = AdminSupportThreadDetail {
+        id: row.get::<Uuid, _>("id").to_string(),
+        subject: row.get::<String, _>("subject"),
+        status,
+        created_at: created_at
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_default(),
+        last_message_at: last_message_at
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_default(),
+        last_sender_role,
+        has_unread,
+        user_email,
+        user_name,
+        user_id: user_id.map(|u| u.to_string()),
+    };
+
+    (
+        StatusCode::OK,
+        Json(AdminSupportThreadResponse { thread, messages }),
+    )
+        .into_response()
+}
+
+async fn admin_support_send_message(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+    Json(req): Json<SupportSendMessageRequest>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+    let admin_user_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+
+    let body = match validate_support_body(&req.message) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+
+    let row = sqlx::query("SELECT status FROM support_threads WHERE id = $1 LIMIT 1")
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await;
+
+    let status: String = match row {
+        Ok(Some(r)) => r.get("status"),
+        Ok(None) => return err(StatusCode::NOT_FOUND, "thread_not_found").into_response(),
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    if status != "open" {
+        return err(StatusCode::BAD_REQUEST, "thread_archived").into_response();
+    }
+
+    let now = OffsetDateTime::now_utc();
+    let msg_id = Uuid::new_v4();
+
+    let res = sqlx::query(
+        r#"
+      INSERT INTO support_messages (id, thread_id, sender_role, sender_user_id, body, created_at)
+      VALUES ($1, $2, 'admin', $3, $4, $5)
+    "#,
+    )
+    .bind(msg_id)
+    .bind(id)
+    .bind(admin_user_id)
+    .bind(&body)
+    .bind(now)
+    .execute(&state.pool)
+    .await;
+
+    if res.is_err() {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+    }
+
+    let _ = sqlx::query(
+        r#"
+      UPDATE support_threads
+         SET last_message_at = $1,
+             last_sender_role = 'admin',
+             admin_last_read_at = $1,
+             updated_at = $1
+       WHERE id = $2
+    "#,
+    )
+    .bind(now)
+    .bind(id)
+    .execute(&state.pool)
+    .await;
+
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+}
+
+async fn admin_support_archive_thread(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+
+    let now = OffsetDateTime::now_utc();
+    let res = sqlx::query("UPDATE support_threads SET status = 'archived', updated_at = $1 WHERE id = $2")
+        .bind(now)
+        .bind(id)
+        .execute(&state.pool)
+        .await;
+
+    match res {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
+}
+
+async fn admin_support_unarchive_thread(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+
+    let now = OffsetDateTime::now_utc();
+    let res = sqlx::query("UPDATE support_threads SET status = 'open', updated_at = $1 WHERE id = $2")
+        .bind(now)
         .bind(id)
         .execute(&state.pool)
         .await;
@@ -2472,6 +3600,96 @@ async fn admin_set_password(
             .await;
             (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
         }
+        Ok(_) => err(StatusCode::NOT_FOUND, "user_not_found").into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
+}
+
+async fn admin_set_admin_flag(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+    Json(req): Json<AdminToggleFlagRequest>,
+) -> axum::response::Response {
+    let role = match require_staff(&state, &headers, connect_info).await {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    if role != StaffRole::Admin {
+        return err(StatusCode::FORBIDDEN, "forbidden").into_response();
+    }
+
+    let caller_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    if !req.enabled && caller_id == id {
+        return err(StatusCode::FORBIDDEN, "cannot_demote_self").into_response();
+    }
+
+    if !req.enabled {
+        let row = sqlx::query("SELECT COUNT(*)::bigint AS c FROM users WHERE is_admin = TRUE")
+            .fetch_one(&state.pool)
+            .await;
+        let admins_count: i64 = match row {
+            Ok(r) => r.try_get::<i64, _>("c").unwrap_or(1),
+            Err(_) => 1,
+        };
+        if admins_count <= 1 {
+            return err(StatusCode::FORBIDDEN, "cannot_remove_last_admin").into_response();
+        }
+    }
+
+    let res = sqlx::query("UPDATE users SET is_admin = $1 WHERE id = $2")
+        .bind(req.enabled)
+        .bind(id)
+        .execute(&state.pool)
+        .await;
+    match res {
+        Ok(r) if r.rows_affected() > 0 => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Ok(_) => err(StatusCode::NOT_FOUND, "user_not_found").into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
+}
+
+async fn admin_set_founder_flag(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+    Json(req): Json<AdminToggleFlagRequest>,
+) -> axum::response::Response {
+    let role = match require_staff(&state, &headers, connect_info).await {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    if role != StaffRole::Admin {
+        return err(StatusCode::FORBIDDEN, "forbidden").into_response();
+    }
+
+    if req.enabled {
+        let row = sqlx::query("SELECT is_admin FROM users WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&state.pool)
+            .await;
+        let is_admin: bool = match row {
+            Ok(Some(r)) => r.try_get("is_admin").unwrap_or(false),
+            Ok(None) => return err(StatusCode::NOT_FOUND, "user_not_found").into_response(),
+            Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+        };
+        if is_admin {
+            return err(StatusCode::FORBIDDEN, "forbidden").into_response();
+        }
+    }
+
+    let res = sqlx::query("UPDATE users SET is_founder = $1 WHERE id = $2")
+        .bind(req.enabled)
+        .bind(id)
+        .execute(&state.pool)
+        .await;
+    match res {
+        Ok(r) if r.rows_affected() > 0 => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
         Ok(_) => err(StatusCode::NOT_FOUND, "user_not_found").into_response(),
         Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
     }

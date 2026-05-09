@@ -161,6 +161,149 @@ function Pill({ kind, children }) {
   return React.createElement('span', { className: cls }, children)
 }
 
+const te = new TextEncoder()
+const td = new TextDecoder()
+
+function bytesToB64(bytes) {
+  let s = ''
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || [])
+  for (let i = 0; i < arr.length; i++) s += String.fromCharCode(arr[i])
+  return btoa(s)
+}
+
+function b64ToBytes(b64) {
+  const raw = atob(String(b64 || ''))
+  const out = new Uint8Array(raw.length)
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i)
+  return out
+}
+
+function randomBytes(len) {
+  const out = new Uint8Array(len)
+  crypto.getRandomValues(out)
+  return out
+}
+
+function chatKeyStorageKey(userId) {
+  return `kivanaPortal/chatKey:${String(userId || '')}`
+}
+
+function deviceSecretKey() {
+  return 'kivanaPortal/deviceSecret'
+}
+
+function isE2EEBody(v) {
+  return String(v || '').startsWith('e2ee:v1:')
+}
+
+async function getOrCreateDeviceSecret() {
+  try {
+    const existing = String(localStorage.getItem(deviceSecretKey()) || '')
+    if (existing) return b64ToBytes(existing)
+    const secret = randomBytes(32)
+    localStorage.setItem(deviceSecretKey(), bytesToB64(secret))
+    return secret
+  } catch {
+    return randomBytes(32)
+  }
+}
+
+async function encryptJsonWithDeviceSecret(obj, secretBytes) {
+  const key = await crypto.subtle.importKey('raw', secretBytes, { name: 'AES-GCM' }, false, ['encrypt'])
+  const iv = randomBytes(12)
+  const pt = te.encode(JSON.stringify(obj || {}))
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, pt)
+  return { v: 1, iv: bytesToB64(iv), ct: bytesToB64(new Uint8Array(ct)) }
+}
+
+async function decryptJsonWithDeviceSecret(payload, secretBytes) {
+  const key = await crypto.subtle.importKey('raw', secretBytes, { name: 'AES-GCM' }, false, ['decrypt'])
+  const iv = b64ToBytes(payload?.iv || '')
+  const ct = b64ToBytes(payload?.ct || '')
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct)
+  return JSON.parse(td.decode(new Uint8Array(pt)))
+}
+
+async function getOrCreateChatKeypair(userId) {
+  const storageKey = chatKeyStorageKey(userId)
+  const secret = await getOrCreateDeviceSecret()
+  try {
+    const raw = String(localStorage.getItem(storageKey) || '')
+    if (raw) {
+      const payload = JSON.parse(raw)
+      const jwk = await decryptJsonWithDeviceSecret(payload, secret)
+      const privateJwk = jwk?.priv || null
+      const publicJwk = jwk?.pub || null
+      if (privateJwk && publicJwk) {
+        const privateKey = await crypto.subtle.importKey('jwk', privateJwk, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt'])
+        const publicKey = await crypto.subtle.importKey('jwk', publicJwk, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt'])
+        return { publicKey, privateKey, publicJwk }
+      }
+      if (publicJwk && typeof publicJwk === 'object') {
+        void 0
+      }
+    }
+  } catch {
+    void 0
+  }
+
+  const kp = await crypto.subtle.generateKey(
+    { name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' },
+    true,
+    ['encrypt', 'decrypt']
+  )
+  const priv = await crypto.subtle.exportKey('jwk', kp.privateKey)
+  const pub = await crypto.subtle.exportKey('jwk', kp.publicKey)
+  const wrapped = await encryptJsonWithDeviceSecret({ priv, pub }, secret)
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(wrapped))
+  } catch {
+    void 0
+  }
+  return { publicKey: kp.publicKey, privateKey: kp.privateKey, publicJwk: pub }
+}
+
+async function e2eeEncryptMessage(plainText, recipients) {
+  const text = String(plainText || '')
+  const aesKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt'])
+  const iv = randomBytes(12)
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, te.encode(text))
+  const rawKey = await crypto.subtle.exportKey('raw', aesKey)
+
+  const keys = []
+  for (const r of Array.isArray(recipients) ? recipients : []) {
+    const rid = String(r?.id || '')
+    const jwk = r?.publicJwk || r?.public_jwk || null
+    if (!rid || !jwk || typeof jwk !== 'object') continue
+    const pub = await crypto.subtle.importKey('jwk', jwk, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt'])
+    const ek = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, pub, rawKey)
+    keys.push({ id: rid, ek: bytesToB64(new Uint8Array(ek)) })
+  }
+
+  const payload = {
+    v: 1,
+    alg: 'A256GCM+RSA-OAEP-SHA256',
+    iv: bytesToB64(iv),
+    ct: bytesToB64(new Uint8Array(ct)),
+    keys,
+  }
+  return `e2ee:v1:${bytesToB64(te.encode(JSON.stringify(payload)))}` 
+}
+
+async function e2eeDecryptMessage(body, myId, privateKey) {
+  if (!isE2EEBody(body)) return String(body || '')
+  const raw = String(body || '').slice('e2ee:v1:'.length)
+  const payload = JSON.parse(td.decode(b64ToBytes(raw)))
+  const keys = Array.isArray(payload?.keys) ? payload.keys : []
+  const mine = keys.find((k) => String(k?.id || '') === String(myId || '')) || null
+  if (!mine?.ek) return null
+
+  const rawKey = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, b64ToBytes(mine.ek))
+  const aesKey = await crypto.subtle.importKey('raw', rawKey, { name: 'AES-GCM' }, false, ['decrypt'])
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(payload?.iv || '') }, aesKey, b64ToBytes(payload?.ct || ''))
+  return td.decode(new Uint8Array(pt))
+}
+
 function App() {
   const pricing = useMemo(() => detectPricingCurrency(), [])
   const query = useQueryMode()
@@ -187,6 +330,13 @@ function App() {
   const [adminUsers, setAdminUsers] = useState([])
   const [adminMessages, setAdminMessages] = useState([])
   const [adminModal, setAdminModal] = useState(null)
+  const [supportThreads, setSupportThreads] = useState([])
+  const [supportThreadId, setSupportThreadId] = useState('')
+  const [supportThread, setSupportThread] = useState(null)
+  const [supportMessages, setSupportMessages] = useState([])
+  const [supportUnreadCount, setSupportUnreadCount] = useState(0)
+  const [adminSupportUnreadCount, setAdminSupportUnreadCount] = useState(0)
+  const [supportAdminKeys, setSupportAdminKeys] = useState([])
   const [section, setSection] = useState(() => {
     const sp = new URLSearchParams(window.location.search)
     const s = String(sp.get('section') || '').trim().toLowerCase()
@@ -209,6 +359,7 @@ function App() {
   const [adminUserQuery, setAdminUserQuery] = useState('')
 
   const displayNameInputRef = useRef(null)
+  const chatKeyRef = useRef({ userId: '', publicJwk: null, privateKey: null })
 
   const mounted = useRef(false)
   useEffect(() => {
@@ -244,6 +395,83 @@ function App() {
   const monthlyPro = Number(cfgPricing?.proMonthly?.[currencyKey] ?? (pricing.code === 'NOK' ? 299 : 29.9))
   const yearlyStd = pricing.code === 'NOK' ? monthlyStd * yearlyFactor : Number((monthlyStd * yearlyFactor).toFixed(2))
   const yearlyPro = pricing.code === 'NOK' ? monthlyPro * yearlyFactor : Number((monthlyPro * yearlyFactor).toFixed(2))
+
+  async function ensureChatKeys() {
+    const userId = String(me?.id || '')
+    if (!userId) return null
+    if (chatKeyRef.current.userId === userId && chatKeyRef.current.privateKey && chatKeyRef.current.publicJwk) {
+      return chatKeyRef.current
+    }
+    const kp = await getOrCreateChatKeypair(userId)
+    chatKeyRef.current = { userId, publicJwk: kp.publicJwk, privateKey: kp.privateKey }
+    try {
+      const res = await apiFetch('/v1/crypto/public-key', { method: 'GET' })
+      const json = await res.json().catch(() => ({}))
+      if (!json?.publicJwk) {
+        await apiFetch('/v1/crypto/public-key', { method: 'POST', body: JSON.stringify({ publicJwk: kp.publicJwk }) })
+      }
+    } catch {
+      void 0
+    }
+    return chatKeyRef.current
+  }
+
+  async function loadSupportAdminKeys() {
+    const res = await apiFetch('/v1/support/admin-keys', { method: 'GET' })
+    const json = await res.json()
+    const list = Array.isArray(json?.admins) ? json.admins : []
+    setSupportAdminKeys(list)
+    return list
+  }
+
+  async function refreshUnreadBadges() {
+    try {
+      const res = await apiFetch('/v1/support/unread-count', { method: 'GET' })
+      const json = await res.json().catch(() => ({}))
+      setSupportUnreadCount(Number(json?.count || 0))
+    } catch {
+      setSupportUnreadCount(0)
+    }
+    if (me?.isAdmin) {
+      try {
+        const res = await apiFetch('/v1/admin/support/unread-count', { method: 'GET' })
+        const json = await res.json().catch(() => ({}))
+        setAdminSupportUnreadCount(Number(json?.count || 0))
+      } catch {
+        setAdminSupportUnreadCount(0)
+      }
+    } else {
+      setAdminSupportUnreadCount(0)
+    }
+  }
+
+  useEffect(() => {
+    if (!me?.id) return
+    ;(async () => {
+      try {
+        await ensureChatKeys()
+      } catch {
+        void 0
+      }
+    })()
+  }, [me?.id])
+
+  useEffect(() => {
+    if (!me?.id) return
+    let stopped = false
+    ;(async () => {
+      if (stopped) return
+      await refreshUnreadBadges()
+    })()
+    const t = window.setInterval(() => {
+      if (stopped) return
+      void refreshUnreadBadges()
+    }, 15_000)
+    return () => {
+      stopped = true
+      window.clearInterval(t)
+    }
+  }, [me?.id, me?.isAdmin])
 
   async function loadMe() {
     const res = await apiFetch('/v1/me', { method: 'GET' })
@@ -473,14 +701,14 @@ function App() {
     try {
       const [uRes, mRes, cRes] = await Promise.all([
         apiFetch('/v1/admin/users', { method: 'GET' }),
-        apiFetch('/v1/admin/contact-messages', { method: 'GET' }),
+        apiFetch('/v1/admin/support/threads', { method: 'GET' }),
         apiFetch('/v1/admin/config', { method: 'GET' }),
       ])
       const uJson = await uRes.json()
       const mJson = await mRes.json()
       const cJson = await cRes.json()
       setAdminUsers(Array.isArray(uJson?.users) ? uJson.users : [])
-      setAdminMessages(Array.isArray(mJson?.messages) ? mJson.messages : [])
+      setAdminMessages(Array.isArray(mJson?.threads) ? mJson.threads : [])
       setAdminConfig(cJson || null)
     } catch (e) {
       setStatus({ kind: 'err', text: String(e?.message || e) })
@@ -510,7 +738,9 @@ function App() {
     setBusy(true)
     setStatus({ kind: 'muted', text: '' })
     try {
-      const endpoint = read ? `/v1/admin/contact-messages/${encodeURIComponent(id)}/read` : `/v1/admin/contact-messages/${encodeURIComponent(id)}/unread`
+      const endpoint = read
+        ? `/v1/admin/support/threads/${encodeURIComponent(id)}/archive`
+        : `/v1/admin/support/threads/${encodeURIComponent(id)}/unarchive`
       await apiFetch(endpoint, { method: 'POST', body: JSON.stringify({}) })
       await loadAdmin()
     } catch (e) {
@@ -520,18 +750,99 @@ function App() {
     }
   }
 
-  async function adminDeleteMsg(id) {
-    if (busy) return
-    setBusy(true)
-    setStatus({ kind: 'muted', text: '' })
-    try {
-      await apiFetch(`/v1/admin/contact-messages/${encodeURIComponent(id)}`, { method: 'DELETE' })
-      await loadAdmin()
-    } catch (e) {
-      setStatus({ kind: 'err', text: String(e?.message || e) })
-    } finally {
-      setBusy(false)
+  async function loadSupportThreads() {
+    const res = await apiFetch('/v1/support/threads', { method: 'GET' })
+    const json = await res.json()
+    const list = Array.isArray(json?.threads) ? json.threads : []
+    setSupportThreads(list)
+    return list
+  }
+
+  async function loadSupportThread(threadId) {
+    const tid = String(threadId || '')
+    if (!tid) return null
+    const res = await apiFetch(`/v1/support/threads/${encodeURIComponent(tid)}`, { method: 'GET' })
+    const json = await res.json()
+    setSupportThread(json?.thread || null)
+    const kp = await ensureChatKeys().catch(() => null)
+    const msgs = Array.isArray(json?.messages) ? json.messages : []
+    if (kp?.privateKey && kp?.userId) {
+      const out = []
+      for (const m of msgs) {
+        const body = await e2eeDecryptMessage(m?.body, kp.userId, kp.privateKey).catch(() => null)
+        out.push({ ...m, body: body == null ? 'Encrypted message' : body })
+      }
+      setSupportMessages(out)
+    } else {
+      setSupportMessages(msgs)
     }
+    setSupportThreadId(String(json?.thread?.id || tid))
+    return json
+  }
+
+  async function createSupportThread(subject, message) {
+    const kp = await ensureChatKeys()
+    const admins = supportAdminKeys.length ? supportAdminKeys : await loadSupportAdminKeys()
+    if (!admins.length) throw new Error('support_keys_missing')
+    const recipients = [{ id: kp.userId, publicJwk: kp.publicJwk }, ...admins]
+    const enc = await e2eeEncryptMessage(message, recipients)
+    const res = await apiFetch('/v1/support/threads', { method: 'POST', body: JSON.stringify({ subject: subject || null, message: enc }) })
+    const json = await res.json()
+    setSupportThread(json?.thread || null)
+    const msgs = Array.isArray(json?.messages) ? json.messages : []
+    const out = []
+    for (const m of msgs) {
+      const body = await e2eeDecryptMessage(m?.body, kp.userId, kp.privateKey).catch(() => null)
+      out.push({ ...m, body: body == null ? 'Encrypted message' : body })
+    }
+    setSupportMessages(out)
+    setSupportThreadId(String(json?.thread?.id || ''))
+    return json
+  }
+
+  async function sendSupportThreadMessage(threadId, message) {
+    const tid = String(threadId || '')
+    if (!tid) throw new Error('Missing thread')
+    const kp = await ensureChatKeys()
+    const admins = supportAdminKeys.length ? supportAdminKeys : await loadSupportAdminKeys()
+    if (!admins.length) throw new Error('support_keys_missing')
+    const recipients = [{ id: kp.userId, publicJwk: kp.publicJwk }, ...admins]
+    const enc = await e2eeEncryptMessage(message, recipients)
+    await apiFetch(`/v1/support/threads/${encodeURIComponent(tid)}/messages`, { method: 'POST', body: JSON.stringify({ message: enc }) })
+  }
+
+  async function adminLoadSupportThread(threadId) {
+    const tid = String(threadId || '')
+    if (!tid) return null
+    const res = await apiFetch(`/v1/admin/support/threads/${encodeURIComponent(tid)}`, { method: 'GET' })
+    const json = await res.json()
+    const kp = await ensureChatKeys().catch(() => null)
+    if (kp?.privateKey && kp?.userId) {
+      const msgs = Array.isArray(json?.messages) ? json.messages : []
+      const out = []
+      for (const m of msgs) {
+        const body = await e2eeDecryptMessage(m?.body, kp.userId, kp.privateKey).catch(() => null)
+        out.push({ ...m, body: body == null ? 'Encrypted message' : body })
+      }
+      return { ...json, messages: out }
+    }
+    return json
+  }
+
+  async function adminSendSupportThreadMessage(threadId, userId, message) {
+    const tid = String(threadId || '')
+    if (!tid) throw new Error('Missing thread')
+    const uid = String(userId || '')
+    if (!uid) throw new Error('Missing user')
+    const kp = await ensureChatKeys()
+    const admins = supportAdminKeys.length ? supportAdminKeys : await loadSupportAdminKeys()
+    const userRes = await apiFetch(`/v1/admin/users/${encodeURIComponent(uid)}/public-key`, { method: 'GET' })
+    const userJson = await userRes.json().catch(() => ({}))
+    const userJwk = userJson?.publicJwk || null
+    if (!userJwk) throw new Error('user_missing_key')
+    const recipients = [{ id: uid, publicJwk: userJwk }, { id: kp.userId, publicJwk: kp.publicJwk }, ...admins]
+    const enc = await e2eeEncryptMessage(message, recipients)
+    await apiFetch(`/v1/admin/support/threads/${encodeURIComponent(tid)}/messages`, { method: 'POST', body: JSON.stringify({ message: enc }) })
   }
 
   async function sendSupportMessage({ subject, message }) {
@@ -539,22 +850,28 @@ function App() {
     setBusy(true)
     setStatus({ kind: 'muted', text: '' })
     try {
-      const name = String(me?.displayName || '').trim() || 'User'
-      const email = String(me?.email || '').trim()
       const subj = String(subject || '').trim() || 'Support request'
       const msg = String(message || '').trim()
-      if (!email || !msg) throw new Error('Missing fields')
-      const res = await fetch('/v1/contact', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name, email, subject: subj, message: msg }),
-      })
-      const j = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(String(j?.error || `HTTP ${res.status}`))
-      setStatus({ kind: 'ok', text: 'Message sent.' })
+      if (!msg) throw new Error('Missing fields')
+      if (!supportThreadId) {
+        await createSupportThread(subj, msg)
+      } else {
+        await sendSupportThreadMessage(supportThreadId, msg)
+        await loadSupportThread(supportThreadId)
+      }
+      await loadSupportThreads()
+      setStatus({ kind: 'ok', text: 'Sent.' })
     } catch (e) {
       const msg = String(e?.message || e)
-      setStatus({ kind: 'err', text: msg === 'Missing fields' ? 'Message is required.' : msg })
+      setStatus({
+        kind: 'err',
+        text:
+          msg === 'Missing fields'
+            ? 'Message is required.'
+            : msg === 'support_keys_missing'
+              ? 'Encrypted support chat is not ready yet. Please ask an admin to sign in once to enable it.'
+              : msg,
+      })
     } finally {
       setBusy(false)
     }
@@ -591,6 +908,11 @@ function App() {
   function openDeleteUserModal(user) {
     setStatus({ kind: 'muted', text: '' })
     setAdminModal({ kind: 'deleteUser', user })
+  }
+
+  function openUserModal(user) {
+    setStatus({ kind: 'muted', text: '' })
+    setAdminModal({ kind: 'user', user })
   }
 
   async function adminSetPassword(userId, password) {
@@ -682,6 +1004,51 @@ function App() {
     }
   }
 
+  async function adminToggleAdmin(userId, enabled) {
+    if (busy) return
+    setBusy(true)
+    setStatus({ kind: 'muted', text: '' })
+    try {
+      await apiFetch(`/v1/admin/users/${encodeURIComponent(String(userId))}/admin`, {
+        method: 'POST',
+        body: JSON.stringify({ enabled: !!enabled }),
+      })
+      setStatus({ kind: 'ok', text: 'Admin role updated.' })
+      await loadAdmin()
+    } catch (e) {
+      const msg = String(e?.message || e)
+      setStatus({
+        kind: 'err',
+        text:
+          msg === 'cannot_demote_self'
+            ? 'You cannot remove admin from yourself.'
+            : msg === 'cannot_remove_last_admin'
+              ? 'Cannot remove the last admin.'
+              : msg,
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function adminToggleFounder(userId, enabled) {
+    if (busy) return
+    setBusy(true)
+    setStatus({ kind: 'muted', text: '' })
+    try {
+      await apiFetch(`/v1/admin/users/${encodeURIComponent(String(userId))}/founder`, {
+        method: 'POST',
+        body: JSON.stringify({ enabled: !!enabled }),
+      })
+      setStatus({ kind: 'ok', text: 'Founder updated.' })
+      await loadAdmin()
+    } catch (e) {
+      setStatus({ kind: 'err', text: String(e?.message || e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function adminDeleteUser(userId) {
     if (busy) return
     setBusy(true)
@@ -704,18 +1071,150 @@ function App() {
     const user = adminModal.user || {}
     const email = String(user.email || '')
     const title =
-      kind === 'password'
-        ? `Set password (${email})`
-        : kind === 'grant'
-          ? `Set subscription (${email})`
-          : kind === 'discount'
-            ? `Set discount (${email})`
-            : kind === 'deleteUser'
-              ? `Delete user (${email})`
-              : 'Admin'
+      kind === 'user'
+        ? `User (${email})`
+        : kind === 'password'
+          ? `Set password (${email})`
+          : kind === 'grant'
+            ? `Set subscription (${email})`
+            : kind === 'discount'
+              ? `Set discount (${email})`
+              : kind === 'deleteUser'
+                ? `Delete user (${email})`
+                : 'Admin'
 
     const body =
-      kind === 'password'
+      kind === 'user'
+        ? (() => {
+            const userId = String(user.id || '')
+            const createdAt = user.createdAt ? formatRfc3339Short(user.createdAt) : '—'
+            const pwChanged = user.passwordChangedAt ? formatRfc3339Short(user.passwordChangedAt) : '—'
+            const lastIp = String(user.lastIp || '—')
+            const trialActive = user.kivanaTrialEndsAt && new Date(String(user.kivanaTrialEndsAt)).getTime() > Date.now()
+            const planCode = trialActive ? 'trial' : String(user.kivanaPlanCode || 'basic').toLowerCase()
+            const planLabel = trialActive ? 'Trial' : String(user.kivanaPlanName || normalizePlanLabel(planCode) || 'Basic')
+            const ends = trialActive ? user.kivanaTrialEndsAt : user.kivanaEndsAt
+            const role = user.isAdmin ? 'ADMIN' : user.isModerator ? 'MOD' : 'USER'
+            const discountPct = user.discountPercent != null ? `${user.discountPercent}%` : '—'
+            const discountLabel = String(user.discountLabel || '—')
+            const discountUntil = user.discountExpiresAt ? formatRfc3339Short(user.discountExpiresAt) : '—'
+
+            return React.createElement(
+              'div',
+              { className: 'grid gap-4' },
+              React.createElement(
+                'div',
+                { className: 'rounded-2xl border border-gray-100 bg-gray-50 p-5' },
+                React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, email || '—'),
+                React.createElement('div', { className: 'mt-1 text-xs text-gray-600' }, `ID: ${userId || '—'}`),
+                React.createElement(
+                  'div',
+                  { className: 'mt-3 flex items-center gap-2 flex-wrap' },
+                  React.createElement(Pill, { kind: user.isAdmin ? 'ok' : user.isModerator ? 'warn' : 'muted' }, role),
+                  user.isFounder ? React.createElement(Pill, { kind: 'ok' }, 'FOUNDER') : null,
+                  React.createElement(Pill, { kind: planCode === 'basic' ? 'muted' : 'ok' }, planLabel)
+                )
+              ),
+              React.createElement(
+                'div',
+                { className: 'grid grid-cols-1 sm:grid-cols-2 gap-4' },
+                React.createElement('div', { className: 'rounded-2xl border border-gray-100 px-5 py-4' }, React.createElement('div', { className: 'text-[11px] tracking-wide font-extrabold text-gray-500' }, 'CREATED'), React.createElement('div', { className: 'mt-1 text-sm font-semibold text-[#1B1748]' }, createdAt)),
+                React.createElement('div', { className: 'rounded-2xl border border-gray-100 px-5 py-4' }, React.createElement('div', { className: 'text-[11px] tracking-wide font-extrabold text-gray-500' }, 'LAST IP'), React.createElement('div', { className: 'mt-1 text-sm font-semibold text-[#1B1748]' }, lastIp)),
+                React.createElement('div', { className: 'rounded-2xl border border-gray-100 px-5 py-4' }, React.createElement('div', { className: 'text-[11px] tracking-wide font-extrabold text-gray-500' }, 'PASSWORD CHANGED'), React.createElement('div', { className: 'mt-1 text-sm font-semibold text-[#1B1748]' }, pwChanged)),
+                React.createElement('div', { className: 'rounded-2xl border border-gray-100 px-5 py-4' }, React.createElement('div', { className: 'text-[11px] tracking-wide font-extrabold text-gray-500' }, 'PLAN ENDS'), React.createElement('div', { className: 'mt-1 text-sm font-semibold text-[#1B1748]' }, ends ? formatRfc3339Short(ends) : '—'))
+              ),
+              React.createElement(
+                'div',
+                { className: 'rounded-2xl border border-gray-100 px-5 py-4' },
+                React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Discount'),
+                React.createElement('div', { className: 'mt-2 text-sm text-gray-700' }, `Percent: ${discountPct}`),
+                React.createElement('div', { className: 'mt-1 text-sm text-gray-700' }, `Label: ${discountLabel}`),
+                React.createElement('div', { className: 'mt-1 text-sm text-gray-700' }, `Expires: ${discountUntil}`)
+              ),
+              React.createElement(
+                'div',
+                { className: 'flex items-center gap-3 flex-wrap justify-end' },
+                React.createElement(
+                  'button',
+                  {
+                    className:
+                      'px-4 py-2.5 rounded-full text-[14px] font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                    type: 'button',
+                    onClick: () => openGrantModal(user),
+                    disabled: busy,
+                  },
+                  'Subscription'
+                ),
+                React.createElement(
+                  'button',
+                  {
+                    className:
+                      'px-4 py-2.5 rounded-full text-[14px] font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                    type: 'button',
+                    onClick: () => openDiscountModal(user),
+                    disabled: busy,
+                  },
+                  'Discount'
+                ),
+                React.createElement(
+                  'button',
+                  {
+                    className:
+                      'px-4 py-2.5 rounded-full text-[14px] font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                    type: 'button',
+                    onClick: () => openPasswordModal(user),
+                    disabled: busy,
+                  },
+                  'Password'
+                ),
+                React.createElement(
+                  'button',
+                  {
+                    className:
+                      'px-4 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
+                    type: 'button',
+                    onClick: () => adminToggleModerator(String(user.email || ''), !user.isModerator),
+                    disabled: busy || !!user.isAdmin,
+                  },
+                  user.isModerator ? 'Remove mod' : 'Make mod'
+                ),
+                React.createElement(
+                  'button',
+                  {
+                    className:
+                      'px-4 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
+                    type: 'button',
+                    onClick: () => adminToggleFounder(user.id, !user.isFounder),
+                    disabled: busy || !!user.isAdmin,
+                  },
+                  user.isFounder ? 'Remove founder' : 'Make founder'
+                ),
+                React.createElement(
+                  'button',
+                  {
+                    className:
+                      'px-4 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
+                    type: 'button',
+                    onClick: () => adminToggleAdmin(user.id, !user.isAdmin),
+                    disabled: busy || (String(me?.id || '') === String(user.id || '') && !!user.isAdmin),
+                  },
+                  user.isAdmin ? 'Remove admin' : 'Make admin'
+                ),
+                React.createElement(
+                  'button',
+                  {
+                    className:
+                      'px-4 py-2.5 rounded-full text-[14px] font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none',
+                    type: 'button',
+                    onClick: () => openDeleteUserModal(user),
+                    disabled: busy || !!user.isAdmin,
+                  },
+                  'Delete'
+                )
+              )
+            )
+          })()
+        : kind === 'password'
         ? React.createElement(
             React.Fragment,
             null,
@@ -821,13 +1320,17 @@ function App() {
                 )
               : null
 
-    const confirmLabel = kind === 'deleteUser' ? 'Delete' : 'Save'
+    const confirmLabel = kind === 'deleteUser' ? 'Delete' : kind === 'user' ? 'Close' : 'Save'
     const confirmKind =
       kind === 'deleteUser'
         ? 'px-5 py-2.5 rounded-full text-[15px] font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none'
         : 'px-5 py-2.5 rounded-full text-[15px] font-semibold text-white bg-[#4F3DDD] hover:bg-[#3F2FCB] disabled:opacity-60 disabled:pointer-events-none'
 
     const onConfirm = async () => {
+      if (kind === 'user') {
+        closeAdminModal()
+        return
+      }
       if (kind === 'password') {
         const p1 = String(adminModal.password || '')
         const p2 = String(adminModal.confirm || '')
@@ -956,6 +1459,41 @@ function App() {
             ? React.createElement(
                 React.Fragment,
                 null,
+                React.createElement(
+                  'button',
+                  {
+                    type: 'button',
+                    disabled: busy,
+                    onClick: async () => {
+                      if (me?.isAdmin) {
+                        setSection('admin')
+                        setAdminPage('messages')
+                        await loadAdmin()
+                      } else {
+                        setSection('support')
+                      }
+                    },
+                    className:
+                      'relative w-11 h-11 rounded-full border border-gray-200 bg-white text-[#1B1748] hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none flex items-center justify-center',
+                    title: me?.isAdmin ? 'Support inbox' : 'Support chat',
+                  },
+                  React.createElement(
+                    'svg',
+                    { viewBox: '0 0 24 24', fill: 'none', className: 'w-5 h-5' },
+                    React.createElement('path', { d: 'M4 6.5C4 5.12 5.12 4 6.5 4H17.5C18.88 4 20 5.12 20 6.5V15.5C20 16.88 18.88 18 17.5 18H9l-5 3v-3.5C4 16.12 4 6.5 4 6.5Z', stroke: 'currentColor', strokeWidth: 1.8, strokeLinejoin: 'round' }),
+                    React.createElement('path', { d: 'M7 8h10M7 11h8', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' })
+                  ),
+                  (me?.isAdmin ? adminSupportUnreadCount : supportUnreadCount) > 0
+                    ? React.createElement(
+                        'span',
+                        {
+                          className:
+                            'absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-[#4F3DDD] text-white text-[11px] font-extrabold flex items-center justify-center',
+                        },
+                        String(me?.isAdmin ? adminSupportUnreadCount : supportUnreadCount)
+                      )
+                    : null
+                ),
                 statusText ? React.createElement(Pill, { kind: 'ok' }, statusText) : null,
                 React.createElement(
                   'div',
@@ -1227,7 +1765,7 @@ function App() {
     const renews = isTrial ? (trialEndsAt ? formatRfc3339Short(trialEndsAt) : '—') : endsAt ? formatRfc3339Short(endsAt) : '—'
     const planLabel = isTrial ? 'Ordinary' : planName || normalizePlanLabel(planCode) || 'Basic'
 
-    function NavItem({ id, label, icon }) {
+    function NavItem({ id, label, icon, count }) {
       const active = section === id
       return React.createElement(
         'button',
@@ -1243,7 +1781,14 @@ function App() {
           disabled: busy,
         },
         React.createElement('span', { className: 'w-5 h-5 text-current' }, icon),
-        React.createElement('span', null, label)
+        React.createElement('span', null, label),
+        typeof count === 'number' && count > 0
+          ? React.createElement(
+              'span',
+              { className: 'ml-auto min-w-[26px] h-6 px-2 rounded-full bg-[#4F3DDD] text-white text-xs font-extrabold flex items-center justify-center' },
+              String(count)
+            )
+          : null
       )
     }
 
@@ -1675,60 +2220,171 @@ function App() {
 
     function SupportSection() {
       const [subject, setSubject] = useState('')
-      const [message, setMessage] = useState('')
-      const canSend = String(message || '').trim().length > 0
+      const [draft, setDraft] = useState('')
+      const scrollRef = useRef(null)
+
+      useEffect(() => {
+        let alive = true
+        ;(async () => {
+          try {
+            const list = await loadSupportThreads()
+            if (!alive) return
+            const first = list.find((t) => String(t.status || '').toLowerCase() === 'open') || list[0] || null
+            if (first && String(first.id || '')) {
+              await loadSupportThread(String(first.id || ''))
+            }
+          } catch {
+            void 0
+          }
+        })()
+        return () => {
+          alive = false
+        }
+      }, [])
+
+      useEffect(() => {
+        const el = scrollRef.current
+        if (!el) return
+        el.scrollTop = el.scrollHeight
+      }, [supportThreadId, supportMessages.length])
+
+      const canSend = String(draft || '').trim().length > 0
+      const active = supportThread || null
+      const threads = Array.isArray(supportThreads) ? supportThreads : []
+      const activeLabel = active?.subject ? String(active.subject) : supportThreadId ? 'Support' : 'New message'
+
+      const Bubble = (m) => {
+        const role = String(m.senderRole || m.sender_role || '').toLowerCase()
+        const mine = role !== 'admin'
+        const body = String(m.body || '').trim()
+        const when = m.createdAt ? formatRfc3339Short(m.createdAt) : ''
+        const wrapCls = mine ? 'flex justify-end' : 'flex justify-start'
+        const bubbleCls = mine
+          ? 'max-w-[80%] rounded-2xl bg-[#4F3DDD] text-white px-4 py-3 text-[14px] leading-relaxed'
+          : 'max-w-[80%] rounded-2xl bg-white border border-gray-200 text-gray-800 px-4 py-3 text-[14px] leading-relaxed'
+        return React.createElement(
+          'div',
+          { key: String(m.id || Math.random()), className: wrapCls },
+          React.createElement(
+            'div',
+            null,
+            React.createElement('div', { className: bubbleCls }, body || '—'),
+            when ? React.createElement('div', { className: `mt-1 text-[11px] ${mine ? 'text-right text-gray-500' : 'text-left text-gray-500'}` }, when) : null
+          )
+        )
+      }
 
       return React.createElement(
         'div',
         { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
-        React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Contact support'),
-        React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, 'Send a message to the team from inside the portal.'),
         React.createElement(
           'div',
-          { className: 'mt-6 grid gap-4' },
+          { className: 'flex items-start justify-between gap-4 flex-wrap' },
           React.createElement(
             'div',
             null,
-            React.createElement('div', { className: 'text-[11px] tracking-wide font-extrabold text-gray-500' }, 'SUBJECT'),
-            React.createElement('input', {
-              className:
-                'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
-              value: subject,
-              onChange: (e) => setSubject(e.target.value),
-              disabled: busy,
-              placeholder: 'Support request',
-            })
+            React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Support chat'),
+            React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, 'Talk with the team and keep the full history here.')
           ),
           React.createElement(
             'div',
-            null,
-            React.createElement('div', { className: 'text-[11px] tracking-wide font-extrabold text-gray-500' }, 'MESSAGE'),
-            React.createElement('textarea', {
-              className:
-                'mt-2 w-full min-h-[140px] rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
-              value: message,
-              onChange: (e) => setMessage(e.target.value),
-              disabled: busy,
-              placeholder: 'Write your message…',
-            })
-          ),
-          React.createElement(
-            'div',
-            { className: 'flex items-center justify-end gap-3' },
+            { className: 'flex items-center gap-3 flex-wrap' },
+            threads.length > 1
+              ? React.createElement(
+                  'select',
+                  {
+                    value: supportThreadId || '',
+                    onChange: async (e) => {
+                      const v = String(e.target.value || '')
+                      if (!v) return
+                      try {
+                        await loadSupportThread(v)
+                      } catch (err) {
+                        setStatus({ kind: 'err', text: String(err?.message || err) })
+                      }
+                    },
+                    className: 'px-4 py-2.5 rounded-full border border-gray-200 bg-white text-[14px] font-semibold text-[#1B1748]',
+                    disabled: busy,
+                  },
+                  threads.map((t) =>
+                    React.createElement('option', { key: String(t.id || ''), value: String(t.id || '') }, String(t.subject || 'Support'))
+                  )
+                )
+              : null,
             React.createElement(
               'button',
               {
                 type: 'button',
                 onClick: async () => {
-                  await sendSupportMessage({ subject, message })
+                  try {
+                    const list = await loadSupportThreads()
+                    const first = list.find((t) => String(t.status || '').toLowerCase() === 'open') || list[0] || null
+                    if (first && String(first.id || '')) {
+                      await loadSupportThread(String(first.id || ''))
+                    }
+                  } catch (err) {
+                    setStatus({ kind: 'err', text: String(err?.message || err) })
+                  }
+                },
+                disabled: busy,
+                className:
+                  'px-5 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
+              },
+              'Reload'
+            )
+          )
+        ),
+        React.createElement(
+          'div',
+          { className: 'mt-6 rounded-3xl border border-gray-100 bg-[#F6F7FB] p-4' },
+          React.createElement(
+            'div',
+            { className: 'flex items-center justify-between gap-3 flex-wrap' },
+            React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, activeLabel),
+            supportThreadId
+              ? null
+              : React.createElement(
+                  'input',
+                  {
+                    className:
+                      'w-full sm:w-auto sm:min-w-[260px] rounded-full border border-gray-200 bg-white px-4 py-2.5 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                    value: subject,
+                    onChange: (e) => setSubject(e.target.value),
+                    disabled: busy,
+                    placeholder: 'Subject (optional)',
+                  }
+                )
+          ),
+          React.createElement(
+            'div',
+            { ref: scrollRef, className: 'mt-4 h-[360px] overflow-y-auto grid gap-3 pr-1' },
+            supportMessages.length ? supportMessages.map(Bubble) : React.createElement('div', { className: 'text-sm text-gray-600 py-6 text-center' }, 'No messages yet.')
+          ),
+          React.createElement(
+            'div',
+            { className: 'mt-4 flex items-end gap-3' },
+            React.createElement('textarea', {
+              className:
+                'flex-1 min-h-[46px] max-h-[120px] rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+              value: draft,
+              onChange: (e) => setDraft(e.target.value),
+              disabled: busy,
+              placeholder: 'Write a message…',
+            }),
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                onClick: async () => {
+                  await sendSupportMessage({ subject, message: draft })
+                  setDraft('')
                   setSubject('')
-                  setMessage('')
                 },
                 disabled: busy || !canSend,
                 className:
-                  'px-6 py-2.5 rounded-full text-[14px] font-semibold text-white bg-[#4F3DDD] hover:bg-[#3F2FCB] disabled:opacity-60 disabled:pointer-events-none',
+                  'px-6 py-3 rounded-full text-[14px] font-semibold text-white bg-[#4F3DDD] hover:bg-[#3F2FCB] disabled:opacity-60 disabled:pointer-events-none',
               },
-              'Send'
+              busy ? 'Sending…' : 'Send'
             )
           )
         )
@@ -1778,6 +2434,7 @@ function App() {
           React.createElement(NavItem, {
             id: 'support',
             label: 'Contact support',
+            count: supportUnreadCount,
             icon: React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none' }, React.createElement('path', { d: 'M4 6.5C4 5.12 5.12 4 6.5 4H17.5C18.88 4 20 5.12 20 6.5V15.5C20 16.88 18.88 18 17.5 18H9l-5 3v-3.5C4 16.12 4 6.5 4 6.5Z', stroke: 'currentColor', strokeWidth: 1.8, strokeLinejoin: 'round' }), React.createElement('path', { d: 'M7 8h10M7 11h8', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' })),
           }),
           React.createElement(NavItem, {
@@ -1916,7 +2573,7 @@ function App() {
       )
     }
 
-    const newMessagesCount = adminMessages.filter((m) => !m.isRead).length
+    const newMessagesCount = Number(adminSupportUnreadCount || 0)
     const adminsCount = adminUsers.filter((u) => !!u.isAdmin).length
     const activePlansCount = adminUsers.filter((u) => {
       const trialActive = u.kivanaTrialEndsAt && new Date(String(u.kivanaTrialEndsAt)).getTime() > Date.now()
@@ -1930,9 +2587,12 @@ function App() {
       return String(u.email || '').toLowerCase().includes(q)
     })
 
-    const filteredMessages = adminMessages.filter((m) => {
-      if (adminMsgFilter === 'new') return !m.isRead
-      if (adminMsgFilter === 'archived') return !!m.isRead
+    const filteredMessages = adminMessages.filter((t) => {
+      const status = String(t.status || '').toLowerCase()
+      const archived = status !== 'open'
+      const unread = !!t.hasUnread
+      if (adminMsgFilter === 'new') return !archived && unread
+      if (adminMsgFilter === 'archived') return archived
       return true
     })
 
@@ -2030,12 +2690,20 @@ function App() {
                 const planCode = trialActive ? 'trial' : String(u.kivanaPlanCode || 'basic').toLowerCase()
                 const planLabel = trialActive ? 'Trial' : String(u.kivanaPlanName || normalizePlanLabel(planCode) || 'Basic')
                 const ends = trialActive ? u.kivanaTrialEndsAt : u.kivanaEndsAt
-                const role = u.isAdmin ? 'ADMIN' : u.isModerator ? 'MOD' : 'USER'
+                const role = u.isAdmin ? 'ADMIN' : u.isModerator ? 'MOD' : u.isFounder ? 'FOUNDER' : 'USER'
 
                 return React.createElement(
                   'tr',
                   { key: String(u.id || email), className: 'border-t border-gray-100' },
-                  React.createElement('td', { className: 'py-3 pr-4 font-medium text-[#1B1748]' }, email),
+                  React.createElement(
+                    'td',
+                    { className: 'py-3 pr-4 font-medium text-[#1B1748]' },
+                    React.createElement(
+                      'button',
+                      { type: 'button', className: 'hover:underline', onClick: () => openUserModal(u), disabled: busy },
+                      email
+                    )
+                  ),
                   React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, formatRfc3339Short(u.createdAt || '')),
                   React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, String(u.lastIp || '—')),
                   React.createElement('td', { className: 'py-3 pr-4' }, React.createElement(Pill, { kind: u.isAdmin ? 'ok' : u.isModerator ? 'warn' : 'muted' }, role)),
@@ -2077,10 +2745,10 @@ function App() {
                         className:
                           'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
                         type: 'button',
-                        onClick: () => openGrantModal(u),
-                        disabled: busy || !!u.isAdmin,
+                        onClick: () => openUserModal(u),
+                        disabled: busy,
                       },
-                      'Details'
+                      'Open'
                     ),
                     ' ',
                     React.createElement(
@@ -2140,10 +2808,11 @@ function App() {
     }
 
     function MessagesTable() {
-      const statusPill = (m) => (m.isRead ? React.createElement(Pill, { kind: 'muted' }, 'ARCHIVED') : React.createElement(Pill, { kind: 'warn' }, 'NEW'))
-      const preview = (m) => {
-        const s = String(m.message || '').replace(/\s+/g, ' ').trim()
-        return s.length > 44 ? s.slice(0, 44) + '…' : s
+      const statusPill = (t) => {
+        const status = String(t.status || '').toLowerCase()
+        if (status !== 'open') return React.createElement(Pill, { kind: 'muted' }, 'ARCHIVED')
+        if (t.hasUnread) return React.createElement(Pill, { kind: 'warn' }, 'NEW')
+        return React.createElement(Pill, { kind: 'muted' }, 'OPEN')
       }
       return React.createElement(
         'div',
@@ -2154,8 +2823,8 @@ function App() {
           React.createElement(
             'div',
             null,
-            React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Inbound messages'),
-            React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, 'Contact form submissions from the website.')
+            React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Support inbox'),
+            React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, 'Conversations between users and admins.')
           ),
           React.createElement(
             'div',
@@ -2190,47 +2859,38 @@ function App() {
           { className: 'mt-6 overflow-x-auto' },
           React.createElement(
             'table',
-            { className: 'w-full text-sm min-w-[1040px]' },
+            { className: 'w-full text-sm min-w-[920px]' },
             React.createElement(
               'thead',
               null,
               React.createElement(
                 'tr',
                 null,
-                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Created'),
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Last'),
                 React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Status'),
-                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Name'),
-                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Email'),
+                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'User'),
                 React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Subject'),
-                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Message'),
-                React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'IP'),
                 React.createElement('th', { className: 'text-left font-semibold text-gray-600 py-3 pr-4' }, 'Action')
               )
             ),
             React.createElement(
               'tbody',
               null,
-              filteredMessages.map((m) => {
-                const id = String(m.id || '')
-                const read = !!m.isRead
+              filteredMessages.map((t) => {
+                const id = String(t.id || '')
+                const archived = String(t.status || '').toLowerCase() !== 'open'
                 return React.createElement(
                   'tr',
                   { key: id, className: 'border-t border-gray-100' },
-                  React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, formatRfc3339Short(m.createdAt || '')),
-                  React.createElement('td', { className: 'py-3 pr-4' }, statusPill(m)),
-                  React.createElement('td', { className: 'py-3 pr-4 font-medium text-[#1B1748]' }, String(m.name || '')),
-                  React.createElement('td', { className: 'py-3 pr-4 text-gray-700' }, String(m.email || '')),
+                  React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, formatRfc3339Short(t.lastMessageAt || t.last_message_at || '')),
+                  React.createElement('td', { className: 'py-3 pr-4' }, statusPill(t)),
                   React.createElement(
                     'td',
-                    { className: 'py-3 pr-4 text-[#4F3DDD] font-semibold' },
-                    React.createElement(
-                      'button',
-                      { type: 'button', className: 'hover:underline', onClick: () => setMsgModal(m), disabled: busy },
-                      String(m.subject || '(no subject)')
-                    )
+                    { className: 'py-3 pr-4' },
+                    React.createElement('div', { className: 'font-medium text-[#1B1748]' }, String(t.userName || '')),
+                    React.createElement('div', { className: 'text-gray-600 text-xs' }, String(t.userEmail || ''))
                   ),
-                  React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, preview(m)),
-                  React.createElement('td', { className: 'py-3 pr-4 text-gray-600' }, String(m.clientIp || '—')),
+                  React.createElement('td', { className: 'py-3 pr-4 text-gray-700 font-semibold' }, String(t.subject || 'Support')),
                   React.createElement(
                     'td',
                     { className: 'py-3 pr-4' },
@@ -2240,7 +2900,20 @@ function App() {
                         className:
                           'px-3 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
                         type: 'button',
-                        onClick: () => setMsgModal(m),
+                        onClick: async () => {
+                          setMsgModal({ kind: 'support', threadId: id, thread: t, messages: [], reply: '', loading: true })
+                          try {
+                            const json = await adminLoadSupportThread(id)
+                            setMsgModal((m) => {
+                              if (!m || m.kind !== 'support' || String(m.threadId || '') !== id) return m
+                              return { ...m, thread: json?.thread || t, messages: Array.isArray(json?.messages) ? json.messages : [], loading: false }
+                            })
+                            await loadAdmin()
+                          } catch (err) {
+                            setMsgModal(null)
+                            setStatus({ kind: 'err', text: String(err?.message || err) })
+                          }
+                        },
                         disabled: busy,
                       },
                       'Open'
@@ -2252,22 +2925,10 @@ function App() {
                         className:
                           'px-3 py-2 rounded-full text-xs font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
                         type: 'button',
-                        onClick: () => adminMark(id, read ? false : true),
+                        onClick: () => adminMark(id, archived ? false : true),
                         disabled: busy,
                       },
-                      read ? 'Unarchive' : 'Archive'
-                    ),
-                    ' ',
-                    React.createElement(
-                      'button',
-                      {
-                        className:
-                          'px-3 py-2 rounded-full text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none',
-                        type: 'button',
-                        onClick: () => adminDeleteMsg(id),
-                        disabled: busy,
-                      },
-                      'Delete'
+                      archived ? 'Unarchive' : 'Archive'
                     )
                   )
                 )
@@ -2655,14 +3316,43 @@ function App() {
 
   function MessageModal() {
     if (!msgModal) return null
-    const id = String(msgModal.id || '')
-    const read = !!msgModal.isRead
-    const created = msgModal.createdAt ? formatRfc3339Short(msgModal.createdAt) : ''
-    const subject = String(msgModal.subject || '(no subject)')
-    const email = String(msgModal.email || '')
-    const name = String(msgModal.name || '')
-    const ip = String(msgModal.clientIp || '')
-    const message = String(msgModal.message || '')
+    if (String(msgModal.kind || '') !== 'support') return null
+    const threadId = String(msgModal.threadId || msgModal.thread?.id || '')
+    const thread = msgModal.thread || {}
+    const subject = String(thread.subject || 'Support')
+    const status = String(thread.status || '').toLowerCase()
+    const archived = status !== 'open'
+    const userId = String(thread.userId || thread.user_id || '').trim()
+    const userName = String(thread.userName || thread.user_name || '').trim()
+    const userEmail = String(thread.userEmail || thread.user_email || '').trim()
+    const lastAt = thread.lastMessageAt ? formatRfc3339Short(thread.lastMessageAt) : thread.last_message_at ? formatRfc3339Short(thread.last_message_at) : ''
+    const loading = !!msgModal.loading
+    const messages = Array.isArray(msgModal.messages) ? msgModal.messages : []
+    const reply = String(msgModal.reply || '')
+    const scrollRef = (node) => {
+      if (!node) return
+      node.scrollTop = node.scrollHeight
+    }
+    const Bubble = (m) => {
+      const role = String(m.senderRole || m.sender_role || '').toLowerCase()
+      const mine = role === 'admin'
+      const body = String(m.body || '').trim()
+      const when = m.createdAt ? formatRfc3339Short(m.createdAt) : ''
+      const wrapCls = mine ? 'flex justify-end' : 'flex justify-start'
+      const bubbleCls = mine
+        ? 'max-w-[80%] rounded-2xl bg-[#1B1748] text-white px-4 py-3 text-[14px] leading-relaxed'
+        : 'max-w-[80%] rounded-2xl bg-white border border-gray-200 text-gray-800 px-4 py-3 text-[14px] leading-relaxed'
+      return React.createElement(
+        'div',
+        { key: String(m.id || Math.random()), className: wrapCls },
+        React.createElement(
+          'div',
+          null,
+          React.createElement('div', { className: bubbleCls }, body || '—'),
+          when ? React.createElement('div', { className: `mt-1 text-[11px] ${mine ? 'text-right text-gray-500' : 'text-left text-gray-500'}` }, when) : null
+        )
+      )
+    }
 
     return React.createElement(
       'div',
@@ -2677,7 +3367,7 @@ function App() {
             'div',
             null,
             React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, subject),
-            React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, `${name || 'Unknown'} • ${email || '—'}${created ? ' • ' + created : ''}${ip ? ' • ' + ip : ''}`)
+            React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, `${userName || 'User'} • ${userEmail || '—'}${lastAt ? ' • ' + lastAt : ''}`)
           ),
           React.createElement(
             'button',
@@ -2690,14 +3380,55 @@ function App() {
           { className: 'px-6 py-6' },
           React.createElement(
             'div',
-            { className: 'rounded-2xl border border-gray-100 bg-gray-50 p-5 whitespace-pre-wrap text-[14px] text-gray-800 leading-relaxed' },
-            message || '—'
+            { ref: scrollRef, className: 'h-[360px] overflow-y-auto rounded-2xl border border-gray-100 bg-[#F6F7FB] p-4 grid gap-3 pr-1' },
+            loading
+              ? React.createElement('div', { className: 'text-sm text-gray-600 py-6 text-center' }, 'Loading…')
+              : messages.length
+                ? messages.map(Bubble)
+                : React.createElement('div', { className: 'text-sm text-gray-600 py-6 text-center' }, 'No messages yet.')
+          ),
+          React.createElement(
+            'div',
+            { className: 'mt-4 flex items-end gap-3' },
+            React.createElement('textarea', {
+              className:
+                'flex-1 min-h-[46px] max-h-[120px] rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+              value: reply,
+              onChange: (e) => setMsgModal((m) => (m && m.kind === 'support' ? { ...m, reply: e.target.value } : m)),
+              disabled: busy || loading,
+              placeholder: 'Reply as admin…',
+              autoFocus: true,
+            }),
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                onClick: async () => {
+                  const body = String(reply || '').trim()
+                  if (!body) return
+                  setStatus({ kind: 'muted', text: '' })
+                  try {
+                    await adminSendSupportThreadMessage(threadId, userId, body)
+                    const json = await adminLoadSupportThread(threadId)
+                    setMsgModal((m) => (m && m.kind === 'support' && String(m.threadId || '') === threadId ? { ...m, thread: json?.thread || m.thread, messages: Array.isArray(json?.messages) ? json.messages : [], reply: '', loading: false } : m))
+                    await loadAdmin()
+                  } catch (err) {
+                    const msg = String(err?.message || err)
+                    setStatus({ kind: 'err', text: msg === 'user_missing_key' ? 'User has not enabled encrypted chat yet.' : msg })
+                  }
+                },
+                disabled: busy || loading || !String(reply || '').trim(),
+                className:
+                  'px-6 py-3 rounded-full text-[14px] font-semibold text-white bg-[#4F3DDD] hover:bg-[#3F2FCB] disabled:opacity-60 disabled:pointer-events-none',
+              },
+              busy ? 'Sending…' : 'Send'
+            )
           )
         ),
         React.createElement(
           'div',
           { className: 'px-6 pb-6 flex items-center justify-between gap-3 flex-wrap' },
-          React.createElement('div', null, read ? React.createElement(Pill, { kind: 'muted' }, 'ARCHIVED') : React.createElement(Pill, { kind: 'warn' }, 'NEW')),
+          React.createElement('div', null, archived ? React.createElement(Pill, { kind: 'muted' }, 'ARCHIVED') : thread.hasUnread ? React.createElement(Pill, { kind: 'warn' }, 'NEW') : React.createElement(Pill, { kind: 'muted' }, 'OPEN')),
           React.createElement(
             'div',
             { className: 'flex items-center gap-3 flex-wrap justify-end' },
@@ -2708,26 +3439,14 @@ function App() {
                   'px-5 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
                 type: 'button',
                 onClick: async () => {
-                  await adminMark(id, read ? false : true)
-                  setMsgModal(null)
+                  await adminMark(threadId, archived ? false : true)
+                  const json = await adminLoadSupportThread(threadId).catch(() => null)
+                  setMsgModal((m) => (m && m.kind === 'support' && String(m.threadId || '') === threadId ? { ...m, thread: json?.thread || m.thread } : m))
+                  await loadAdmin()
                 },
                 disabled: busy,
               },
-              read ? 'Unarchive' : 'Archive'
-            ),
-            React.createElement(
-              'button',
-              {
-                className:
-                  'px-5 py-2.5 rounded-full text-[14px] font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none',
-                type: 'button',
-                onClick: async () => {
-                  await adminDeleteMsg(id)
-                  setMsgModal(null)
-                },
-                disabled: busy,
-              },
-              'Delete'
+              archived ? 'Unarchive' : 'Archive'
             )
           )
         )
