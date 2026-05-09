@@ -193,7 +193,8 @@ function deviceSecretKey() {
 }
 
 function isE2EEBody(v) {
-  return String(v || '').startsWith('e2ee:v1:')
+  const s = String(v || '')
+  return s.startsWith('e2ee:v1:') || s.startsWith('e2ee:v2:')
 }
 
 async function getOrCreateDeviceSecret() {
@@ -287,13 +288,24 @@ async function e2eeEncryptMessage(plainText, recipients) {
     ct: bytesToB64(new Uint8Array(ct)),
     keys,
   }
-  return `e2ee:v1:${bytesToB64(te.encode(JSON.stringify(payload)))}` 
+  return `e2ee:v2:${btoa(JSON.stringify(payload))}`
 }
 
 async function e2eeDecryptMessage(body, myId, privateKey) {
-  if (!isE2EEBody(body)) return String(body || '')
-  const raw = String(body || '').slice('e2ee:v1:'.length)
-  const payload = JSON.parse(td.decode(b64ToBytes(raw)))
+  const s = String(body || '')
+  if (!isE2EEBody(s)) return String(body || '')
+
+  const raw = s.startsWith('e2ee:v2:') ? s.slice('e2ee:v2:'.length) : s.slice('e2ee:v1:'.length)
+  let payload
+  if (s.startsWith('e2ee:v2:')) {
+    payload = JSON.parse(atob(raw))
+  } else {
+    try {
+      payload = JSON.parse(atob(raw))
+    } catch {
+      payload = JSON.parse(td.decode(b64ToBytes(raw)))
+    }
+  }
   const keys = Array.isArray(payload?.keys) ? payload.keys : []
   const mine = keys.find((k) => String(k?.id || '') === String(myId || '')) || null
   if (!mine?.ek) return null
@@ -302,6 +314,18 @@ async function e2eeDecryptMessage(body, myId, privateKey) {
   const aesKey = await crypto.subtle.importKey('raw', rawKey, { name: 'AES-GCM' }, false, ['decrypt'])
   const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(payload?.iv || '') }, aesKey, b64ToBytes(payload?.ct || ''))
   return td.decode(new Uint8Array(pt))
+}
+
+async function decryptE2EEMessagesIfPossible(messages, kp) {
+  const msgs = Array.isArray(messages) ? messages : []
+  if (!kp?.privateKey || !kp?.userId) return msgs
+  const out = await Promise.all(
+    msgs.map(async (m) => {
+      const body = await e2eeDecryptMessage(m?.body, kp.userId, kp.privateKey).catch(() => null)
+      return { ...m, body: body == null ? 'Encrypted message' : body }
+    })
+  )
+  return out
 }
 
 function SupportChatSection({
@@ -944,16 +968,7 @@ function App() {
     setSupportThread(json?.thread || null)
     const kp = await ensureChatKeys().catch(() => null)
     const msgs = Array.isArray(json?.messages) ? json.messages : []
-    if (kp?.privateKey && kp?.userId) {
-      const out = []
-      for (const m of msgs) {
-        const body = await e2eeDecryptMessage(m?.body, kp.userId, kp.privateKey).catch(() => null)
-        out.push({ ...m, body: body == null ? 'Encrypted message' : body })
-      }
-      setSupportMessages(out)
-    } else {
-      setSupportMessages(msgs)
-    }
+    setSupportMessages(await decryptE2EEMessagesIfPossible(msgs, kp))
     setSupportThreadId(String(json?.thread?.id || tid))
     return json
   }
@@ -968,12 +983,7 @@ function App() {
     const json = await res.json()
     setSupportThread(json?.thread || null)
     const msgs = Array.isArray(json?.messages) ? json.messages : []
-    const out = []
-    for (const m of msgs) {
-      const body = await e2eeDecryptMessage(m?.body, kp.userId, kp.privateKey).catch(() => null)
-      out.push({ ...m, body: body == null ? 'Encrypted message' : body })
-    }
-    setSupportMessages(out)
+    setSupportMessages(await decryptE2EEMessagesIfPossible(msgs, kp))
     setSupportThreadId(String(json?.thread?.id || ''))
     return json
   }
@@ -995,15 +1005,7 @@ function App() {
     const res = await apiFetch(`/v1/admin/support/threads/${encodeURIComponent(tid)}`, { method: 'GET' })
     const json = await res.json()
     const kp = await ensureChatKeys().catch(() => null)
-    if (kp?.privateKey && kp?.userId) {
-      const msgs = Array.isArray(json?.messages) ? json.messages : []
-      const out = []
-      for (const m of msgs) {
-        const body = await e2eeDecryptMessage(m?.body, kp.userId, kp.privateKey).catch(() => null)
-        out.push({ ...m, body: body == null ? 'Encrypted message' : body })
-      }
-      return { ...json, messages: out }
-    }
+    if (kp?.privateKey && kp?.userId) return { ...json, messages: await decryptE2EEMessagesIfPossible(json?.messages, kp) }
     return json
   }
 
