@@ -494,7 +494,7 @@
             })
             .then(function (j) {
               setTokens(j && j.accessToken, j && j.refreshToken)
-              window.location.assign("/account/")
+              window.location.assign("/account/?portal=1")
             })
             .catch(function (err) {
               var msg = err && err.message ? String(err.message) : "Failed."
