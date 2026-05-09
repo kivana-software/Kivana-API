@@ -158,6 +158,9 @@ function App() {
   const [adminTab, setAdminTab] = useState('users')
   const [adminUsers, setAdminUsers] = useState([])
   const [adminMessages, setAdminMessages] = useState([])
+  const [adminModal, setAdminModal] = useState(null)
+
+  const displayNameInputRef = useRef(null)
 
   const mounted = useRef(false)
   useEffect(() => {
@@ -186,7 +189,14 @@ function App() {
     const res = await apiFetch('/v1/me', { method: 'GET' })
     const json = await res.json()
     setMe(json)
-    setDisplayName(String(json.displayName || ''))
+    const nextName = String(json.displayName || '')
+    setDisplayName(nextName)
+    try {
+      const el = displayNameInputRef.current
+      if (el && document.activeElement !== el) el.value = nextName
+    } catch {
+      void 0
+    }
     return json
   }
 
@@ -276,7 +286,7 @@ function App() {
     setBusy(true)
     setStatus({ kind: 'muted', text: '' })
     try {
-      const dn = String(displayName || '').trim()
+      const dn = String((displayNameInputRef.current && displayNameInputRef.current.value) || displayName || '').trim()
       await apiFetch('/v1/profile', { method: 'POST', body: JSON.stringify({ displayName: dn || null }) })
       await loadMe()
       setStatus({ kind: 'ok', text: 'Profile saved.' })
@@ -334,6 +344,326 @@ function App() {
     } finally {
       setBusy(false)
     }
+  }
+
+  function updateAdminModal(patch) {
+    setAdminModal((m) => {
+      if (!m) return m
+      return { ...m, ...patch }
+    })
+  }
+
+  function closeAdminModal() {
+    setAdminModal(null)
+  }
+
+  function openPasswordModal(user) {
+    setStatus({ kind: 'muted', text: '' })
+    setAdminModal({ kind: 'password', user, password: '', confirm: '' })
+  }
+
+  function openGrantModal(user) {
+    setStatus({ kind: 'muted', text: '' })
+    setAdminModal({ kind: 'grant', user, planCode: String(user?.kivanaPlanCode || 'basic') || 'basic', endsAtLocal: '' })
+  }
+
+  function openDiscountModal(user) {
+    setStatus({ kind: 'muted', text: '' })
+    const pct = user?.discountPercent != null ? String(user.discountPercent) : '0'
+    const label = user?.discountLabel != null ? String(user.discountLabel) : ''
+    setAdminModal({ kind: 'discount', user, percent: pct, label })
+  }
+
+  function openDeleteUserModal(user) {
+    setStatus({ kind: 'muted', text: '' })
+    setAdminModal({ kind: 'deleteUser', user })
+  }
+
+  async function adminSetPassword(userId, password) {
+    if (busy) return
+    setBusy(true)
+    setStatus({ kind: 'muted', text: '' })
+    try {
+      await apiFetch(`/v1/admin/users/${encodeURIComponent(String(userId))}/password`, {
+        method: 'POST',
+        body: JSON.stringify({ password }),
+      })
+      setStatus({ kind: 'ok', text: 'Password updated.' })
+      closeAdminModal()
+      await loadAdmin()
+    } catch (e) {
+      setStatus({ kind: 'err', text: String(e?.message || e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function adminGrantPlan(email, planCode, endsAtLocal) {
+    if (busy) return
+    setBusy(true)
+    setStatus({ kind: 'muted', text: '' })
+    try {
+      const endsAt = (() => {
+        const s = String(endsAtLocal || '').trim()
+        if (!s) return null
+        const d = new Date(s)
+        if (!Number.isFinite(d.getTime())) throw new Error('Invalid date')
+        return d.toISOString()
+      })()
+      await apiFetch('/v1/admin/grant', {
+        method: 'POST',
+        body: JSON.stringify({ email, productCode: 'kivana', planCode, endsAt }),
+      })
+      setStatus({ kind: 'ok', text: 'Subscription updated.' })
+      closeAdminModal()
+      await loadAdmin()
+    } catch (e) {
+      const msg = String(e?.message || e)
+      setStatus({ kind: 'err', text: msg === 'Invalid date' ? 'Invalid ends date/time.' : msg })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function adminSetDiscount(email, percent, label) {
+    if (busy) return
+    setBusy(true)
+    setStatus({ kind: 'muted', text: '' })
+    try {
+      const pct = Number(String(percent || '0').trim() || '0')
+      if (!Number.isFinite(pct) || pct < 0 || pct > 90) {
+        throw new Error('invalid_discount')
+      }
+      const lab = String(label || '').trim()
+      await apiFetch('/v1/admin/discount', {
+        method: 'POST',
+        body: JSON.stringify({ email, percent: Math.round(pct), label: lab ? lab : null }),
+      })
+      setStatus({ kind: 'ok', text: 'Discount updated.' })
+      closeAdminModal()
+      await loadAdmin()
+    } catch (e) {
+      const msg = String(e?.message || e)
+      setStatus({ kind: 'err', text: msg === 'invalid_discount' ? 'Discount must be 0–90.' : msg })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function adminToggleModerator(email, enabled) {
+    if (busy) return
+    setBusy(true)
+    setStatus({ kind: 'muted', text: '' })
+    try {
+      await apiFetch('/v1/admin/moderator', {
+        method: 'POST',
+        body: JSON.stringify({ email, enabled: !!enabled }),
+      })
+      setStatus({ kind: 'ok', text: 'Moderator updated.' })
+      await loadAdmin()
+    } catch (e) {
+      setStatus({ kind: 'err', text: String(e?.message || e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function adminDeleteUser(userId) {
+    if (busy) return
+    setBusy(true)
+    setStatus({ kind: 'muted', text: '' })
+    try {
+      await apiFetch(`/v1/admin/users/${encodeURIComponent(String(userId))}`, { method: 'DELETE' })
+      setStatus({ kind: 'ok', text: 'User deleted.' })
+      closeAdminModal()
+      await loadAdmin()
+    } catch (e) {
+      setStatus({ kind: 'err', text: String(e?.message || e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function AdminModal() {
+    if (!adminModal) return null
+    const kind = String(adminModal.kind || '')
+    const user = adminModal.user || {}
+    const email = String(user.email || '')
+    const title =
+      kind === 'password'
+        ? `Set password (${email})`
+        : kind === 'grant'
+          ? `Set subscription (${email})`
+          : kind === 'discount'
+            ? `Set discount (${email})`
+            : kind === 'deleteUser'
+              ? `Delete user (${email})`
+              : 'Admin'
+
+    const body =
+      kind === 'password'
+        ? React.createElement(
+            React.Fragment,
+            null,
+            React.createElement('div', { className: 'fieldLabel' }, 'New password (min 8 chars)'),
+            React.createElement('input', {
+              className: 'fieldInput',
+              type: 'password',
+              value: String(adminModal.password || ''),
+              onChange: (e) => updateAdminModal({ password: e.target.value }),
+              disabled: busy,
+              autoComplete: 'new-password',
+            }),
+            React.createElement('div', { style: { height: 10 } }),
+            React.createElement('div', { className: 'fieldLabel' }, 'Confirm password'),
+            React.createElement('input', {
+              className: 'fieldInput',
+              type: 'password',
+              value: String(adminModal.confirm || ''),
+              onChange: (e) => updateAdminModal({ confirm: e.target.value }),
+              disabled: busy,
+              autoComplete: 'new-password',
+            })
+          )
+        : kind === 'grant'
+          ? React.createElement(
+              React.Fragment,
+              null,
+              React.createElement('div', { className: 'fieldLabel' }, 'Plan'),
+              React.createElement(
+                'select',
+                {
+                  className: 'fieldInput',
+                  value: String(adminModal.planCode || 'basic'),
+                  onChange: (e) => updateAdminModal({ planCode: e.target.value }),
+                  disabled: busy,
+                },
+                React.createElement('option', { value: 'basic' }, 'Basic'),
+                React.createElement('option', { value: 'standard' }, 'Ordinary'),
+                React.createElement('option', { value: 'pro' }, 'Pro'),
+                React.createElement('option', { value: 'lifetime' }, 'Lifetime')
+              ),
+              React.createElement('div', { style: { height: 10 } }),
+              React.createElement('div', { className: 'fieldLabel' }, 'Ends at (optional)'),
+              React.createElement('input', {
+                className: 'fieldInput',
+                type: 'datetime-local',
+                value: String(adminModal.endsAtLocal || ''),
+                onChange: (e) => updateAdminModal({ endsAtLocal: e.target.value }),
+                disabled: busy,
+              }),
+              React.createElement('div', { className: 'status' }, 'Leave empty for no end date. Uses your local time.')
+            )
+          : kind === 'discount'
+            ? React.createElement(
+                React.Fragment,
+                null,
+                React.createElement('div', { className: 'fieldLabel' }, 'Percent (0–90)'),
+                React.createElement('input', {
+                  className: 'fieldInput',
+                  type: 'number',
+                  min: 0,
+                  max: 90,
+                  step: 1,
+                  value: String(adminModal.percent || '0'),
+                  onChange: (e) => updateAdminModal({ percent: e.target.value }),
+                  disabled: busy,
+                }),
+                React.createElement('div', { style: { height: 10 } }),
+                React.createElement('div', { className: 'fieldLabel' }, 'Label (optional)'),
+                React.createElement('input', {
+                  className: 'fieldInput',
+                  type: 'text',
+                  value: String(adminModal.label || ''),
+                  onChange: (e) => updateAdminModal({ label: e.target.value }),
+                  disabled: busy,
+                  placeholder: 'founder',
+                }),
+                React.createElement('div', { className: 'status' }, 'Set percent to 0 to remove the discount.')
+              )
+            : kind === 'deleteUser'
+              ? React.createElement(
+                  React.Fragment,
+                  null,
+                  React.createElement('div', { className: 'cardSub' }, 'This permanently deletes the user and their sessions.'),
+                  React.createElement('div', { style: { height: 10 } }),
+                  React.createElement('div', { className: 'cardSub' }, 'Type DELETE to confirm:'),
+                  React.createElement('input', {
+                    className: 'fieldInput',
+                    type: 'text',
+                    value: String(adminModal.confirmText || ''),
+                    onChange: (e) => updateAdminModal({ confirmText: e.target.value }),
+                    disabled: busy,
+                    placeholder: 'DELETE',
+                  })
+                )
+              : null
+
+    const confirmLabel = kind === 'deleteUser' ? 'Delete' : 'Save'
+    const confirmKind = kind === 'deleteUser' ? 'btn btnDanger' : 'btn btnPrimary'
+
+    const onConfirm = async () => {
+      if (kind === 'password') {
+        const p1 = String(adminModal.password || '')
+        const p2 = String(adminModal.confirm || '')
+        if (p1.length < 8) {
+          setStatus({ kind: 'err', text: 'Password must be at least 8 characters.' })
+          return
+        }
+        if (p1 !== p2) {
+          setStatus({ kind: 'err', text: 'Passwords do not match.' })
+          return
+        }
+        await adminSetPassword(user.id, p1)
+        return
+      }
+      if (kind === 'grant') {
+        const planCode = String(adminModal.planCode || 'basic').trim().toLowerCase()
+        await adminGrantPlan(email, planCode, adminModal.endsAtLocal)
+        return
+      }
+      if (kind === 'discount') {
+        await adminSetDiscount(email, adminModal.percent, adminModal.label)
+        return
+      }
+      if (kind === 'deleteUser') {
+        if (String(adminModal.confirmText || '').trim().toUpperCase() !== 'DELETE') {
+          setStatus({ kind: 'err', text: 'Type DELETE to confirm.' })
+          return
+        }
+        await adminDeleteUser(user.id)
+      }
+    }
+
+    return React.createElement(
+      'div',
+      {
+        className: 'modalBackdrop',
+        onClick: () => closeAdminModal(),
+        role: 'dialog',
+        'aria-modal': 'true',
+      },
+      React.createElement(
+        'div',
+        {
+          className: 'modalCard',
+          onClick: (e) => e.stopPropagation(),
+        },
+        React.createElement(
+          'div',
+          { className: 'modalHeader' },
+          React.createElement('div', { className: 'modalTitle' }, title),
+          React.createElement('button', { className: 'modalClose', type: 'button', onClick: closeAdminModal, disabled: busy }, '×')
+        ),
+        React.createElement('div', { className: 'modalBody' }, body),
+        React.createElement(
+          'div',
+          { className: 'modalActions' },
+          React.createElement('button', { className: 'btn', type: 'button', onClick: closeAdminModal, disabled: busy }, 'Cancel'),
+          React.createElement('button', { className: confirmKind, type: 'button', onClick: onConfirm, disabled: busy }, busy ? 'Working…' : confirmLabel)
+        )
+      )
+    )
   }
 
   function Topbar() {
@@ -670,8 +1000,8 @@ function App() {
             React.createElement('div', { className: 'fieldLabel' }, 'Display name'),
             React.createElement('input', {
               className: 'fieldInput',
-              value: displayName,
-              onChange: (e) => setDisplayName(e.target.value),
+              ref: displayNameInputRef,
+              defaultValue: displayName,
               placeholder: 'Your name',
               disabled: busy,
             })
@@ -716,7 +1046,18 @@ function App() {
               React.createElement(
                 'thead',
                 null,
-                React.createElement('tr', null, React.createElement('th', null, 'Email'), React.createElement('th', null, 'Plan'), React.createElement('th', null, 'Flags'))
+                React.createElement(
+                  'tr',
+                  null,
+                  React.createElement('th', null, 'Email'),
+                  React.createElement('th', null, 'Created'),
+                  React.createElement('th', null, 'Plan'),
+                  React.createElement('th', null, 'Ends'),
+                  React.createElement('th', null, 'Discount'),
+                  React.createElement('th', null, 'Last IP'),
+                  React.createElement('th', null, 'Flags'),
+                  React.createElement('th', null, 'Actions')
+                )
               ),
               React.createElement(
                 'tbody',
@@ -726,13 +1067,63 @@ function App() {
                     'tr',
                     { key: String(u.id || u.email) },
                     React.createElement('td', null, String(u.email || '')),
+                    React.createElement('td', null, String(u.createdAt || '')),
                     React.createElement('td', null, String(u.kivanaPlanName || u.kivanaPlanCode || 'basic')),
+                    React.createElement('td', null, String(u.kivanaEndsAt || '—')),
+                    React.createElement(
+                      'td',
+                      null,
+                      u.discountPercent != null && Number(u.discountPercent) > 0
+                        ? `${String(u.discountPercent)}%${u.discountLabel ? ` (${String(u.discountLabel)})` : ''}`
+                        : '—'
+                    ),
+                    React.createElement('td', null, String(u.lastIp || '—')),
                     React.createElement(
                       'td',
                       null,
                       u.isAdmin ? React.createElement(Pill, { kind: 'ok' }, 'admin') : null,
                       ' ',
-                      u.isModerator ? React.createElement(Pill, { kind: 'warn' }, 'moderator') : null
+                      u.isModerator ? React.createElement(Pill, { kind: 'warn' }, 'moderator') : null,
+                      ' ',
+                      u.isFounder ? React.createElement(Pill, { kind: 'ok' }, 'founder') : null
+                    ),
+                    React.createElement(
+                      'td',
+                      null,
+                      React.createElement(
+                        'button',
+                        { className: 'btn', type: 'button', onClick: () => openPasswordModal(u), disabled: busy },
+                        'Password'
+                      ),
+                      ' ',
+                      React.createElement(
+                        'button',
+                        { className: 'btn', type: 'button', onClick: () => openGrantModal(u), disabled: busy },
+                        'Plan'
+                      ),
+                      ' ',
+                      React.createElement(
+                        'button',
+                        { className: 'btn', type: 'button', onClick: () => openDiscountModal(u), disabled: busy },
+                        'Discount'
+                      ),
+                      ' ',
+                      React.createElement(
+                        'button',
+                        {
+                          className: 'btn',
+                          type: 'button',
+                          onClick: () => adminToggleModerator(String(u.email || ''), !u.isModerator),
+                          disabled: busy || !!u.isAdmin,
+                        },
+                        u.isModerator ? 'Unmod' : 'Mod'
+                      ),
+                      ' ',
+                      React.createElement(
+                        'button',
+                        { className: 'btn btnDanger', type: 'button', onClick: () => openDeleteUserModal(u), disabled: busy || !!u.isAdmin },
+                        'Delete'
+                      )
                     )
                   )
                 )
@@ -847,7 +1238,8 @@ function App() {
     { className: 'shell' },
     React.createElement(Topbar, null),
     React.createElement('div', { className: 'main' }, content),
-    React.createElement('div', { className: 'footer' }, `© ${new Date().getFullYear()} Kivana`)
+    React.createElement('div', { className: 'footer' }, `© ${new Date().getFullYear()} Kivana`),
+    React.createElement(AdminModal, null)
   )
 }
 

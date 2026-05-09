@@ -340,7 +340,6 @@
           <div id="authError"></div>
           <div id="authActions">
             <button id="authSubmit" type="submit">Continue</button>
-            <a id="authOpenPortal" href="/portal/?portal=1" rel="noopener">Open portal</a>
           </div>
         </form>
       </div>
@@ -396,7 +395,6 @@
             password: document.getElementById("authPassword"),
             submit: document.getElementById("authSubmit"),
             error: document.getElementById("authError"),
-            openPortal: document.getElementById("authOpenPortal"),
           }
         }
 
@@ -512,7 +510,6 @@
         function init() {
           loadReactBuild()
           var e = els()
-          if (e.openPortal) e.openPortal.setAttribute("href", portalUrl)
           if (e.tabLogin) e.tabLogin.addEventListener("click", function () { setMode("login") })
           if (e.tabSignup) e.tabSignup.addEventListener("click", function () { setMode("signup") })
           if (e.close) e.close.addEventListener("click", closeModal)
