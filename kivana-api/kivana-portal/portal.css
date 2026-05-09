@@ -2092,11 +2092,20 @@ html[data-theme="dark"] .btn-secondary:hover {
   background: rgba(5, 11, 20, 0.20);
   padding: 0.55rem 0.75rem;
   border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
 }
 
 .prebetaLink:hover {
   color: rgba(229,231,235,0.95);
   background: rgba(255,255,255,0.05);
+}
+
+.prebetaLink::after {
+  content: '↗';
+  font-weight: 950;
+  opacity: 0.75;
 }
 
 .prebetaGrid {
