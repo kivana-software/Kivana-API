@@ -165,6 +165,7 @@ struct AuthResponse {
 struct UserInfo {
     id: String,
     email: String,
+    created_at: Option<String>,
     display_name: Option<String>,
     avatar_data_url: Option<String>,
     is_admin: bool,
@@ -173,6 +174,7 @@ struct UserInfo {
     discount_percent: Option<i32>,
     discount_label: Option<String>,
     discount_expires_at: Option<String>,
+    password_changed_at: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -196,7 +198,49 @@ struct ProductEntitlement {
     plan_name: String,
     status: String,
     ends_at: Option<String>,
+    trial_ends_at: Option<String>,
+    is_trial: bool,
+    trial_eligible: bool,
     features: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionsResponse {
+    sessions: Vec<SessionInfo>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionInfo {
+    id: String,
+    created_at: String,
+    last_used_at: String,
+    expires_at: String,
+    client_ip: Option<String>,
+    user_agent: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ChangePasswordRequest {
+    current_password: String,
+    new_password: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AccountExportResponse {
+    user: UserInfo,
+    entitlements: EntitlementsResponse,
+    sessions: Vec<SessionInfo>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeleteAccountRequest {
+    password: String,
+    confirm_text: String,
 }
 
 #[derive(Deserialize)]
@@ -315,9 +359,15 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/auth/login", post(login))
         .route("/v1/auth/refresh", post(refresh))
         .route("/v1/auth/logout", post(logout))
+        .route("/v1/auth/logout-all", post(logout_all))
+        .route("/v1/auth/change-password", post(change_password))
         .route("/v1/me", get(me))
         .route("/v1/profile", post(update_profile))
         .route("/v1/entitlements", get(entitlements))
+        .route("/v1/sessions", get(list_sessions))
+        .route("/v1/sessions/:id/revoke", post(revoke_session))
+        .route("/v1/account/export", get(account_export))
+        .route("/v1/account/delete", post(delete_account))
         .route("/v1/admin/bootstrap", post(admin_bootstrap))
         .route("/v1/admin/users", get(admin_users))
         .route("/v1/admin/contact-messages", get(admin_contact_messages))
@@ -651,6 +701,7 @@ async fn signup(
         Ok(v) => v,
         Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "hash_failed").into_response(),
     };
+    let now = OffsetDateTime::now_utc();
 
     let tx = state.pool.begin().await;
     let mut tx = match tx {
@@ -660,8 +711,8 @@ async fn signup(
 
     let inserted = sqlx::query(
         r#"
-      INSERT INTO users (id, email, password_hash, last_ip)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO users (id, email, password_hash, last_ip, password_changed_at)
+      VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (email) DO NOTHING
       RETURNING id
     "#,
@@ -670,6 +721,7 @@ async fn signup(
     .bind(&email)
     .bind(&password_hash)
     .bind(&client_ip)
+    .bind(now)
     .fetch_optional(&mut *tx)
     .await;
 
@@ -690,7 +742,6 @@ async fn signup(
         Err(_) => 0,
     };
     if founders_count < 20 {
-        let now = OffsetDateTime::now_utc();
         let _ = sqlx::query(
             r#"
           UPDATE users
@@ -709,6 +760,35 @@ async fn signup(
         .execute(&mut *tx)
         .await;
     }
+
+    let prod_row = sqlx::query("SELECT id FROM products WHERE code = 'kivana' LIMIT 1")
+        .fetch_optional(&mut *tx)
+        .await;
+    let product_id: Uuid = match prod_row {
+        Ok(Some(r)) => r.get("id"),
+        _ => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+    let plan_row = sqlx::query("SELECT id FROM plans WHERE product_id = $1 AND code = 'standard' LIMIT 1")
+        .bind(product_id)
+        .fetch_optional(&mut *tx)
+        .await;
+    let plan_id: Uuid = match plan_row {
+        Ok(Some(r)) => r.get("id"),
+        _ => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+    let trial_end = now + Duration::days(14);
+    let _ = sqlx::query(
+        "INSERT INTO subscriptions (id, user_id, product_id, plan_id, status, started_at, ends_at, trial_ends_at) VALUES ($1,$2,$3,$4,'active',$5,$6,$7)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(user_id)
+    .bind(product_id)
+    .bind(plan_id)
+    .bind(now)
+    .bind(trial_end)
+    .bind(trial_end)
+    .execute(&mut *tx)
+    .await;
 
     if tx.commit().await.is_err() {
         return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
@@ -734,10 +814,17 @@ async fn signup(
         Err(_) => (false, false, false, None, None, None),
     };
 
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
     let tokens = issue_tokens(
         &state,
         user_id,
         &email,
+        client_ip,
+        user_agent,
         is_admin,
         is_moderator,
         is_founder,
@@ -823,7 +910,7 @@ async fn login(
         }
     }
 
-    if let Some(ip) = client_ip {
+    if let Some(ip) = client_ip.clone() {
         let _ = sqlx::query("UPDATE users SET last_ip = $1 WHERE id = $2")
             .bind(ip)
             .bind(user_id)
@@ -831,10 +918,17 @@ async fn login(
             .await;
     }
 
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
     let tokens = issue_tokens(
         &state,
         user_id,
         &email,
+        client_ip,
+        user_agent,
         is_admin,
         is_moderator,
         is_founder,
@@ -851,6 +945,8 @@ async fn login(
 
 async fn refresh(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     Json(req): Json<RefreshRequest>,
 ) -> axum::response::Response {
     if req.refresh_token.trim().is_empty() {
@@ -904,17 +1000,24 @@ async fn refresh(
     let new_refresh = random_token_urlsafe(48);
     let new_hash = sha256_hex(new_refresh.as_bytes());
     let expires_at = now + Duration::days(state.cfg.refresh_token_ttl_days);
+    let client_ip = get_client_ip(&headers, connect_info);
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
 
     let updated = sqlx::query(
         r#"
       UPDATE sessions
-      SET refresh_token_hash = $1, last_used_at = $2, expires_at = $3
-      WHERE id = $4
+      SET refresh_token_hash = $1, last_used_at = $2, expires_at = $3, client_ip = $4, user_agent = $5
+      WHERE id = $6
     "#,
     )
     .bind(&new_hash)
     .bind(now)
     .bind(expires_at)
+    .bind(client_ip)
+    .bind(user_agent)
     .bind(session_id)
     .execute(&state.pool)
     .await;
@@ -933,6 +1036,7 @@ async fn refresh(
                 user: UserInfo {
                     id: user_id.to_string(),
                     email,
+                    created_at: None,
                     display_name: None,
                     avatar_data_url: None,
                     is_admin,
@@ -944,6 +1048,7 @@ async fn refresh(
                         t.format(&time::format_description::well_known::Rfc3339)
                             .unwrap_or_default()
                     }),
+                    password_changed_at: None,
                 },
             }),
         )
@@ -976,6 +1081,118 @@ async fn logout(
     }
 }
 
+async fn logout_all(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> axum::response::Response {
+    let user_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    let now = OffsetDateTime::now_utc();
+    let res = sqlx::query("UPDATE sessions SET revoked_at = $1 WHERE user_id = $2 AND revoked_at IS NULL")
+        .bind(now)
+        .bind(user_id)
+        .execute(&state.pool)
+        .await;
+    match res {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
+}
+
+async fn change_password(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    Json(req): Json<ChangePasswordRequest>,
+) -> axum::response::Response {
+    if req.new_password.len() < 8 {
+        return err(StatusCode::BAD_REQUEST, "weak_password").into_response();
+    }
+    let user_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+
+    let row = sqlx::query(
+        "SELECT email, password_hash, is_admin, is_moderator, is_founder, discount_percent, discount_label, discount_expires_at FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(&state.pool)
+    .await;
+    let row = match row {
+        Ok(Some(r)) => r,
+        Ok(None) => return err(StatusCode::UNAUTHORIZED, "invalid_token").into_response(),
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+    let email: String = row.get("email");
+    let password_hash: String = row.get("password_hash");
+    if !verify_password(&req.current_password, &password_hash) {
+        return err(StatusCode::UNAUTHORIZED, "invalid_credentials").into_response();
+    }
+    let is_admin: bool = row.get("is_admin");
+    let is_moderator: bool = row.try_get("is_moderator").unwrap_or(false);
+    let is_founder: bool = row.try_get("is_founder").unwrap_or(false);
+    let discount_percent: Option<i32> = row.try_get("discount_percent").ok().flatten();
+    let discount_label: Option<String> = row.try_get("discount_label").ok().flatten();
+    let discount_expires_at: Option<sqlx::types::time::OffsetDateTime> =
+        row.try_get("discount_expires_at").ok().flatten();
+
+    let new_hash = match hash_password(&req.new_password) {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "hash_failed").into_response(),
+    };
+    let now = OffsetDateTime::now_utc();
+    let updated = sqlx::query("UPDATE users SET password_hash = $1, password_changed_at = $2 WHERE id = $3")
+        .bind(new_hash)
+        .bind(now)
+        .bind(user_id)
+        .execute(&state.pool)
+        .await;
+    if updated.is_err() {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+    }
+
+    let _ = sqlx::query("UPDATE sessions SET revoked_at = $1 WHERE user_id = $2 AND revoked_at IS NULL")
+        .bind(now)
+        .bind(user_id)
+        .execute(&state.pool)
+        .await;
+
+    let client_ip = get_client_ip(&headers, connect_info);
+    if let Some(ip) = client_ip.clone() {
+        let _ = sqlx::query("UPDATE users SET last_ip = $1 WHERE id = $2")
+            .bind(ip)
+            .bind(user_id)
+            .execute(&state.pool)
+            .await;
+    }
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let tokens = issue_tokens(
+        &state,
+        user_id,
+        &email,
+        client_ip,
+        user_agent,
+        is_admin,
+        is_moderator,
+        is_founder,
+        discount_percent,
+        discount_label,
+        discount_expires_at,
+    )
+    .await;
+    match tokens {
+        Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "token_error").into_response(),
+    }
+}
+
 async fn me(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
@@ -996,7 +1213,7 @@ async fn me(
     };
 
     let row = sqlx::query(
-        "SELECT id, email, display_name, avatar_data_url, is_admin, is_moderator, is_founder, discount_percent, discount_label, discount_expires_at FROM users WHERE id = $1",
+        "SELECT id, email, created_at, display_name, avatar_data_url, is_admin, is_moderator, is_founder, discount_percent, discount_label, discount_expires_at, password_changed_at FROM users WHERE id = $1",
     )
     .bind(user_id)
     .fetch_optional(&state.pool)
@@ -1010,6 +1227,7 @@ async fn me(
 
     let id: Uuid = row.get("id");
     let email: String = row.get("email");
+    let created_at: sqlx::types::time::OffsetDateTime = row.get("created_at");
     let display_name: Option<String> = row.try_get("display_name").unwrap_or(None);
     let avatar_data_url: Option<String> = row.try_get("avatar_data_url").unwrap_or(None);
     let is_admin: bool = row.try_get("is_admin").unwrap_or(false);
@@ -1019,11 +1237,18 @@ async fn me(
     let discount_label: Option<String> = row.try_get("discount_label").ok().flatten();
     let discount_expires_at: Option<sqlx::types::time::OffsetDateTime> =
         row.try_get("discount_expires_at").ok().flatten();
+    let password_changed_at: Option<sqlx::types::time::OffsetDateTime> =
+        row.try_get("password_changed_at").ok().flatten();
     (
         StatusCode::OK,
         Json(UserInfo {
             id: id.to_string(),
             email,
+            created_at: Some(
+                created_at
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default(),
+            ),
             display_name,
             avatar_data_url,
             is_admin,
@@ -1032,6 +1257,10 @@ async fn me(
             discount_percent,
             discount_label,
             discount_expires_at: discount_expires_at.map(|t| {
+                t.format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default()
+            }),
+            password_changed_at: password_changed_at.map(|t| {
                 t.format(&time::format_description::well_known::Rfc3339)
                     .unwrap_or_default()
             }),
@@ -1108,6 +1337,22 @@ async fn entitlements(
   .execute(&state.pool)
   .await;
 
+    let trial_used_row = sqlx::query(
+        r#"
+      SELECT 1
+      FROM subscriptions s
+      JOIN products p ON p.id = s.product_id
+      WHERE s.user_id = $1
+        AND p.code = 'kivana'
+        AND s.trial_ends_at IS NOT NULL
+      LIMIT 1
+    "#,
+    )
+    .bind(user_id)
+    .fetch_optional(&state.pool)
+    .await;
+    let trial_eligible = matches!(trial_used_row, Ok(None));
+
     let rows = sqlx::query(
         r#"
       SELECT
@@ -1115,7 +1360,8 @@ async fn entitlements(
         pl.code AS plan_code,
         pl.name AS plan_name,
         s.status AS status,
-        s.ends_at AS ends_at
+        s.ends_at AS ends_at,
+        s.trial_ends_at AS trial_ends_at
       FROM subscriptions s
       JOIN products p ON p.id = s.product_id
       JOIN plans pl ON pl.id = s.plan_id
@@ -1141,6 +1387,9 @@ async fn entitlements(
         let plan_name: String = r.get("plan_name");
         let status: String = r.get("status");
         let ends_at: Option<sqlx::types::time::OffsetDateTime> = r.try_get("ends_at").ok();
+        let trial_ends_at: Option<sqlx::types::time::OffsetDateTime> =
+            r.try_get("trial_ends_at").ok();
+        let is_trial = trial_ends_at.map(|t| t > now).unwrap_or(false);
         let feature_rows = sqlx::query(
             r#"
         SELECT f.code AS code
@@ -1162,6 +1411,7 @@ async fn entitlements(
             Err(_) => Vec::new(),
         };
 
+        let is_kivana_product = product_code == "kivana";
         products.push(ProductEntitlement {
             product_code,
             plan_code,
@@ -1171,11 +1421,370 @@ async fn entitlements(
                 t.format(&time::format_description::well_known::Rfc3339)
                     .unwrap_or_default()
             }),
+            trial_ends_at: trial_ends_at.map(|t| {
+                t.format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default()
+            }),
+            is_trial,
+            trial_eligible: if is_kivana_product { trial_eligible } else { false },
+            features,
+        });
+    }
+
+    let has_kivana = products
+        .iter()
+        .any(|p| p.product_code.trim().to_lowercase() == "kivana");
+    if !has_kivana {
+        let feature_rows = sqlx::query(
+            r#"
+        SELECT f.code AS code
+        FROM plan_features pf
+        JOIN features f ON f.id = pf.feature_id
+        JOIN plans pl ON pl.id = pf.plan_id
+        JOIN products p ON p.id = pl.product_id
+        WHERE p.code = 'kivana' AND pl.code = 'basic'
+        ORDER BY f.code ASC
+      "#,
+        )
+        .fetch_all(&state.pool)
+        .await;
+        let features: Vec<String> = match feature_rows {
+            Ok(v) => v.into_iter().map(|x| x.get::<String, _>("code")).collect(),
+            Err(_) => Vec::new(),
+        };
+
+        products.push(ProductEntitlement {
+            product_code: "kivana".to_string(),
+            plan_code: "basic".to_string(),
+            plan_name: "Basic".to_string(),
+            status: "free".to_string(),
+            ends_at: None,
+            trial_ends_at: None,
+            is_trial: false,
+            trial_eligible,
             features,
         });
     }
 
     (StatusCode::OK, Json(EntitlementsResponse { products })).into_response()
+}
+
+async fn list_sessions(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> axum::response::Response {
+    let user_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    let rows = sqlx::query(
+        r#"
+      SELECT id, created_at, last_used_at, expires_at, client_ip, user_agent
+      FROM sessions
+      WHERE user_id = $1
+        AND revoked_at IS NULL
+        AND expires_at > now()
+      ORDER BY last_used_at DESC
+      LIMIT 50
+    "#,
+    )
+    .bind(user_id)
+    .fetch_all(&state.pool)
+    .await;
+    let rows = match rows {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+    let sessions = rows
+        .into_iter()
+        .map(|r| {
+            let id: Uuid = r.get("id");
+            let created_at: sqlx::types::time::OffsetDateTime = r.get("created_at");
+            let last_used_at: sqlx::types::time::OffsetDateTime = r.get("last_used_at");
+            let expires_at: sqlx::types::time::OffsetDateTime = r.get("expires_at");
+            let client_ip: Option<String> = r.try_get("client_ip").ok().flatten();
+            let user_agent: Option<String> = r.try_get("user_agent").ok().flatten();
+            SessionInfo {
+                id: id.to_string(),
+                created_at: created_at
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default(),
+                last_used_at: last_used_at
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default(),
+                expires_at: expires_at
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default(),
+                client_ip,
+                user_agent,
+            }
+        })
+        .collect::<Vec<_>>();
+    (StatusCode::OK, Json(SessionsResponse { sessions })).into_response()
+}
+
+async fn revoke_session(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+) -> axum::response::Response {
+    let user_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    let now = OffsetDateTime::now_utc();
+    let res = sqlx::query(
+        "UPDATE sessions SET revoked_at = $1 WHERE id = $2 AND user_id = $3 AND revoked_at IS NULL",
+    )
+    .bind(now)
+    .bind(id)
+    .bind(user_id)
+    .execute(&state.pool)
+    .await;
+    match res {
+        Ok(r) if r.rows_affected() > 0 => {
+            (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+        }
+        Ok(_) => err(StatusCode::NOT_FOUND, "session_not_found").into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
+}
+
+async fn account_export(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> axum::response::Response {
+    let user_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+
+    let row = sqlx::query(
+        "SELECT id, email, created_at, display_name, avatar_data_url, is_admin, is_moderator, is_founder, discount_percent, discount_label, discount_expires_at, password_changed_at FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(&state.pool)
+    .await;
+    let row = match row {
+        Ok(Some(r)) => r,
+        Ok(None) => return err(StatusCode::UNAUTHORIZED, "invalid_token").into_response(),
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    let created_at: sqlx::types::time::OffsetDateTime = row.get("created_at");
+    let discount_expires_at: Option<sqlx::types::time::OffsetDateTime> =
+        row.try_get("discount_expires_at").ok().flatten();
+    let password_changed_at: Option<sqlx::types::time::OffsetDateTime> =
+        row.try_get("password_changed_at").ok().flatten();
+
+    let user = UserInfo {
+        id: row.get::<Uuid, _>("id").to_string(),
+        email: row.get::<String, _>("email"),
+        created_at: Some(
+            created_at
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default(),
+        ),
+        display_name: row.try_get("display_name").unwrap_or(None),
+        avatar_data_url: row.try_get("avatar_data_url").unwrap_or(None),
+        is_admin: row.try_get("is_admin").unwrap_or(false),
+        is_moderator: row.try_get("is_moderator").unwrap_or(false),
+        is_founder: row.try_get("is_founder").unwrap_or(false),
+        discount_percent: row.try_get("discount_percent").ok().flatten(),
+        discount_label: row.try_get("discount_label").ok().flatten(),
+        discount_expires_at: discount_expires_at.map(|t| {
+            t.format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default()
+        }),
+        password_changed_at: password_changed_at.map(|t| {
+            t.format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default()
+        }),
+    };
+
+    let trial_used_row = sqlx::query(
+        r#"
+      SELECT 1
+      FROM subscriptions s
+      JOIN products p ON p.id = s.product_id
+      WHERE s.user_id = $1
+        AND p.code = 'kivana'
+        AND s.trial_ends_at IS NOT NULL
+      LIMIT 1
+    "#,
+    )
+    .bind(user_id)
+    .fetch_optional(&state.pool)
+    .await;
+    let trial_eligible = matches!(trial_used_row, Ok(None));
+
+    let rows = sqlx::query(
+        r#"
+      SELECT
+        p.code AS product_code,
+        pl.code AS plan_code,
+        pl.name AS plan_name,
+        s.status AS status,
+        s.ends_at AS ends_at,
+        s.trial_ends_at AS trial_ends_at
+      FROM subscriptions s
+      JOIN products p ON p.id = s.product_id
+      JOIN plans pl ON pl.id = s.plan_id
+      WHERE s.user_id = $1
+        AND s.status = 'active'
+        AND (s.ends_at IS NULL OR s.ends_at > now())
+      ORDER BY p.code ASC
+    "#,
+    )
+    .bind(user_id)
+    .fetch_all(&state.pool)
+    .await;
+    let rows = match rows {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+    let now = OffsetDateTime::now_utc();
+    let mut products: Vec<ProductEntitlement> = Vec::new();
+    for r in rows {
+        let product_code: String = r.get("product_code");
+        let plan_code: String = r.get("plan_code");
+        let plan_name: String = r.get("plan_name");
+        let status: String = r.get("status");
+        let ends_at: Option<sqlx::types::time::OffsetDateTime> = r.try_get("ends_at").ok();
+        let trial_ends_at: Option<sqlx::types::time::OffsetDateTime> =
+            r.try_get("trial_ends_at").ok();
+        let is_trial = trial_ends_at.map(|t| t > now).unwrap_or(false);
+        products.push(ProductEntitlement {
+            product_code: product_code.clone(),
+            plan_code,
+            plan_name,
+            status,
+            ends_at: ends_at.map(|t| {
+                t.format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default()
+            }),
+            trial_ends_at: trial_ends_at.map(|t| {
+                t.format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default()
+            }),
+            is_trial,
+            trial_eligible: if product_code == "kivana" { trial_eligible } else { false },
+            features: Vec::new(),
+        });
+    }
+    if !products
+        .iter()
+        .any(|p| p.product_code.trim().to_lowercase() == "kivana")
+    {
+        products.push(ProductEntitlement {
+            product_code: "kivana".to_string(),
+            plan_code: "basic".to_string(),
+            plan_name: "Basic".to_string(),
+            status: "free".to_string(),
+            ends_at: None,
+            trial_ends_at: None,
+            is_trial: false,
+            trial_eligible,
+            features: Vec::new(),
+        });
+    }
+
+    let entitlements = EntitlementsResponse { products };
+
+    let sessions_rows = sqlx::query(
+        r#"
+      SELECT id, created_at, last_used_at, expires_at, client_ip, user_agent
+      FROM sessions
+      WHERE user_id = $1
+        AND revoked_at IS NULL
+        AND expires_at > now()
+      ORDER BY last_used_at DESC
+      LIMIT 50
+    "#,
+    )
+    .bind(user_id)
+    .fetch_all(&state.pool)
+    .await;
+    let sessions_rows = match sessions_rows {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+    let sessions = sessions_rows
+        .into_iter()
+        .map(|r| {
+            let id: Uuid = r.get("id");
+            let created_at: sqlx::types::time::OffsetDateTime = r.get("created_at");
+            let last_used_at: sqlx::types::time::OffsetDateTime = r.get("last_used_at");
+            let expires_at: sqlx::types::time::OffsetDateTime = r.get("expires_at");
+            let client_ip: Option<String> = r.try_get("client_ip").ok().flatten();
+            let user_agent: Option<String> = r.try_get("user_agent").ok().flatten();
+            SessionInfo {
+                id: id.to_string(),
+                created_at: created_at
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default(),
+                last_used_at: last_used_at
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default(),
+                expires_at: expires_at
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default(),
+                client_ip,
+                user_agent,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    (
+        StatusCode::OK,
+        Json(AccountExportResponse {
+            user,
+            entitlements,
+            sessions,
+        }),
+    )
+        .into_response()
+}
+
+async fn delete_account(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<DeleteAccountRequest>,
+) -> axum::response::Response {
+    if req.confirm_text.trim() != "DELETE" {
+        return err(StatusCode::BAD_REQUEST, "confirm_required").into_response();
+    }
+    let user_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    let row = sqlx::query("SELECT password_hash FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(&state.pool)
+        .await;
+    let row = match row {
+        Ok(Some(r)) => r,
+        Ok(None) => return err(StatusCode::UNAUTHORIZED, "invalid_token").into_response(),
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+    let password_hash: String = row.get("password_hash");
+    if !verify_password(&req.password, &password_hash) {
+        return err(StatusCode::UNAUTHORIZED, "invalid_credentials").into_response();
+    }
+    let now = OffsetDateTime::now_utc();
+    let _ = sqlx::query("UPDATE sessions SET revoked_at = $1 WHERE user_id = $2 AND revoked_at IS NULL")
+        .bind(now)
+        .bind(user_id)
+        .execute(&state.pool)
+        .await;
+    let res = sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(user_id)
+        .execute(&state.pool)
+        .await;
+    match res {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
 }
 
 #[derive(Deserialize)]
@@ -1195,7 +1804,7 @@ async fn portal_select_plan(
         Err(e) => return e,
     };
 
-    let valid_plans = ["basic", "standard", "pro", "lifetime_pro"];
+    let valid_plans = ["basic", "trial", "standard", "pro", "lifetime_pro"];
     if !valid_plans.contains(&req.plan_code.as_str()) {
         return err(StatusCode::BAD_REQUEST, "invalid_plan").into_response();
     }
@@ -1222,31 +1831,40 @@ async fn portal_select_plan(
         _ => return err(StatusCode::NOT_FOUND, "product_not_found").into_response(),
     };
 
-    let plan_row = sqlx::query("SELECT id FROM plans WHERE product_id = $1 AND code = $2")
-        .bind(product_id)
-        .bind(&plan_code)
-        .fetch_optional(&state.pool)
-        .await;
-    let plan_id: Uuid = match plan_row {
-        Ok(Some(r)) => r.get("id"),
-        _ => return err(StatusCode::NOT_FOUND, "plan_not_found").into_response(),
-    };
-
-    if plan_code == "basic" {
-        let existing = sqlx::query(
-            "SELECT 1 FROM subscriptions WHERE user_id = $1 AND product_id = $2 LIMIT 1",
+    let is_trial_request = plan_code == "trial";
+    if is_trial_request {
+        let used = sqlx::query(
+            "SELECT 1 FROM subscriptions WHERE user_id = $1 AND product_id = $2 AND trial_ends_at IS NOT NULL LIMIT 1",
         )
         .bind(user_id)
         .bind(product_id)
         .fetch_optional(&state.pool)
         .await;
-
-        match existing {
+        match used {
             Ok(Some(_)) => return err(StatusCode::FORBIDDEN, "trial_already_used").into_response(),
             Ok(None) => {}
             Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
         }
     }
+
+    let plan_code_to_lookup = if is_trial_request {
+        "standard".to_string()
+    } else {
+        plan_code.clone()
+    };
+    let plan_id = if plan_code == "basic" {
+        None
+    } else {
+        let plan_row = sqlx::query("SELECT id FROM plans WHERE product_id = $1 AND code = $2")
+            .bind(product_id)
+            .bind(&plan_code_to_lookup)
+            .fetch_optional(&state.pool)
+            .await;
+        match plan_row {
+            Ok(Some(r)) => Some(r.get::<Uuid, _>("id")),
+            _ => return err(StatusCode::NOT_FOUND, "plan_not_found").into_response(),
+        }
+    };
 
     let tx = state.pool.begin().await;
     let mut tx = match tx {
@@ -1256,41 +1874,43 @@ async fn portal_select_plan(
 
     let now = OffsetDateTime::now_utc();
     let _ = sqlx::query("UPDATE subscriptions SET status = 'canceled', canceled_at = $1 WHERE user_id = $2 AND product_id = $3 AND status = 'active'")
-    .bind(now)
-    .bind(user_id)
-    .bind(product_id)
-    .execute(&mut *tx)
-    .await;
+        .bind(now)
+        .bind(user_id)
+        .bind(product_id)
+        .execute(&mut *tx)
+        .await;
 
-    let (ends_at, trial_ends_at) = match plan_code.as_str() {
-        "basic" => {
+    if plan_code != "basic" {
+        let (ends_at, trial_ends_at) = if is_trial_request {
             let trial_end = now + Duration::days(14);
             (Some(trial_end), Some(trial_end))
-        }
-        "standard" | "pro" => {
-            let days = if billing_cycle == "yearly" { 365 } else { 30 };
-            (Some(now + Duration::days(days)), None)
-        }
-        "lifetime_pro" => (None, None),
-        _ => (None, None),
-    };
+        } else {
+            match plan_code_to_lookup.as_str() {
+                "standard" | "pro" => {
+                    let days = if billing_cycle == "yearly" { 365 } else { 30 };
+                    (Some(now + Duration::days(days)), None)
+                }
+                "lifetime_pro" => (None, None),
+                _ => (None, None),
+            }
+        };
 
-    let sub_id = Uuid::new_v4();
-    let inserted = sqlx::query(
-        "INSERT INTO subscriptions (id, user_id, product_id, plan_id, status, started_at, ends_at, trial_ends_at) VALUES ($1,$2,$3,$4,'active',$5,$6,$7)",
-    )
-    .bind(sub_id)
-    .bind(user_id)
-    .bind(product_id)
-    .bind(plan_id)
-    .bind(now)
-    .bind(ends_at)
-    .bind(trial_ends_at)
-    .execute(&mut *tx)
-    .await;
+        let inserted = sqlx::query(
+            "INSERT INTO subscriptions (id, user_id, product_id, plan_id, status, started_at, ends_at, trial_ends_at) VALUES ($1,$2,$3,$4,'active',$5,$6,$7)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(user_id)
+        .bind(product_id)
+        .bind(plan_id.unwrap_or_else(|| Uuid::nil()))
+        .bind(now)
+        .bind(ends_at)
+        .bind(trial_ends_at)
+        .execute(&mut *tx)
+        .await;
 
-    if inserted.is_err() {
-        return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+        if inserted.is_err() {
+            return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+        }
     }
 
     if tx.commit().await.is_err() {
@@ -1646,16 +2266,17 @@ async fn admin_set_password(
         Ok(v) => v,
         Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "hash_failed").into_response(),
     };
+    let now = OffsetDateTime::now_utc();
 
-    let updated = sqlx::query("UPDATE users SET password_hash = $1 WHERE id = $2")
+    let updated = sqlx::query("UPDATE users SET password_hash = $1, password_changed_at = $2 WHERE id = $3")
         .bind(password_hash)
+        .bind(now)
         .bind(id)
         .execute(&state.pool)
         .await;
 
     match updated {
         Ok(r) if r.rows_affected() > 0 => {
-            let now = OffsetDateTime::now_utc();
             let _ = sqlx::query(
                 "UPDATE sessions SET revoked_at = $1 WHERE user_id = $2 AND revoked_at IS NULL",
             )
@@ -1918,6 +2539,8 @@ async fn issue_tokens(
     state: &AppState,
     user_id: Uuid,
     email: &str,
+    client_ip: Option<String>,
+    user_agent: Option<String>,
     is_admin: bool,
     is_moderator: bool,
     is_founder: bool,
@@ -1935,14 +2558,16 @@ async fn issue_tokens(
     let session_id = Uuid::new_v4();
     sqlx::query(
         r#"
-      INSERT INTO sessions (id, user_id, refresh_token_hash, expires_at)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO sessions (id, user_id, refresh_token_hash, expires_at, client_ip, user_agent)
+      VALUES ($1, $2, $3, $4, $5, $6)
     "#,
     )
     .bind(session_id)
     .bind(user_id)
     .bind(refresh_hash)
     .bind(expires_at)
+    .bind(client_ip)
+    .bind(user_agent)
     .execute(&state.pool)
     .await?;
 
@@ -1952,6 +2577,7 @@ async fn issue_tokens(
         user: UserInfo {
             id: user_id.to_string(),
             email: email.to_string(),
+            created_at: None,
             display_name: None,
             avatar_data_url: None,
             is_admin,
@@ -1963,6 +2589,7 @@ async fn issue_tokens(
                 t.format(&time::format_description::well_known::Rfc3339)
                     .unwrap_or_default()
             }),
+            password_changed_at: None,
         },
     })
 }
