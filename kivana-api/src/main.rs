@@ -345,14 +345,14 @@ async fn main() -> anyhow::Result<()> {
             "/admin/",
             ServeDir::new("kivana-admin").append_index_html_on_directories(true),
         )
-        .route("/portal", get(|| async { Redirect::permanent("/") }))
+        .route("/portal", get(|| async { Redirect::permanent("/portal/") }))
         .nest_service(
             "/portal/",
             ServeDir::new("kivana-portal").append_index_html_on_directories(true),
         )
         .nest_service(
             "/",
-            ServeDir::new("kivana-portal").append_index_html_on_directories(true),
+            ServeDir::new("kivana-site").append_index_html_on_directories(true),
         )
         .layer(cors)
         .layer(RequestBodyLimitLayer::new(1_000_000))
@@ -395,12 +395,11 @@ async fn sitemap_xml() -> impl IntoResponse {
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://{}/</loc></url>
-  <url><loc>https://{}/learn.html</loc></url>
   <url><loc>https://{}/privacy.html</loc></url>
   <url><loc>https://{}/terms.html</loc></url>
 </urlset>
 "#,
-        domain, domain, domain, domain
+        domain, domain, domain
     );
     ([(axum::http::header::CONTENT_TYPE, "application/xml; charset=utf-8")], body)
 }

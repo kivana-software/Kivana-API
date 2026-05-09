@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="icon" type="image/png" href="/kivana-logo.png" />
+  <link rel="apple-touch-icon" href="/kivana-logo.png" />
+  <title>Kivana • Privacy Policy</title>
+  <script>
+    ;(() => {
+      try {
+        const t = localStorage.getItem('kivanaPortal/theme')
+        document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light')
+      } catch {
+        document.documentElement.setAttribute('data-theme', 'light')
+      }
+    })()
+  </script>
+  <link rel="stylesheet" href="portal.css?v=0.4.19" />
+</head>
+<body>
+  <div id="app">
+    <div id="navbar">
+      <div class="logo">
+        <img class="logoImg" src="/kivana-logo.png" alt="Kivana logo" />
+        <span class="logoText">Kivana</span>
+      </div>
+      <div class="nav-links">
+        <div class="nav-actions">
+          <button class="btn btn-secondary themeToggle" id="btnThemeToggle" type="button">Theme</button>
+          <a class="btn btn-secondary" href="/">Back</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="view">
+      <div class="dashboard-header">
+        <h2>Privacy Policy</h2>
+        <p class="text-muted">Last updated: 2026-05-07</p>
+      </div>
+
+      <div class="panel" style="max-width: 980px; margin: 0 auto;">
+        <div class="planDesc">
+          This Privacy Policy explains how the Kivana account portal and services handle personal data. It applies to the Kivana website/portal and related services. The Kivana desktop app is designed to be local-first; your finance data stays on your device unless you choose features that send data to a server.
+        </div>
+
+        <div style="height: 14px"></div>
+
+        <div class="planName">What we collect</div>
+        <div class="planIncludes">
+          Account data: email address, authentication details, and account identifiers.
+        </div>
+        <div class="planIncludes">
+          Profile data (optional): display name and avatar image if you upload one.
+        </div>
+        <div class="planIncludes">
+          Subscription/entitlements: plan name, plan status, and expiration date.
+        </div>
+        <div class="planIncludes">
+          Security/operations: IP address and basic request logs for security and abuse prevention.
+        </div>
+
+        <div style="height: 14px"></div>
+
+        <div class="planName">How we use data</div>
+        <div class="planIncludes">
+          Provide sign-in, account management, and plan access for Kivana products.
+        </div>
+        <div class="planIncludes">
+          Prevent fraud and abuse, and keep services secure.
+        </div>
+        <div class="planIncludes">
+          Operate, maintain, and improve the portal and backend.
+        </div>
+
+        <div style="height: 14px"></div>
+
+        <div class="planName">How we share data</div>
+        <div class="planDesc">
+          We do not sell your personal data. We may share data only with service providers needed to operate the service (for example, hosting and monitoring) and only to the extent required. We may disclose information if required by law.
+        </div>
+
+        <div style="height: 14px"></div>
+
+        <div class="planName">Retention</div>
+        <div class="planDesc">
+          We keep account and subscription information while your account is active. You can request deletion of your account, after which we will delete or anonymize personal data unless we must retain it for legal, security, or operational reasons.
+        </div>
+
+        <div style="height: 14px"></div>
+
+        <div class="planName">Security</div>
+        <div class="planDesc">
+          We use industry-standard security measures. When the portal is served over HTTPS, data is encrypted in transit between your browser and our servers.
+        </div>
+
+        <div style="height: 14px"></div>
+
+        <div class="planName">Your choices</div>
+        <div class="planIncludes">
+          You can update your display name and avatar in the portal account settings.
+        </div>
+        <div class="planIncludes">
+          You can sign out and revoke sessions via the portal.
+        </div>
+        <div class="planIncludes">
+          You can request access, correction, or deletion of your account data.
+        </div>
+
+        <div style="height: 14px"></div>
+
+        <div class="planName">Contact</div>
+        <div class="planDesc">
+          For privacy requests, contact: support@kivana.eu
+        </div>
+      </div>
+    </div>
+
+    <div class="portalBottomFooter">
+      <div class="portalBottomFooterLinks">
+        <a href="/terms.html">Terms</a>
+      </div>
+      <div>kivana.eu • All rights reserved © 2026</div>
+    </div>
+  </div>
+  <script>
+    ;(() => {
+      const btn = document.getElementById('btnThemeToggle')
+      function getTheme() {
+        try {
+          return localStorage.getItem('kivanaPortal/theme') === 'dark' ? 'dark' : 'light'
+        } catch {
+          return 'light'
+        }
+      }
+      function setTheme(t) {
+        const v = t === 'dark' ? 'dark' : 'light'
+        document.documentElement.setAttribute('data-theme', v)
+        try {
+          localStorage.setItem('kivanaPortal/theme', v)
+        } catch {
+          void 0
+        }
+        const label = v === 'dark' ? 'Theme: Light' : 'Theme: Dark'
+        if (btn) btn.textContent = label
+      }
+      function toggle() {
+        const cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
+        setTheme(cur === 'dark' ? 'light' : 'dark')
+      }
+      setTheme(getTheme())
+      if (btn) btn.addEventListener('click', toggle)
+    })()
+  </script>
+</body>
+</html>
