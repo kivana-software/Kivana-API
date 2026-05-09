@@ -1622,7 +1622,7 @@ async function applyHashNav() {
   const normalized = id === 'features' ? 'how'
     : id === 'resources' ? 'preview'
     : id
-  const allow = new Set(['benefits', 'how', 'preview'])
+  const allow = new Set(['benefits', 'how', 'preview', 'why', 'fit', 'trust', 'coming'])
   if (!allow.has(normalized)) return
   await showDashboard()
   setTimeout(() => document.getElementById(normalized)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
