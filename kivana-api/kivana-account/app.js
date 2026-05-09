@@ -816,6 +816,7 @@ function App() {
                     onChange: (e) => updateAdminModal({ confirmText: e.target.value }),
                     disabled: busy,
                     placeholder: 'DELETE',
+                    autoFocus: true,
                   })
                 )
               : null
@@ -2753,10 +2754,10 @@ function App() {
       content
     ),
     React.createElement('div', { className: 'max-w-7xl mx-auto px-6 lg:px-10 pb-10 text-sm text-gray-500' }, `© ${new Date().getFullYear()} Kivana`),
-    React.createElement(AdminModal, null),
-    React.createElement(PasswordModal, null),
-    React.createElement(DeleteModal, null),
-    React.createElement(MessageModal, null)
+    AdminModal(),
+    PasswordModal(),
+    DeleteModal(),
+    MessageModal()
   )
 }
 
