@@ -343,31 +343,6 @@ function SupportChatSection({
   const [draft, setDraft] = useState('')
   const scrollRef = useRef(null)
 
-  useEffect(() => {
-    let alive = true
-    ;(async () => {
-      try {
-        const list = await loadSupportThreads()
-        if (!alive) return
-        const first = list.find((t) => String(t.status || '').toLowerCase() === 'open') || list[0] || null
-        if (first && String(first.id || '')) {
-          await loadSupportThread(String(first.id || ''))
-        }
-      } catch {
-        void 0
-      }
-    })()
-    return () => {
-      alive = false
-    }
-  }, [])
-
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    el.scrollTop = el.scrollHeight
-  }, [supportThreadId, supportMessages.length])
-
   const canSend = String(draft || '').trim().length > 0
   const active = supportThread || null
   const threads = Array.isArray(supportThreads) ? supportThreads : []
