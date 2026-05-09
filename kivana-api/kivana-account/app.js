@@ -561,6 +561,13 @@ function App() {
   const displayNameInputRef = useRef(null)
   const chatKeyRef = useRef({ userId: '', publicJwk: null, privateKey: null })
 
+  function closeAllPopups() {
+    setAdminModal(null)
+    setPwModal(null)
+    setDeleteModal(null)
+    setMsgModal(null)
+  }
+
   const mounted = useRef(false)
   useEffect(() => {
     if (mounted.current) return
@@ -576,6 +583,18 @@ function App() {
       }
       await loadSession()
     })()
+  }, [])
+
+  useEffect(() => {
+    closeAllPopups()
+  }, [section])
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') closeAllPopups()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
   useEffect(() => {
@@ -1655,6 +1674,7 @@ function App() {
                     type: 'button',
                     disabled: busy,
                     onClick: async () => {
+                      closeAllPopups()
                       if (me?.isAdmin) {
                         setSection('admin')
                         setAdminPage('messages')
@@ -1962,6 +1982,7 @@ function App() {
         {
           type: 'button',
           onClick: async () => {
+            closeAllPopups()
             if (onSelect) {
               await onSelect()
               return
