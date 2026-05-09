@@ -424,7 +424,6 @@ function SupportChatSection({
                   }
                 },
                 className: 'px-4 py-2.5 rounded-full border border-gray-200 bg-white text-[14px] font-semibold text-[#1B1748]',
-                disabled: busy,
               },
               threads.map((t) =>
                 React.createElement('option', { key: String(t.id || ''), value: String(t.id || '') }, String(t.subject || 'Support'))
@@ -446,7 +445,6 @@ function SupportChatSection({
                 setStatus({ kind: 'err', text: String(err?.message || err) })
               }
             },
-            disabled: busy,
             className:
               'px-5 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
           },
@@ -599,6 +597,7 @@ function App() {
   const yearlyPro = pricing.code === 'NOK' ? monthlyPro * yearlyFactor : Number((monthlyPro * yearlyFactor).toFixed(2))
 
   async function ensureChatKeys() {
+    if (!(window.crypto && window.crypto.subtle)) return null
     const userId = String(me?.id || '')
     if (!userId) return null
     if (chatKeyRef.current.userId === userId && chatKeyRef.current.privateKey && chatKeyRef.current.publicJwk) {
@@ -646,17 +645,6 @@ function App() {
       setAdminSupportUnreadCount(0)
     }
   }
-
-  useEffect(() => {
-    if (!me?.id) return
-    ;(async () => {
-      try {
-        await ensureChatKeys()
-      } catch {
-        void 0
-      }
-    })()
-  }, [me?.id])
 
   useEffect(() => {
     if (!me?.id) return
@@ -966,23 +954,37 @@ function App() {
     const res = await apiFetch(`/v1/support/threads/${encodeURIComponent(tid)}`, { method: 'GET' })
     const json = await res.json()
     setSupportThread(json?.thread || null)
-    const kp = await ensureChatKeys().catch(() => null)
     const msgs = Array.isArray(json?.messages) ? json.messages : []
-    setSupportMessages(await decryptE2EEMessagesIfPossible(msgs, kp))
+    const needsDecrypt = msgs.some((m) => isE2EEBody(m?.body))
+    if (needsDecrypt) {
+      const kp = await ensureChatKeys().catch(() => null)
+      setSupportMessages(await decryptE2EEMessagesIfPossible(msgs, kp))
+    } else {
+      setSupportMessages(msgs)
+    }
     setSupportThreadId(String(json?.thread?.id || tid))
     return json
   }
 
   async function createSupportThread(subject, message) {
-    const kp = await ensureChatKeys()
-    const admins = supportAdminKeys.length ? supportAdminKeys : await loadSupportAdminKeys()
-    if (!admins.length) throw new Error('support_keys_missing')
-    const recipients = [{ id: kp.userId, publicJwk: kp.publicJwk }, ...admins]
-    const enc = await e2eeEncryptMessage(message, recipients)
-    const res = await apiFetch('/v1/support/threads', { method: 'POST', body: JSON.stringify({ subject: subject || null, message: enc }) })
+    let outMessage = String(message || '')
+    if (window.crypto && window.crypto.subtle) {
+      try {
+        const kp = await ensureChatKeys()
+        const admins = supportAdminKeys.length ? supportAdminKeys : await loadSupportAdminKeys()
+        if (kp?.userId && kp?.publicJwk && admins.length) {
+          const recipients = [{ id: kp.userId, publicJwk: kp.publicJwk }, ...admins]
+          outMessage = await e2eeEncryptMessage(outMessage, recipients)
+        }
+      } catch {
+        void 0
+      }
+    }
+    const res = await apiFetch('/v1/support/threads', { method: 'POST', body: JSON.stringify({ subject: subject || null, message: outMessage }) })
     const json = await res.json()
     setSupportThread(json?.thread || null)
     const msgs = Array.isArray(json?.messages) ? json.messages : []
+    const kp = await ensureChatKeys().catch(() => null)
     setSupportMessages(await decryptE2EEMessagesIfPossible(msgs, kp))
     setSupportThreadId(String(json?.thread?.id || ''))
     return json
@@ -991,12 +993,20 @@ function App() {
   async function sendSupportThreadMessage(threadId, message) {
     const tid = String(threadId || '')
     if (!tid) throw new Error('Missing thread')
-    const kp = await ensureChatKeys()
-    const admins = supportAdminKeys.length ? supportAdminKeys : await loadSupportAdminKeys()
-    if (!admins.length) throw new Error('support_keys_missing')
-    const recipients = [{ id: kp.userId, publicJwk: kp.publicJwk }, ...admins]
-    const enc = await e2eeEncryptMessage(message, recipients)
-    await apiFetch(`/v1/support/threads/${encodeURIComponent(tid)}/messages`, { method: 'POST', body: JSON.stringify({ message: enc }) })
+    let outMessage = String(message || '')
+    if (window.crypto && window.crypto.subtle) {
+      try {
+        const kp = await ensureChatKeys()
+        const admins = supportAdminKeys.length ? supportAdminKeys : await loadSupportAdminKeys()
+        if (kp?.userId && kp?.publicJwk && admins.length) {
+          const recipients = [{ id: kp.userId, publicJwk: kp.publicJwk }, ...admins]
+          outMessage = await e2eeEncryptMessage(outMessage, recipients)
+        }
+      } catch {
+        void 0
+      }
+    }
+    await apiFetch(`/v1/support/threads/${encodeURIComponent(tid)}/messages`, { method: 'POST', body: JSON.stringify({ message: outMessage }) })
   }
 
   async function adminLoadSupportThread(threadId) {
@@ -1962,7 +1972,6 @@ function App() {
           className: `w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-[14px] font-semibold transition-colors ${
             active ? 'bg-[#F0EEFC] text-[#4F3DDD]' : 'text-gray-700 hover:bg-gray-50'
           }`,
-          disabled: busy,
         },
         React.createElement('span', { className: 'w-5 h-5 text-current' }, icon),
         React.createElement('span', null, label),
