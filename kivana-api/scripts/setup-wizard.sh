@@ -28,6 +28,7 @@ KIVANA_BIND_IP="0.0.0.0"
 DOMAIN_NAME="$DOMAIN_NAME_DEFAULT"
 HTTPS_EMAIL=""
 ENABLE_HTTPS="n"
+FORCE_NO_HTTPS="n"
 POSTGRES_PASSWORD=""
 JWT_SECRET=""
 ADMIN_TOKEN=""
@@ -45,7 +46,7 @@ for arg in "$@"; do
     --base-dir=*) BASE_DIR="${arg#*=}" ;;
     --repo=*) REPO_URL="${arg#*=}" ;;
     --http-port=*) HTTP_PORT="${arg#*=}" ;;
-    --no-https) ENABLE_HTTPS="n" ;;
+    --no-https) ENABLE_HTTPS="n"; FORCE_NO_HTTPS="y" ;;
     --admin-email=*) ADMIN_EMAIL="${arg#*=}" ;;
     --admin-password=*) ADMIN_PASSWORD="${arg#*=}" ;;
   esac
@@ -293,7 +294,23 @@ else
   info "Auto mode: minimal prompts, safe updates."
   if [ -n "${KIVANA_DOMAIN:-}" ]; then DOMAIN_NAME="$KIVANA_DOMAIN"; fi
   if [ -z "$DOMAIN_NAME" ]; then DOMAIN_NAME="$DOMAIN_NAME_DEFAULT"; fi
-  ENABLE_HTTPS="${ENABLE_HTTPS:-y}"
+  if [ -n "${KIVANA_ENABLE_HTTPS:-}" ]; then
+    v="$(echo "${KIVANA_ENABLE_HTTPS}" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
+    if [ "$v" = "1" ] || [ "$v" = "true" ] || [ "$v" = "y" ] || [ "$v" = "yes" ]; then
+      ENABLE_HTTPS="y"
+    else
+      ENABLE_HTTPS="n"
+    fi
+  elif [ "$FORCE_NO_HTTPS" = "y" ]; then
+    ENABLE_HTTPS="n"
+  else
+    d="$(echo "$DOMAIN_NAME" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
+    if [ "$d" = "localhost" ] || [ "$d" = "127.0.0.1" ] || [ "$d" = "" ]; then
+      ENABLE_HTTPS="n"
+    else
+      ENABLE_HTTPS="y"
+    fi
+  fi
 fi
 
 if [ "$ENABLE_HTTPS" = "y" ]; then
@@ -497,9 +514,21 @@ setup_caddy_https() {
   local domain="$1"
   local upstream_port="$2"
   local email="${3:-}"
+  local root_domain="$domain"
+  local www_domain=""
+  local dot_count=""
 
   if [ -z "$domain" ]; then
     return 0
+  fi
+  domain="$(echo "$domain" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
+  root_domain="$domain"
+  if [[ "$domain" == www.* ]]; then
+    root_domain="${domain#www.}"
+  fi
+  dot_count="$(echo "$root_domain" | awk -F'.' '{print NF-1}')"
+  if [ "$dot_count" = "1" ]; then
+    www_domain="www.${root_domain}"
   fi
 
   if ! command -v systemctl >/dev/null 2>&1; then
@@ -526,30 +555,34 @@ setup_caddy_https() {
     cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.backup-${ts}" || true
   fi
 
-  info "Writing Caddyfile (HTTPS for ${domain})..."
+  info "Writing Caddyfile (HTTPS for ${root_domain})..."
   if [ -n "$email" ]; then
     cat > /etc/caddy/Caddyfile <<EOF
 {
   email ${email}
 }
-
-${domain} {
-  encode zstd gzip
-  redir /portal / 308
-  redir /portal/ / 308
-  reverse_proxy 127.0.0.1:${upstream_port}
-}
 EOF
   else
     cat > /etc/caddy/Caddyfile <<EOF
-${domain} {
-  encode zstd gzip
-  redir /portal / 308
-  redir /portal/ / 308
-  reverse_proxy 127.0.0.1:${upstream_port}
+EOF
+  fi
+
+  if [ -n "$www_domain" ]; then
+    cat >> /etc/caddy/Caddyfile <<EOF
+
+${www_domain} {
+  redir https://${root_domain}{uri} permanent
 }
 EOF
   fi
+
+  cat >> /etc/caddy/Caddyfile <<EOF
+
+${root_domain} {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:${upstream_port}
+}
+EOF
 
   systemctl enable --now caddy >/dev/null 2>&1 || true
   if systemctl reload caddy >/dev/null 2>&1; then
@@ -592,9 +625,11 @@ echo -e "\n${C_GREEN}===============================================${C_RESET}"
 echo -e "${C_GREEN}✓ Setup Complete!${C_RESET}"
 echo -e "${C_GREEN}===============================================${C_RESET}"
 if [ -n "$DOMAIN_NAME" ] && [ "$ENABLE_HTTPS" = "y" ]; then
-  echo -e "${C_BOLD}Portal:${C_RESET} ${C_BLUE}https://${DOMAIN_NAME}/${C_RESET}"
-  echo -e "${C_BOLD}Admin:${C_RESET}  ${C_BLUE}https://${DOMAIN_NAME}/admin/${C_RESET}"
-  echo -e "${C_BOLD}API:${C_RESET}    ${C_BLUE}https://${DOMAIN_NAME}/healthz${C_RESET}"
+  d="$(echo "$DOMAIN_NAME" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
+  if [[ "$d" == www.* ]]; then d="${d#www.}"; fi
+  echo -e "${C_BOLD}Portal:${C_RESET} ${C_BLUE}https://${d}/${C_RESET}"
+  echo -e "${C_BOLD}Admin:${C_RESET}  ${C_BLUE}https://${d}/admin/${C_RESET}"
+  echo -e "${C_BOLD}API:${C_RESET}    ${C_BLUE}https://${d}/healthz${C_RESET}"
 else
   echo -e "${C_BOLD}Portal:${C_RESET} ${C_BLUE}http://${PUBLIC_IP}${PORT_SUFFIX}/${C_RESET}"
   echo -e "${C_BOLD}Admin:${C_RESET}  ${C_BLUE}http://${PUBLIC_IP}${PORT_SUFFIX}/admin/${C_RESET}"
