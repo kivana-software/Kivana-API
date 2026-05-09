@@ -1196,22 +1196,18 @@ html[data-theme="dark"] .btn-secondary:hover {
 
 .previewGrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 1rem;
 }
 
-@media (max-width: 900px) {
-  .previewGrid {
-    grid-template-columns: 1fr;
-  }
-}
-
 .previewShot {
+  position: relative;
   border-radius: 18px;
   overflow: hidden;
   border: 1px solid rgba(255,255,255,0.10);
   box-shadow: 0 22px 70px rgba(0,0,0,0.55);
   background: #0b1322;
+  cursor: pointer;
 }
 
 .previewImg {
@@ -1221,10 +1217,26 @@ html[data-theme="dark"] .btn-secondary:hover {
 }
 
 .previewCaption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   padding: 0.75rem 1rem;
-  border-top: 1px solid rgba(255,255,255,0.08);
-  color: rgba(229,231,235,0.80);
+  background: rgba(2, 6, 23, 0.72);
+  color: rgba(255,255,255,0.92);
   font-weight: 800;
+}
+
+.previewModalImg {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 14px;
+}
+
+#previewModal .modalPanel {
+  width: min(1200px, 100%);
+  max-height: min(88vh, 980px);
 }
 
 .preview-svg {

@@ -66,6 +66,8 @@ const els = {
   btnCtaDownloadMac: document.getElementById('btnCtaDownloadMac'),
   btnCtaDownloadWin: document.getElementById('btnCtaDownloadWin'),
   btnCtaViewPlans: document.getElementById('btnCtaViewPlans'),
+  btnFooterDownloadMac: document.getElementById('btnFooterDownloadMac'),
+  btnFooterDownloadWin: document.getElementById('btnFooterDownloadWin'),
   btnAccountantService: document.getElementById('btnAccountantService'),
   btnBackToWebsite: document.getElementById('btnBackToWebsite'),
   footerYear: document.getElementById('footerYear'),
@@ -91,6 +93,12 @@ const els = {
   btnCloseMacGuide: document.getElementById('btnCloseMacGuide'),
   macGuideBackdrop: document.getElementById('macGuideBackdrop'),
   macGuideContent: document.getElementById('macGuideContent'),
+
+  previewModal: document.getElementById('previewModal'),
+  btnClosePreviewModal: document.getElementById('btnClosePreviewModal'),
+  previewModalBackdrop: document.getElementById('previewModalBackdrop'),
+  previewModalTitle: document.getElementById('previewModalTitle'),
+  previewModalImg: document.getElementById('previewModalImg'),
 
   actionModal: document.getElementById('actionModal'),
   actionModalTitle: document.getElementById('actionModalTitle'),
@@ -197,9 +205,9 @@ function formatMoney(amount) {
 function getTheme() {
   try {
     const t = String(localStorage.getItem(LS_THEME) || '').trim().toLowerCase()
-    return t === 'dark' ? 'dark' : 'light'
+    return t === 'light' ? 'light' : 'dark'
   } catch {
-    return 'light'
+    return 'dark'
   }
 }
 
@@ -548,6 +556,20 @@ function openMacGuide() {
 function closeMacGuide() {
   if (!els.macGuideModal) return
   els.macGuideModal.classList.add('hidden')
+}
+
+function openPreviewModal({ src, title }) {
+  if (!els.previewModal || !els.previewModalImg || !els.previewModalTitle) return
+  els.previewModalTitle.textContent = String(title || 'Preview')
+  els.previewModalImg.src = String(src || '')
+  els.previewModalImg.alt = String(title || 'Screenshot')
+  els.previewModal.classList.remove('hidden')
+}
+
+function closePreviewModal() {
+  if (!els.previewModal) return
+  els.previewModal.classList.add('hidden')
+  if (els.previewModalImg) els.previewModalImg.src = ''
 }
 
 function profileKey(userId) {
@@ -1441,6 +1463,23 @@ if (els.btnPrebetaDownloadWin) els.btnPrebetaDownloadWin.addEventListener('click
 if (els.btnMacGuide) els.btnMacGuide.addEventListener('click', openMacGuide)
 if (els.btnCloseMacGuide) els.btnCloseMacGuide.addEventListener('click', closeMacGuide)
 if (els.macGuideBackdrop) els.macGuideBackdrop.addEventListener('click', closeMacGuide)
+if (els.btnClosePreviewModal) els.btnClosePreviewModal.addEventListener('click', closePreviewModal)
+if (els.previewModalBackdrop) els.previewModalBackdrop.addEventListener('click', closePreviewModal)
+
+document.querySelectorAll('.previewImg').forEach((img) => {
+  img.addEventListener('click', () => {
+    const src = img.getAttribute('src')
+    if (!src) return
+    const title = img.getAttribute('alt') || 'Screenshot'
+    openPreviewModal({ src, title })
+  })
+})
+
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return
+  if (els.previewModal && !els.previewModal.classList.contains('hidden')) closePreviewModal()
+  if (els.macGuideModal && !els.macGuideModal.classList.contains('hidden')) closeMacGuide()
+})
 
 if (els.btnMacGuide) {
   els.btnMacGuide.classList.toggle('hidden', !isMacOs())
@@ -1533,6 +1572,8 @@ if (els.btnCtaDownloadMac) els.btnCtaDownloadMac.addEventListener('click', () =>
 if (els.btnCtaDownloadWin) els.btnCtaDownloadWin.addEventListener('click', () => {
   void startPrebetaDownload('windows-x86_64')
 })
+if (els.btnFooterDownloadMac) els.btnFooterDownloadMac.addEventListener('click', () => void startPrebetaDownload('darwin-aarch64'))
+if (els.btnFooterDownloadWin) els.btnFooterDownloadWin.addEventListener('click', () => void startPrebetaDownload('windows-x86_64'))
 
 let selectedOs = 'mac'
 function setSelectedOs(os) {
@@ -1555,7 +1596,7 @@ function showMarketingStatus(message) {
 async function handleDownloadClick() {
   if (isAuthed()) return
   await goToPublicSection('how')
-  showMarketingStatus('Downloads are pre-beta. Create an account to get started.')
+  showMarketingStatus('Downloads are available below.')
 }
 
 if (els.osMac) els.osMac.addEventListener('click', () => setSelectedOs('mac'))

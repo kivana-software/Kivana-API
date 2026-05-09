@@ -19,9 +19,9 @@
     ;(() => {
       try {
         const t = localStorage.getItem('kivanaPortal/theme')
-        document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light')
+        document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark')
       } catch {
-        document.documentElement.setAttribute('data-theme', 'light')
+        document.documentElement.setAttribute('data-theme', 'dark')
       }
     })()
   </script>
@@ -63,7 +63,7 @@
     </div>
 
     <div class="wipBanner" id="wipBanner" role="status" aria-live="polite">
-      Basic is free • Ordinary/Pro/Accountant coming soon
+      Under production • Basic is free to test
     </div>
 
     <div class="mobile-menu hidden" id="mobileMenu" role="dialog" aria-modal="true" aria-label="Menu">
@@ -82,10 +82,6 @@
           <button class="mobile-menu-link hidden" id="mAdmin">Admin</button>
         </div>
         <div class="mobile-menu-actions" id="mobileMenuPublicActions">
-          <div class="os-toggle" id="mOsToggle">
-            <button type="button" class="os-btn active" id="mOsMac">macOS</button>
-            <button type="button" class="os-btn" id="mOsWin">Windows</button>
-          </div>
           <button class="btn btn-secondary w-full themeToggle" id="mThemeToggle" type="button">Theme</button>
           <button class="btn btn-secondary w-full" id="mSignIn">Sign in</button>
           <button class="btn btn-primary w-full" id="mGetKivana">Create account</button>
@@ -168,11 +164,7 @@
             </div>
             <div class="prebetaTitle">Kivana</div>
             <div class="prebetaSubtitle">
-              Personal finance app that runs on your device.
-            </div>
-            <div class="prebetaActions">
-              <button class="btn btn-primary" id="btnPrebetaCreate">Create account</button>
-              <button class="btn btn-secondary" id="btnPrebetaSignIn">Sign in</button>
+              Under production. Basic is free to test.
             </div>
           </div>
 
@@ -208,7 +200,7 @@
               <ol class="prebetaSteps">
                 <li>Download and install the app.</li>
                 <li>Use it locally on your device.</li>
-                <li>Sign in only for your plan and updates.</li>
+                <li>Account is optional (updates and future plans).</li>
               </ol>
               <div class="prebetaNote">Ordinary, Pro, and Accountant editions are planned for next month.</div>
             </div>
@@ -219,7 +211,7 @@
           <div class="hero hero-solo">
             <div>
               <h2 class="hero-title">Your finances. On your device.</h2>
-              <p class="hero-subtitle">Basic is free. Ordinary, Pro, and Accountant editions are coming soon.</p>
+              <p class="hero-subtitle">Under production. Basic is free to test. Ordinary, Pro, and Accountant editions are coming soon.</p>
               <div class="hero-ctas">
                 <button class="btn btn-primary btn-hero" id="btnCtaDownloadWin">
                   <span class="btnIcon" aria-hidden="true">
@@ -237,7 +229,6 @@
                   </span>
                   <span>Download macOS</span>
                 </button>
-                <button class="btn btn-secondary btn-hero" id="btnHeroStartFree">Create account</button>
               </div>
               <div class="hero-meta">
                 <span class="text-muted hidden" id="macUnsignedNote">macOS build is unsigned. If blocked: right-click the app → Open.</span>
@@ -294,8 +285,8 @@
               <div class="step">
                 <div class="step-n">3</div>
                 <div>
-                  <div class="step-t">Sign in only when needed</div>
-                  <div class="step-d">Your account is used for your plan and updates.</div>
+                  <div class="step-t">Optional account</div>
+                  <div class="step-d">An account can be used for updates and future plans.</div>
                 </div>
               </div>
             </div>
@@ -401,13 +392,14 @@
       <div id="marketingFooter" class="hidden">
         <section class="section">
           <div class="cta">
-          <div class="cta-title">Create account - No Risk</div>
-          <div class="cta-subtitle">Upgrade only when you need more.</div>
-          <div class="cta-urgency">Start your trial in seconds</div>
-          <div class="cta-urgency">No commitment</div>
-          <div class="cta-urgency">Upgrade anytime</div>
+          <div class="cta-title">Download Basic - Free</div>
+          <div class="cta-subtitle">Under production. Test it for free.</div>
+          <div class="cta-urgency">Local-first</div>
+          <div class="cta-urgency">No forced cloud</div>
+          <div class="cta-urgency">Your data stays on your device</div>
             <div class="cta-actions">
-            <button class="btn btn-primary btn-hero" id="btnCtaCreate">Create account</button>
+            <button class="btn btn-primary btn-hero" id="btnFooterDownloadWin">Download Windows</button>
+            <button class="btn btn-secondary btn-hero" id="btnFooterDownloadMac">Download macOS</button>
             </div>
           </div>
         </section>
@@ -570,6 +562,19 @@
         </div>
       </div>
       <div class="modalBackdrop" id="macGuideBackdrop"></div>
+    </div>
+
+    <div class="modal hidden" id="previewModal" role="dialog" aria-modal="true" aria-label="Screenshot preview">
+      <div class="modalPanel">
+        <div class="modalTop">
+          <div class="modalTitle" id="previewModalTitle">Preview</div>
+          <button class="modalClose" id="btnClosePreviewModal" type="button" aria-label="Close">✕</button>
+        </div>
+        <div class="modalBody">
+          <img id="previewModalImg" class="previewModalImg" alt="" />
+        </div>
+      </div>
+      <div class="modalBackdrop" id="previewModalBackdrop"></div>
     </div>
 
     <div class="modal hidden" id="actionModal" role="dialog" aria-modal="true" aria-label="Action">
