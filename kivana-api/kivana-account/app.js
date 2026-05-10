@@ -2389,8 +2389,8 @@ function App() {
         children: React.createElement(
           'div',
           { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
-          React.createElement(DlCard, { title: 'macOS', sub: 'Apple Silicon • v0.4.15', href: releaseUrl }),
-          React.createElement(DlCard, { title: 'Windows', sub: 'x64 • v0.4.15', href: releaseUrl }),
+          React.createElement(DlCard, { title: 'macOS', sub: 'Apple Silicon • v0.4.16 Basic', href: releaseUrl }),
+          React.createElement(DlCard, { title: 'Windows', sub: 'x64 • v0.4.16 Basic', href: releaseUrl }),
           React.createElement(DlCard, { title: 'All releases', sub: 'GitHub • changelog', href: releaseUrl })
         ),
       })

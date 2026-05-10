@@ -173,9 +173,9 @@ const fullLanding = sp.get('full') !== '0'
 let adminUsersCache = []
 let adminContactCache = []
 let adminActiveTab = 'users'
-const BASIC_RELEASE_URL = 'https://github.com/kivana-software/Kivana/releases/tag/v0.4.15-basic'
-const BASIC_MAC_URL = 'https://github.com/kivana-software/Kivana/releases/download/v0.4.15-basic/Kivana_0.4.15_aarch64.dmg'
-const BASIC_WIN_URL = 'https://github.com/kivana-software/Kivana/releases/download/v0.4.15-basic/Kivana_0.4.15_x64_en-US.msi'
+const BASIC_RELEASE_URL = 'https://github.com/kivana-software/Kivana/releases/tag/v0.4.16-basic'
+const BASIC_MAC_URL = 'https://github.com/kivana-software/Kivana/releases/download/v0.4.16-basic/Kivana_0.4.16_aarch64.dmg'
+const BASIC_WIN_URL = 'https://github.com/kivana-software/Kivana/releases/download/v0.4.16-basic/Kivana_0.4.16_x64_en-US.msi'
 const MAC_GUIDE_MD_URL = 'https://raw.githubusercontent.com/kivana-software/Kivana/main/readmemac.md'
 const LS_THEME = 'kivanaPortal/theme'
 
