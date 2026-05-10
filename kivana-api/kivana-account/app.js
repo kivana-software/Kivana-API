@@ -2370,6 +2370,8 @@ function App() {
 
     function DownloadsSection() {
       const releaseUrl = 'https://github.com/kivana-software/Kivana/releases/latest'
+      const basicMacUrl = 'https://github.com/kivana-software/Kivana/releases/download/v0.4.16-basic/Kivana_0.4.16_aarch64.dmg'
+      const basicWinUrl = 'https://github.com/kivana-software/Kivana/releases/download/v0.4.16-basic/Kivana_0.4.16_x64_en-US.msi'
       const DlCard = ({ title, sub, href }) =>
         React.createElement(
           'a',
@@ -2389,8 +2391,8 @@ function App() {
         children: React.createElement(
           'div',
           { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
-          React.createElement(DlCard, { title: 'macOS', sub: 'Apple Silicon • v0.4.16 Basic', href: releaseUrl }),
-          React.createElement(DlCard, { title: 'Windows', sub: 'x64 • v0.4.16 Basic', href: releaseUrl }),
+          React.createElement(DlCard, { title: 'macOS', sub: 'Apple Silicon • v0.4.16 Basic', href: basicMacUrl }),
+          React.createElement(DlCard, { title: 'Windows', sub: 'x64 • v0.4.16 Basic', href: basicWinUrl }),
           React.createElement(DlCard, { title: 'All releases', sub: 'GitHub • changelog', href: releaseUrl })
         ),
       })
