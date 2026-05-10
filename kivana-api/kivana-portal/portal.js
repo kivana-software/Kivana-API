@@ -552,13 +552,26 @@ async function refreshAccessToken() {
 
 async function startPrebetaDownload(platformKey) {
   if (els.downloadStatus) els.downloadStatus.textContent = 'Opening download…'
+  const url = String(platformKey || '').startsWith('darwin') ? BASIC_MAC_URL : BASIC_WIN_URL
   try {
-    const url = String(platformKey || '').startsWith('darwin') ? BASIC_MAC_URL : BASIC_WIN_URL
-    window.open(url, '_blank', 'noopener')
-    if (els.downloadStatus) els.downloadStatus.textContent = 'Download opened in a new tab.'
+    const a = document.createElement('a')
+    a.href = url
+    a.target = '_blank'
+    a.rel = 'noopener'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    if (els.downloadStatus) els.downloadStatus.textContent = 'Download opened.'
+    return
+  } catch {
+    void 0
+  }
+  try {
+    window.location.assign(url)
+    if (els.downloadStatus) els.downloadStatus.textContent = 'Download started.'
   } catch {
     window.open(BASIC_RELEASE_URL, '_blank', 'noopener')
-    if (els.downloadStatus) els.downloadStatus.textContent = 'Could not open the download automatically. Opened release page.'
+    if (els.downloadStatus) els.downloadStatus.textContent = 'Could not start the download. Opened release page.'
   }
 }
 
