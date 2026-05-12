@@ -3976,7 +3976,20 @@ function App() {
                 'select',
                 {
                   value: String(pp.mode || 'sandbox'),
-                  onChange: (e) => setAdminPayPal((p) => ({ ...(p || {}), mode: e.target.value })),
+                  onChange: (e) => {
+                    const nextMode = String(e.target.value || 'sandbox')
+                    setAdminPayPal((p) => {
+                      const prevMode = String(p?.mode || 'sandbox')
+                      if (prevMode === nextMode) return { ...(p || {}), mode: nextMode }
+                      return {
+                        ...(p || {}),
+                        mode: nextMode,
+                        webhookId: '',
+                        productId: '',
+                        plans: { standard: { monthly: {}, yearly: {} }, pro: { monthly: {}, yearly: {} } },
+                      }
+                    })
+                  },
                   disabled: busy,
                   className:
                     'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',

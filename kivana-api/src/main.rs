@@ -1068,16 +1068,24 @@ async fn admin_set_paypal_config(
         return err(StatusCode::BAD_REQUEST, "invalid_mode").into_response();
     }
     let mut cfg = get_paypal_config(&state.pool).await;
+    let prev_mode = cfg.mode.trim().to_lowercase();
     cfg.enabled = req.enabled;
     cfg.mode = mode;
     cfg.client_id = req.client_id.trim().to_string();
-    cfg.webhook_id = req.webhook_id.trim().to_string();
-    cfg.product_id = req.product_id.clone().and_then(|s| {
-        let t = s.trim().to_string();
-        if t.is_empty() { None } else { Some(t) }
-    });
-    if let Some(plans) = req.plans {
-        cfg.plans = plans;
+    if prev_mode != cfg.mode {
+        cfg.webhook_id = "".to_string();
+        cfg.product_id = None;
+        cfg.plans = PayPalPlanIds::default();
+        cfg.discount_plans = BTreeMap::new();
+    } else {
+        cfg.webhook_id = req.webhook_id.trim().to_string();
+        cfg.product_id = req.product_id.clone().and_then(|s| {
+            let t = s.trim().to_string();
+            if t.is_empty() { None } else { Some(t) }
+        });
+        if let Some(plans) = req.plans {
+            cfg.plans = plans;
+        }
     }
     if let Some(sec) = req.secret {
         let s = sec.trim().to_string();
@@ -4289,7 +4297,10 @@ async fn paypal_create_subscription(
         .send()
         .await?;
     if !res.status().is_success() {
-        anyhow::bail!("paypal_subscription_failed");
+        let status = res.status().as_u16();
+        let body = res.text().await.unwrap_or_default();
+        let snippet: String = body.chars().take(240).collect();
+        anyhow::bail!("paypal_subscription_failed:{}:{}", status, snippet);
     }
     let json = res.json::<PayPalCreateSubscriptionResponse>().await?;
     let approve = json
