@@ -478,11 +478,17 @@ struct PricingConfig {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+#[serde(default)]
 #[serde(rename_all = "camelCase")]
 struct DownloadsConfig {
     show_mac: bool,
     show_windows: bool,
     show_source: bool,
+    basic_mac_url: String,
+    basic_windows_url: String,
+    basic_source_url: String,
+    paid_mac_url: String,
+    paid_windows_url: String,
 }
 
 impl Default for DownloadsConfig {
@@ -491,6 +497,11 @@ impl Default for DownloadsConfig {
             show_mac: true,
             show_windows: true,
             show_source: false,
+            basic_mac_url: "https://github.com/kivana-software/Kivana/releases/download/v0.4.16-basic/Kivana_0.4.16_aarch64.dmg".to_string(),
+            basic_windows_url: "https://github.com/kivana-software/Kivana/releases/download/v0.4.16-basic/Kivana_0.4.16_x64_en-US.msi".to_string(),
+            basic_source_url: "https://github.com/kivana-software/Kivana/archive/refs/tags/v0.4.16-basic.zip".to_string(),
+            paid_mac_url: "".to_string(),
+            paid_windows_url: "".to_string(),
         }
     }
 }

@@ -206,52 +206,6 @@ function randomBytes(len) {
   return out
 }
 
-function ghReleaseCacheKey(repo) {
-  return `kivanaPortal/ghRelease:${String(repo || '')}`
-}
-
-function readJsonStorage(key) {
-  try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return null
-    const j = JSON.parse(raw)
-    return j && typeof j === 'object' ? j : null
-  } catch {
-    return null
-  }
-}
-
-function writeJsonStorage(key, value) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value))
-  } catch {
-  }
-}
-
-async function fetchGithubLatestRelease(repo) {
-  const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
-    cache: 'no-store',
-    headers: { accept: 'application/vnd.github+json' },
-  })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const json = await res.json().catch(() => ({}))
-  const tag = String(json?.tag_name || '').trim()
-  const htmlUrl = String(json?.html_url || '').trim()
-  const assets = Array.isArray(json?.assets) ? json.assets : []
-  const findAssetUrl = (exts) => {
-    for (const a of assets) {
-      const name = String(a?.name || '').toLowerCase()
-      const url = String(a?.browser_download_url || '').trim()
-      if (!url) continue
-      if (exts.some((e) => name.endsWith(e))) return url
-    }
-    return ''
-  }
-  const macUrl = findAssetUrl(['.dmg'])
-  const winUrl = findAssetUrl(['.msi', '.exe'])
-  return { tag, htmlUrl, macUrl, winUrl }
-}
-
 function chatKeyStorageKey(userId) {
   return `kivanaPortal/chatKey:${String(userId || '')}`
 }
@@ -2649,44 +2603,17 @@ function App() {
     }
 
     function DownloadsSection() {
-      const basicReleasesUrl = 'https://github.com/kivana-software/Kivana/releases/latest'
-      const proReleasesUrl = 'https://github.com/kivana-software/Kivana-Pro/releases/latest'
-      const basicMacUrl = 'https://github.com/kivana-software/Kivana/releases/download/v0.4.16-basic/Kivana_0.4.16_aarch64.dmg'
-      const basicWinUrl = 'https://github.com/kivana-software/Kivana/releases/download/v0.4.16-basic/Kivana_0.4.16_x64_en-US.msi'
-      const basicSourceUrl = 'https://github.com/kivana-software/Kivana/archive/refs/tags/v0.4.16-basic.zip'
       const dl = cfg?.downloads || {}
       const showMac = dl?.showMac !== false
       const showWindows = dl?.showWindows !== false
       const showSource = dl?.showSource === true
       const isBasic = currentKey === 'basic'
-      const [proRelease, setProRelease] = useState(null)
-
-      useEffect(() => {
-        if (isBasic) return
-        const repo = 'kivana-software/Kivana-Pro'
-        const cached = readJsonStorage(ghReleaseCacheKey(repo))
-        const cachedAt = cached?.cachedAt ? Number(cached.cachedAt) : 0
-        const maxAgeMs = 10 * 60 * 1000
-        if (cached && cachedAt > 0 && Date.now() - cachedAt < maxAgeMs && cached?.data) {
-          setProRelease(cached.data)
-          return
-        }
-        ;(async () => {
-          try {
-            const data = await fetchGithubLatestRelease(repo)
-            setProRelease(data)
-            writeJsonStorage(ghReleaseCacheKey(repo), { cachedAt: Date.now(), data })
-          } catch {
-            setProRelease(null)
-          }
-        })()
-      }, [isBasic])
-
-      const releasesUrl = isBasic ? basicReleasesUrl : proReleasesUrl
-      const proTag = String(proRelease?.tag || '').trim()
-      const proMac = String(proRelease?.macUrl || '').trim() || releasesUrl
-      const proWin = String(proRelease?.winUrl || '').trim() || releasesUrl
-      const proLabel = proTag ? proTag : 'latest'
+      const basicMacUrl = String(dl?.basicMacUrl || '').trim()
+      const basicWinUrl = String(dl?.basicWindowsUrl || '').trim()
+      const basicSourceUrl = String(dl?.basicSourceUrl || '').trim()
+      const paidMacUrl = String(dl?.paidMacUrl || '').trim()
+      const paidWinUrl = String(dl?.paidWindowsUrl || '').trim()
+      const releasesUrl = 'https://github.com/kivana-software/Kivana/releases/latest'
       const DlCard = ({ title, sub, href }) =>
         React.createElement(
           'a',
@@ -2700,6 +2627,14 @@ function App() {
           React.createElement('div', { className: 'mt-1 text-xs text-gray-600' }, sub)
         )
 
+      const DisabledCard = ({ title, sub }) =>
+        React.createElement(
+          'div',
+          { className: 'block rounded-3xl border border-gray-100 bg-white p-6 opacity-60' },
+          React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, title),
+          React.createElement('div', { className: 'mt-1 text-xs text-gray-600' }, sub)
+        )
+
       return SectionCard({
         title: 'Downloads',
         subtitle: 'Get the desktop app. Your license unlocks features automatically when signed in.',
@@ -2707,18 +2642,22 @@ function App() {
           'div',
           { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
           showMac
-            ? React.createElement(DlCard, {
-                title: 'macOS',
-                sub: isBasic ? 'Apple Silicon • v0.4.16 Basic' : `macOS • ${proLabel}`,
-                href: isBasic ? basicMacUrl : proMac,
-              })
+            ? isBasic
+              ? basicMacUrl
+                ? React.createElement(DlCard, { title: 'macOS', sub: 'macOS • Basic', href: basicMacUrl })
+                : React.createElement(DisabledCard, { title: 'macOS', sub: 'Not available' })
+              : paidMacUrl
+                ? React.createElement(DlCard, { title: 'macOS', sub: 'macOS • Paid', href: paidMacUrl })
+                : React.createElement(DisabledCard, { title: 'macOS', sub: 'Not available (admin upload pending)' })
             : null,
           showWindows
-            ? React.createElement(DlCard, {
-                title: 'Windows',
-                sub: isBasic ? 'x64 • v0.4.16 Basic' : `Windows • ${proLabel}`,
-                href: isBasic ? basicWinUrl : proWin,
-              })
+            ? isBasic
+              ? basicWinUrl
+                ? React.createElement(DlCard, { title: 'Windows', sub: 'Windows • Basic', href: basicWinUrl })
+                : React.createElement(DisabledCard, { title: 'Windows', sub: 'Not available' })
+              : paidWinUrl
+                ? React.createElement(DlCard, { title: 'Windows', sub: 'Windows • Paid', href: paidWinUrl })
+                : React.createElement(DisabledCard, { title: 'Windows', sub: 'Not available (admin upload pending)' })
             : null,
           showSource && isBasic ? React.createElement(DlCard, { title: 'Source', sub: 'v0.4.16 Basic • .zip', href: basicSourceUrl }) : null,
           React.createElement(DlCard, { title: 'All releases', sub: 'GitHub • changelog', href: releasesUrl })
@@ -3828,6 +3767,76 @@ function App() {
                   onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), downloads: { ...(c?.downloads || {}), showSource: !!e.target.checked } })),
                   disabled: busy,
                   className: 'w-5 h-5 accent-[#4F3DDD]',
+                })
+              )
+            )
+          ),
+          React.createElement(
+            'div',
+            { className: 'rounded-2xl border border-gray-100 px-5 py-4' },
+            React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Download URLs'),
+            React.createElement('div', { className: 'mt-1 text-xs text-gray-600' }, 'Set links used by the Downloads page. Leave empty to disable that download.'),
+            React.createElement(
+              'div',
+              { className: 'mt-4 grid gap-3' },
+              React.createElement('div', null,
+                React.createElement('div', { className: 'text-xs font-semibold text-gray-600' }, 'Basic macOS URL'),
+                React.createElement('input', {
+                  className:
+                    'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                  type: 'text',
+                  value: String(cfg?.downloads?.basicMacUrl || ''),
+                  onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), downloads: { ...(c?.downloads || {}), basicMacUrl: e.target.value } })),
+                  disabled: busy,
+                  placeholder: 'https://...',
+                })
+              ),
+              React.createElement('div', null,
+                React.createElement('div', { className: 'text-xs font-semibold text-gray-600' }, 'Basic Windows URL'),
+                React.createElement('input', {
+                  className:
+                    'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                  type: 'text',
+                  value: String(cfg?.downloads?.basicWindowsUrl || ''),
+                  onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), downloads: { ...(c?.downloads || {}), basicWindowsUrl: e.target.value } })),
+                  disabled: busy,
+                  placeholder: 'https://...',
+                })
+              ),
+              React.createElement('div', null,
+                React.createElement('div', { className: 'text-xs font-semibold text-gray-600' }, 'Basic Source URL'),
+                React.createElement('input', {
+                  className:
+                    'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                  type: 'text',
+                  value: String(cfg?.downloads?.basicSourceUrl || ''),
+                  onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), downloads: { ...(c?.downloads || {}), basicSourceUrl: e.target.value } })),
+                  disabled: busy,
+                  placeholder: 'https://...',
+                })
+              ),
+              React.createElement('div', null,
+                React.createElement('div', { className: 'text-xs font-semibold text-gray-600' }, 'Paid macOS URL'),
+                React.createElement('input', {
+                  className:
+                    'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                  type: 'text',
+                  value: String(cfg?.downloads?.paidMacUrl || ''),
+                  onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), downloads: { ...(c?.downloads || {}), paidMacUrl: e.target.value } })),
+                  disabled: busy,
+                  placeholder: 'https://...',
+                })
+              ),
+              React.createElement('div', null,
+                React.createElement('div', { className: 'text-xs font-semibold text-gray-600' }, 'Paid Windows URL'),
+                React.createElement('input', {
+                  className:
+                    'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                  type: 'text',
+                  value: String(cfg?.downloads?.paidWindowsUrl || ''),
+                  onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), downloads: { ...(c?.downloads || {}), paidWindowsUrl: e.target.value } })),
+                  disabled: busy,
+                  placeholder: 'https://...',
                 })
               )
             )
