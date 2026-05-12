@@ -3957,7 +3957,7 @@ async fn portal_select_plan(
     };
 
     let paypal_cfg = get_paypal_config(&state.pool).await;
-    if paypal_cfg.enabled && (plan_code_to_lookup == "standard" || plan_code_to_lookup == "pro") {
+    if paypal_cfg.enabled && !is_trial_request && (plan_code_to_lookup == "standard" || plan_code_to_lookup == "pro") {
         return err(StatusCode::PAYMENT_REQUIRED, "payment_required").into_response();
     }
     let plan_id = if plan_code == "basic" {
@@ -3981,6 +3981,11 @@ async fn portal_select_plan(
     };
 
     let now = OffsetDateTime::now_utc();
+    let portal_cfg = if is_trial_request {
+        Some(get_portal_config(&state.pool).await)
+    } else {
+        None
+    };
 
     if plan_code == "basic" && paypal_cfg.enabled {
         let row = sqlx::query(
@@ -4009,7 +4014,12 @@ async fn portal_select_plan(
 
     if plan_code != "basic" {
         let (ends_at, trial_ends_at) = if is_trial_request {
-            let trial_end = now + Duration::days(14);
+            let trial_days = portal_cfg
+                .as_ref()
+                .map(|c| c.pricing.trial_days)
+                .unwrap_or(14)
+                .max(1) as i64;
+            let trial_end = now + Duration::days(trial_days);
             (Some(trial_end), Some(trial_end))
         } else {
             match plan_code_to_lookup.as_str() {
