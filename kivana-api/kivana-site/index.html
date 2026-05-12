@@ -166,6 +166,12 @@
         font-size: 13px;
         min-height: 18px;
       }
+      #authCaptchaQuestion {
+        margin-top: 8px;
+        color: rgba(27, 23, 72, 0.7);
+        font-size: 13px;
+        font-weight: 700;
+      }
       #authMetaRow {
         margin-top: 12px;
         display: flex;
@@ -454,6 +460,17 @@
               </button>
             </div>
           </div>
+          <div class="authField" id="authCaptchaField">
+            <label class="authLabel" for="authCaptchaAnswer">Human check</label>
+            <div id="authCaptchaQuestion">Loading…</div>
+            <div class="authInputWrap">
+              <svg class="authIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+                <path d="M9 10h6M10 14h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+              <input class="authInput" id="authCaptchaAnswer" name="captcha" type="text" inputmode="numeric" autocomplete="off" placeholder="Answer" required />
+            </div>
+          </div>
           <div class="authField authHidden" id="authConfirmField">
             <div class="authInputWrap">
               <svg class="authIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -598,7 +615,30 @@
             termsWrap: document.getElementById("authTermsWrap"),
             terms: document.getElementById("authTerms"),
             togglePw: document.getElementById("authTogglePw"),
+            captchaField: document.getElementById("authCaptchaField"),
+            captchaQuestion: document.getElementById("authCaptchaQuestion"),
+            captchaAnswer: document.getElementById("authCaptchaAnswer"),
           }
+        }
+
+        var captchaToken = ""
+        function refreshCaptcha() {
+          var e = els()
+          captchaToken = ""
+          if (e.captchaQuestion) e.captchaQuestion.textContent = "Loading…"
+          if (e.captchaAnswer) e.captchaAnswer.value = ""
+          return fetch("/v1/captcha/challenge", { cache: "no-store" })
+            .then(function (r) { return r.ok ? r.json() : null })
+            .then(function (j) {
+              var q = j && j.question ? String(j.question || "") : ""
+              var t = j && j.token ? String(j.token || "") : ""
+              if (e.captchaQuestion) e.captchaQuestion.textContent = q ? q : "Reload the page to try again."
+              captchaToken = t
+            })
+            .catch(function () {
+              if (e.captchaQuestion) e.captchaQuestion.textContent = "Reload the page to try again."
+              captchaToken = ""
+            })
         }
 
         function setMode(nextMode) {
@@ -640,6 +680,7 @@
             if (e.terms) e.terms.required = true
           }
           if (e.error) e.error.textContent = ""
+          refreshCaptcha()
         }
 
         function openModal(prefMode) {
@@ -648,6 +689,7 @@
           if (!e.modal) return
           e.modal.style.display = "flex"
           e.modal.setAttribute("aria-hidden", "false")
+          refreshCaptcha()
           setTimeout(function () {
             try { e.email && e.email.focus() } catch (err) {}
           }, 0)
@@ -689,8 +731,13 @@
           var email = String(e.email.value || "").trim()
           var password = String(e.password.value || "")
           var confirm = e.confirm ? String(e.confirm.value || "") : ""
+          var captchaAnswer = e.captchaAnswer ? String(e.captchaAnswer.value || "").trim() : ""
           if (!email || !password) {
             if (e.error) e.error.textContent = "Email and password are required."
+            return
+          }
+          if (!captchaToken || !captchaAnswer) {
+            if (e.error) e.error.textContent = "Please complete the human check."
             return
           }
           if (mode === "signup") {
@@ -719,7 +766,7 @@
           fetch(endpoint, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ email: email, password: password }),
+            body: JSON.stringify({ email: email, password: password, captchaToken: captchaToken, captchaAnswer: captchaAnswer }),
           })
             .then(function (r) {
               if (!r.ok) {
@@ -753,7 +800,9 @@
               else if (msg === "invalid_email") friendly = "Enter a valid email address."
               else if (msg === "weak_password") friendly = "Password must be at least 8 characters."
               else if (msg === "too_many_requests") friendly = "Too many attempts. Please wait a moment and try again."
+              else if (msg === "captcha_required" || msg === "captcha_failed") friendly = "Human check failed. Please try again."
               if (e.error) e.error.textContent = friendly
+              refreshCaptcha()
               e.submit.disabled = false
               e.submit.textContent = mode === "signup" ? "Create account" : "Sign in"
             })
