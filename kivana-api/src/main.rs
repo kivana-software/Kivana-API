@@ -1144,7 +1144,10 @@ async fn paypal_create_product(cfg: &PayPalConfig, token: &str) -> anyhow::Resul
         .send()
         .await?;
     if !res.status().is_success() {
-        anyhow::bail!("paypal_product_failed");
+        let status = res.status().as_u16();
+        let body = res.text().await.unwrap_or_default();
+        let snippet: String = body.chars().take(240).collect();
+        anyhow::bail!("paypal_product_failed:{}:{}", status, snippet);
     }
     let json = res.json::<PayPalCreateProductResponse>().await?;
     Ok(json.id)
@@ -1195,7 +1198,10 @@ async fn paypal_create_plan(
         .send()
         .await?;
     if !res.status().is_success() {
-        anyhow::bail!("paypal_plan_failed");
+        let status = res.status().as_u16();
+        let body = res.text().await.unwrap_or_default();
+        let snippet: String = body.chars().take(240).collect();
+        anyhow::bail!("paypal_plan_failed:{}:{}", status, snippet);
     }
     let json = res.json::<PayPalCreatePlanResponse>().await?;
     Ok(json.id)
@@ -1418,8 +1424,8 @@ async fn admin_paypal_sync_plans(
         pro_nok_m_id,
         pro_nok_y_id,
     ];
-    if ids.iter().any(|r| r.is_err()) {
-        return err(StatusCode::BAD_REQUEST, "paypal_plan_failed").into_response();
+    if let Some(msg) = ids.iter().find_map(|r| r.as_ref().err().map(|e| e.to_string())) {
+        return err(StatusCode::BAD_REQUEST, &msg).into_response();
     }
 
     plans.standard.monthly.eur = Some(ids[0].as_ref().unwrap().clone());
