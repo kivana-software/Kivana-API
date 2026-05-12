@@ -1,7 +1,7 @@
 use anyhow::Context;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::Argon2;
-use axum::extract::{ConnectInfo, FromRef, OriginalUri, Query, State};
+use axum::extract::{ConnectInfo, FromRef, Multipart, OriginalUri, Query, State};
 use axum::http::{Method, StatusCode};
 use axum::response::IntoResponse;
 use axum::response::Redirect;
@@ -18,6 +18,8 @@ use std::time::{Duration as StdDuration, Instant};
 use time::{Duration, OffsetDateTime};
 use tokio::sync::broadcast;
 use tokio::sync::Mutex;
+use tokio::fs;
+use tokio::io::AsyncWriteExt;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::services::ServeDir;
@@ -687,6 +689,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/moderator", post(admin_set_moderator))
         .route("/v1/admin/discount", post(admin_set_discount))
         .route("/v1/admin/grant", post(admin_grant))
+        .route("/v1/admin/downloads/upload", post(admin_downloads_upload))
         .route("/v1/portal/select-plan", post(portal_select_plan))
         .route("/v1/portal/paypal/start", post(portal_paypal_start))
         .route("/v1/portal/paypal/confirm", post(portal_paypal_confirm))
@@ -714,7 +717,7 @@ async fn main() -> anyhow::Result<()> {
             ServeDir::new("kivana-site").append_index_html_on_directories(true),
         )
         .layer(cors)
-        .layer(RequestBodyLimitLayer::new(1_000_000))
+        .layer(RequestBodyLimitLayer::new(80_000_000))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
@@ -968,6 +971,106 @@ async fn admin_set_config(
         Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
         Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
     }
+}
+
+fn sanitize_download_filename(name: &str) -> String {
+    let raw = name.trim();
+    if raw.is_empty() {
+        return "download.bin".to_string();
+    }
+    let mut out = String::with_capacity(raw.len().min(80));
+    for c in raw.chars() {
+        if out.len() >= 80 {
+            break;
+        }
+        let ok = c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-';
+        out.push(if ok { c } else { '_' });
+    }
+    while out.starts_with('.') {
+        out.remove(0);
+    }
+    if out.is_empty() {
+        "download.bin".to_string()
+    } else {
+        out
+    }
+}
+
+async fn admin_downloads_upload(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    mut multipart: Multipart,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+
+    let mut target = String::new();
+    let mut stored_filename = String::new();
+
+    while let Ok(Some(mut field)) = multipart.next_field().await {
+        let name = field.name().unwrap_or("").to_string();
+        if name == "target" {
+            target = field.text().await.unwrap_or_default();
+            continue;
+        }
+        if name != "file" {
+            continue;
+        }
+
+        let t = target.trim().to_lowercase();
+        if t != "paid_mac" && t != "paid_windows" {
+            return err(StatusCode::BAD_REQUEST, "invalid_target").into_response();
+        }
+
+        let original = field.file_name().unwrap_or("download.bin");
+        let filename = sanitize_download_filename(original);
+        let lower = filename.to_lowercase();
+        if t == "paid_mac" && !lower.ends_with(".dmg") {
+            return err(StatusCode::BAD_REQUEST, "invalid_file_type").into_response();
+        }
+        if t == "paid_windows" && !(lower.ends_with(".msi") || lower.ends_with(".exe")) {
+            return err(StatusCode::BAD_REQUEST, "invalid_file_type").into_response();
+        }
+
+        if fs::create_dir_all("downloads").await.is_err() {
+            return err(StatusCode::INTERNAL_SERVER_ERROR, "io_error").into_response();
+        }
+
+        let path = format!("downloads/{}", filename);
+        let mut f = match fs::File::create(&path).await {
+            Ok(v) => v,
+            Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "io_error").into_response(),
+        };
+
+        while let Ok(Some(chunk)) = field.chunk().await {
+            if f.write_all(&chunk).await.is_err() {
+                return err(StatusCode::INTERNAL_SERVER_ERROR, "io_error").into_response();
+            }
+        }
+
+        stored_filename = filename;
+        break;
+    }
+
+    if stored_filename.trim().is_empty() {
+        return err(StatusCode::BAD_REQUEST, "missing_file").into_response();
+    }
+
+    let url = format!("/downloads/{}", stored_filename);
+    let mut cfg = get_portal_config(&state.pool).await;
+    let t = target.trim().to_lowercase();
+    if t == "paid_mac" {
+        cfg.downloads.paid_mac_url = url.clone();
+    } else if t == "paid_windows" {
+        cfg.downloads.paid_windows_url = url.clone();
+    }
+    if set_portal_config(&state.pool, &cfg).await.is_err() {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+    }
+
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true, "url": url, "filename": stored_filename }))).into_response()
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]

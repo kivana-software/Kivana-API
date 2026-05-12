@@ -112,6 +112,32 @@ async function apiFetch(path, init = {}, { allowRetry = true } = {}) {
   throw new Error(msg)
 }
 
+async function apiFetchForm(path, formData, { allowRetry = true } = {}) {
+  const access = getAccessToken()
+  const headers = new Headers()
+  if (access) headers.set('authorization', `Bearer ${access}`)
+  const res = await fetch(apiUrl(path), { method: 'POST', body: formData, headers })
+  if (res.ok) return res
+
+  if (res.status === 401 && allowRetry && getRefreshToken()) {
+    try {
+      await refreshAccessToken()
+      return apiFetchForm(path, formData, { allowRetry: false })
+    } catch {
+      void 0
+    }
+  }
+
+  let msg = `HTTP ${res.status}`
+  try {
+    const j = await res.json()
+    if (j && j.error) msg = String(j.error)
+  } catch {
+    void 0
+  }
+  throw new Error(msg)
+}
+
 async function refreshAccessToken() {
   const refreshToken = getRefreshToken()
   if (!refreshToken) return
@@ -1100,6 +1126,36 @@ function App() {
       await apiFetch('/v1/admin/config', { method: 'POST', body: JSON.stringify(nextCfg) })
       setStatus({ kind: 'ok', text: 'Settings saved.' })
       setAdminConfig(nextCfg)
+      await loadPublicConfig()
+    } catch (e) {
+      setStatus({ kind: 'err', text: String(e?.message || e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function adminUploadDownload(target, file) {
+    if (busy) return
+    const t = String(target || '').trim()
+    if (!t || !file) return
+    setBusy(true)
+    setStatus({ kind: 'muted', text: '' })
+    try {
+      const form = new FormData()
+      form.append('target', t)
+      form.append('file', file, file?.name || 'download.bin')
+      const res = await apiFetchForm('/v1/admin/downloads/upload', form)
+      const json = await res.json().catch(() => ({}))
+      const url = String(json?.url || '').trim()
+      if (!url) throw new Error('upload_failed')
+      setAdminConfig((c) => {
+        const prev = c || adminConfig || {}
+        const dls = prev?.downloads || {}
+        if (t === 'paid_mac') return { ...prev, downloads: { ...dls, paidMacUrl: url } }
+        if (t === 'paid_windows') return { ...prev, downloads: { ...dls, paidWindowsUrl: url } }
+        return prev
+      })
+      setStatus({ kind: 'ok', text: 'Upload complete.' })
       await loadPublicConfig()
     } catch (e) {
       setStatus({ kind: 'err', text: String(e?.message || e) })
@@ -3838,6 +3894,40 @@ function App() {
                   disabled: busy,
                   placeholder: 'https://...',
                 })
+              ),
+              React.createElement(
+                'div',
+                { className: 'mt-2 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between rounded-2xl border border-gray-100 bg-[#F6F7FB] px-4 py-3' },
+                React.createElement('div', null,
+                  React.createElement('div', { className: 'text-xs font-bold text-[#1B1748]' }, 'Upload paid builds'),
+                  React.createElement('div', { className: 'mt-1 text-xs text-gray-600' }, 'Uploads to the server and updates Paid URLs automatically.')
+                ),
+                React.createElement(
+                  'div',
+                  { className: 'flex flex-col sm:flex-row gap-2 w-full sm:w-auto' },
+                  React.createElement('input', {
+                    type: 'file',
+                    accept: '.dmg',
+                    disabled: busy,
+                    className: 'w-full sm:w-[260px] text-xs',
+                    onChange: (e) => {
+                      const f = e?.target?.files && e.target.files[0]
+                      if (f) void adminUploadDownload('paid_mac', f)
+                      if (e?.target) e.target.value = ''
+                    },
+                  }),
+                  React.createElement('input', {
+                    type: 'file',
+                    accept: '.msi,.exe',
+                    disabled: busy,
+                    className: 'w-full sm:w-[260px] text-xs',
+                    onChange: (e) => {
+                      const f = e?.target?.files && e.target.files[0]
+                      if (f) void adminUploadDownload('paid_windows', f)
+                      if (e?.target) e.target.value = ''
+                    },
+                  })
+                )
               )
             )
           ),
