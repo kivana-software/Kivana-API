@@ -1212,6 +1212,37 @@ struct PayPalCreateWebhookResponse {
     id: String,
 }
 
+async fn paypal_find_webhook_id(cfg: &PayPalConfig, token: &str, url: &str) -> anyhow::Result<Option<String>> {
+    let base = paypal_base_url(cfg.mode.as_str());
+    let client = reqwest::Client::builder()
+        .timeout(StdDuration::from_secs(12))
+        .build()?;
+    let res = client
+        .get(format!("{}/v1/notifications/webhooks", base))
+        .bearer_auth(token)
+        .send()
+        .await?;
+    if !res.status().is_success() {
+        return Ok(None);
+    }
+    let json = res.json::<serde_json::Value>().await.unwrap_or(serde_json::json!({}));
+    let hooks = json
+        .get("webhooks")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    for h in hooks {
+        let hook_url = h.get("url").and_then(|v| v.as_str()).unwrap_or("");
+        if hook_url.trim() == url.trim() {
+            let id = h.get("id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            if !id.is_empty() {
+                return Ok(Some(id));
+            }
+        }
+    }
+    Ok(None)
+}
+
 async fn paypal_create_webhook(
     cfg: &PayPalConfig,
     token: &str,
@@ -1237,7 +1268,10 @@ async fn paypal_create_webhook(
         .send()
         .await?;
     if !res.status().is_success() {
-        anyhow::bail!("paypal_webhook_failed");
+        let status = res.status().as_u16();
+        let body = res.text().await.unwrap_or_default();
+        let snippet: String = body.chars().take(240).collect();
+        anyhow::bail!("paypal_webhook_failed:{}:{}", status, snippet);
     }
     let json = res.json::<PayPalCreateWebhookResponse>().await?;
     Ok(json.id)
@@ -1278,9 +1312,35 @@ async fn admin_paypal_create_webhook(
         Ok(v) => v,
         Err(_) => return err(StatusCode::BAD_REQUEST, "paypal_auth_failed").into_response(),
     };
+    if let Ok(Some(existing_id)) = paypal_find_webhook_id(&cfg, &token, &webhook_url).await {
+        cfg.webhook_id = existing_id.clone();
+        if let Err(_) = set_paypal_config(&state.pool, &cfg).await {
+            return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+        }
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": true, "webhookId": existing_id, "webhookUrl": webhook_url, "existing": true })),
+        )
+            .into_response();
+    }
+
     let webhook_id = match paypal_create_webhook(&cfg, &token, &webhook_url).await {
         Ok(v) => v,
-        Err(_) => return err(StatusCode::BAD_REQUEST, "paypal_webhook_failed").into_response(),
+        Err(e) => {
+            if let Ok(Some(existing_id)) = paypal_find_webhook_id(&cfg, &token, &webhook_url).await {
+                cfg.webhook_id = existing_id.clone();
+                if let Err(_) = set_paypal_config(&state.pool, &cfg).await {
+                    return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+                }
+                return (
+                    StatusCode::OK,
+                    Json(serde_json::json!({ "ok": true, "webhookId": existing_id, "webhookUrl": webhook_url, "existing": true })),
+                )
+                    .into_response();
+            }
+            let msg = e.to_string();
+            return err(StatusCode::BAD_REQUEST, &msg).into_response();
+        }
     };
     cfg.webhook_id = webhook_id.clone();
     if let Err(_) = set_paypal_config(&state.pool, &cfg).await {

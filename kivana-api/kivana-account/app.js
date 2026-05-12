@@ -565,6 +565,7 @@ function App() {
   const [adminPayPal, setAdminPayPal] = useState(null)
   const [adminPayPalSecret, setAdminPayPalSecret] = useState('')
   const [adminPayPalWebhookUrl, setAdminPayPalWebhookUrl] = useState('')
+  const [adminPricingDraft, setAdminPricingDraft] = useState(null)
   const [adminPage, setAdminPage] = useState('overview')
   const [msgModal, setMsgModal] = useState(null)
   const [adminMsgFilter, setAdminMsgFilter] = useState('new')
@@ -1073,6 +1074,17 @@ function App() {
       setAdminPayPal(pJson || null)
       setAdminPayPalSecret('')
       setAdminPayPalWebhookUrl((prev) => prev || computeDefaultPayPalWebhookUrl())
+      setAdminPricingDraft(() => {
+        const pricing = cJson?.pricing || {}
+        const std = pricing?.standardMonthly || {}
+        const pro = pricing?.proMonthly || {}
+        return {
+          yearlyFactor: String(pricing?.yearlyFactor ?? ''),
+          trialDays: String(pricing?.trialDays ?? ''),
+          standardMonthly: { eur: formatAmount(std?.eur), gbp: formatAmount(std?.gbp), nok: formatAmount(std?.nok) },
+          proMonthly: { eur: formatAmount(pro?.eur), gbp: formatAmount(pro?.gbp), nok: formatAmount(pro?.nok) },
+        }
+      })
     } catch (e) {
       setStatus({ kind: 'err', text: String(e?.message || e) })
     } finally {
@@ -3695,6 +3707,7 @@ function App() {
     function PayPalPanel() {
       const cfg = adminConfig || null
       const pp = adminPayPal || null
+      const draft = adminPricingDraft || null
 
       if (!cfg || !pp) {
         return React.createElement(
@@ -3716,27 +3729,48 @@ function App() {
         )
       }
 
-      const PriceRow = ({ title, obj, onUpdate }) =>
+      const DraftInput = ({ label, value, onChange, placeholder, inputMode }) =>
+        React.createElement(
+          'div',
+          { className: 'flex items-center justify-between gap-3 flex-wrap' },
+          React.createElement('div', { className: 'text-sm font-semibold text-gray-700' }, label),
+          React.createElement('input', {
+            value: String(value ?? ''),
+            onChange: (e) => onChange(e.target.value),
+            disabled: busy,
+            inputMode: inputMode || 'decimal',
+            className:
+              'w-full sm:w-48 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+            placeholder: placeholder || '',
+          })
+        )
+
+      const MoneyEditor = ({ title, values, onUpdate }) =>
         React.createElement(
           'div',
           { className: 'rounded-2xl border border-gray-100 px-5 py-4' },
           React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, title),
           React.createElement(
             'div',
-            { className: 'mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3' },
-            ['eur', 'gbp', 'nok'].map((k) =>
-              React.createElement('input', {
-                key: k,
-                type: 'number',
-                step: '0.01',
-                value: String(obj?.[k] ?? ''),
-                onChange: (e) => onUpdate({ ...(obj || {}), [k]: Number(e.target.value) }),
-                disabled: busy,
-                className:
-                  'w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
-                placeholder: k.toUpperCase(),
-              })
-            )
+            { className: 'mt-4 grid gap-3' },
+            DraftInput({
+              label: 'EUR',
+              value: values?.eur,
+              onChange: (v) => onUpdate({ ...(values || {}), eur: v }),
+              placeholder: '9.99',
+            }),
+            DraftInput({
+              label: 'GBP',
+              value: values?.gbp,
+              onChange: (v) => onUpdate({ ...(values || {}), gbp: v }),
+              placeholder: '9.99',
+            }),
+            DraftInput({
+              label: 'NOK',
+              value: values?.nok,
+              onChange: (v) => onUpdate({ ...(values || {}), nok: v }),
+              placeholder: '99',
+            })
           )
         )
 
@@ -3766,7 +3800,7 @@ function App() {
 
       return React.createElement(
         'div',
-        { className: 'grid gap-6' },
+        { className: 'grid gap-6 max-w-5xl' },
         React.createElement(
           'div',
           { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
@@ -3827,46 +3861,42 @@ function App() {
             { className: 'mt-6 grid gap-4' },
             React.createElement(
               'div',
-              { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },
+              { className: 'grid grid-cols-1 md:grid-cols-2 gap-3' },
               React.createElement(
                 'div',
                 { className: 'rounded-2xl border border-gray-100 px-5 py-4' },
                 React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Yearly factor'),
                 React.createElement('div', { className: 'mt-1 text-xs text-gray-600' }, 'Yearly price = monthly * factor.'),
-                React.createElement('input', {
-                  type: 'number',
-                  step: '1',
-                  value: String(cfg.pricing?.yearlyFactor ?? ''),
-                  onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), yearlyFactor: Number(e.target.value) } })),
-                  disabled: busy,
-                  className:
-                    'mt-3 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                DraftInput({
+                  label: 'Factor',
+                  value: draft?.yearlyFactor,
+                  onChange: (v) => setAdminPricingDraft((d) => ({ ...(d || {}), yearlyFactor: v })),
+                  placeholder: '11',
+                  inputMode: 'numeric',
                 })
               ),
               React.createElement(
                 'div',
                 { className: 'rounded-2xl border border-gray-100 px-5 py-4' },
                 React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Trial days'),
-                React.createElement('input', {
-                  type: 'number',
-                  step: '1',
-                  value: String(cfg.pricing?.trialDays ?? ''),
-                  onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), trialDays: Number(e.target.value) } })),
-                  disabled: busy,
-                  className:
-                    'mt-3 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                DraftInput({
+                  label: 'Days',
+                  value: draft?.trialDays,
+                  onChange: (v) => setAdminPricingDraft((d) => ({ ...(d || {}), trialDays: v })),
+                  placeholder: '14',
+                  inputMode: 'numeric',
                 })
               )
             ),
-            PriceRow({
+            MoneyEditor({
               title: 'Ordinary monthly prices',
-              obj: cfg.pricing?.standardMonthly,
-              onUpdate: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), standardMonthly: v } })),
+              values: draft?.standardMonthly,
+              onUpdate: (v) => setAdminPricingDraft((d) => ({ ...(d || {}), standardMonthly: v })),
             }),
-            PriceRow({
+            MoneyEditor({
               title: 'Pro monthly prices',
-              obj: cfg.pricing?.proMonthly,
-              onUpdate: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), proMonthly: v } })),
+              values: draft?.proMonthly,
+              onUpdate: (v) => setAdminPricingDraft((d) => ({ ...(d || {}), proMonthly: v })),
             }),
             React.createElement(
               'div',
@@ -3875,7 +3905,40 @@ function App() {
                 'button',
                 {
                   type: 'button',
-                  onClick: () => saveAdminConfig(adminConfig),
+                  onClick: () => {
+                    const base = adminConfig || {}
+                    const pricing = base?.pricing || {}
+                    const d = adminPricingDraft || {}
+                    const intOr = (raw, fallback) => {
+                      const n = Number.parseInt(String(raw || '').trim(), 10)
+                      return Number.isFinite(n) ? n : fallback
+                    }
+                    const numOr = (raw, fallback) => {
+                      const s = String(raw || '').trim().replace(',', '.')
+                      const n = Number.parseFloat(s)
+                      return Number.isFinite(n) ? n : fallback
+                    }
+                    const nextPricing = {
+                      ...(pricing || {}),
+                      yearlyFactor: intOr(d.yearlyFactor, pricing.yearlyFactor),
+                      trialDays: intOr(d.trialDays, pricing.trialDays),
+                      standardMonthly: {
+                        ...(pricing.standardMonthly || {}),
+                        eur: numOr(d?.standardMonthly?.eur, pricing.standardMonthly?.eur),
+                        gbp: numOr(d?.standardMonthly?.gbp, pricing.standardMonthly?.gbp),
+                        nok: numOr(d?.standardMonthly?.nok, pricing.standardMonthly?.nok),
+                      },
+                      proMonthly: {
+                        ...(pricing.proMonthly || {}),
+                        eur: numOr(d?.proMonthly?.eur, pricing.proMonthly?.eur),
+                        gbp: numOr(d?.proMonthly?.gbp, pricing.proMonthly?.gbp),
+                        nok: numOr(d?.proMonthly?.nok, pricing.proMonthly?.nok),
+                      },
+                    }
+                    const nextCfg = { ...(base || {}), pricing: nextPricing }
+                    setAdminConfig(nextCfg)
+                    void saveAdminConfig(nextCfg)
+                  },
                   disabled: busy,
                   className:
                     'px-6 py-2.5 rounded-full text-[14px] font-semibold text-white bg-[#4F3DDD] hover:bg-[#3F2FCB] disabled:opacity-60 disabled:pointer-events-none',
