@@ -164,6 +164,21 @@ function Pill({ kind, children }) {
 const te = new TextEncoder()
 const td = new TextDecoder()
 
+function loadTurnstileScript() {
+  if (window.turnstile) return Promise.resolve()
+  if (window.__kivanaTurnstilePromise) return window.__kivanaTurnstilePromise
+  window.__kivanaTurnstilePromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+    s.async = true
+    s.defer = true
+    s.onload = () => resolve()
+    s.onerror = () => reject(new Error('captcha_load_failed'))
+    document.head.appendChild(s)
+  })
+  return window.__kivanaTurnstilePromise
+}
+
 function bytesToB64(bytes) {
   let s = ''
   const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || [])
@@ -504,6 +519,7 @@ function App() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [captchaToken, setCaptchaToken] = useState('')
 
   const [displayName, setDisplayName] = useState('')
 
@@ -542,6 +558,7 @@ function App() {
 
   const displayNameInputRef = useRef(null)
   const chatKeyRef = useRef({ userId: '', publicJwk: null, privateKey: null })
+  const captchaRef = useRef({ widgetId: null })
 
   function closeAllPopups() {
     setAdminModal(null)
@@ -556,6 +573,7 @@ function App() {
     mounted.current = true
 
     ;(async () => {
+      await loadPublicConfig().catch(() => null)
       if (!getAccessToken()) return
       try {
         await refreshAccessToken()
@@ -750,20 +768,45 @@ function App() {
     setStatus({ kind: 'muted', text: '' })
     const em = String(email || '').trim()
     const pw = String(password || '')
+    const captchaSiteKey = String(publicConfig?.captcha?.siteKey || '').trim()
     if (!em || !pw) {
       setStatus({ kind: 'err', text: 'Missing email or password.' })
+      return
+    }
+    if (captchaSiteKey && !String(captchaToken || '').trim()) {
+      setStatus({ kind: 'err', text: 'Please complete the CAPTCHA.' })
       return
     }
     setBusy(true)
     try {
       const endpoint = authMode === 'signup' ? '/v1/auth/signup' : '/v1/auth/login'
-      const res = await apiFetch(endpoint, { method: 'POST', body: JSON.stringify({ email: em, password: pw }) }, { allowRetry: false })
+      const res = await apiFetch(
+        endpoint,
+        { method: 'POST', body: JSON.stringify({ email: em, password: pw, captchaToken: captchaToken || undefined }) },
+        { allowRetry: false }
+      )
       const json = await res.json()
       setTokens(json.accessToken, json.refreshToken)
       setPassword('')
+      setCaptchaToken('')
       await loadSession()
     } catch (err) {
-      setStatus({ kind: 'err', text: String(err?.message || err) })
+      const msg = String(err?.message || err)
+      setStatus({
+        kind: 'err',
+        text:
+          msg === 'captcha_required' || msg === 'captcha_failed'
+            ? 'CAPTCHA failed. Please try again.'
+            : msg,
+      })
+      setCaptchaToken('')
+      if (window.turnstile && captchaRef.current.widgetId != null) {
+        try {
+          window.turnstile.reset(captchaRef.current.widgetId)
+        } catch {
+          void 0
+        }
+      }
     } finally {
       setBusy(false)
     }
@@ -1892,6 +1935,45 @@ function App() {
         : 'Sign in to manage your subscription and account.'
     const toggleText = authMode === 'signup' ? 'Already have an account?' : "Don't have an account?"
     const toggleBtn = authMode === 'signup' ? 'Sign in' : 'Create one'
+    const captchaSiteKey = String(publicConfig?.captcha?.siteKey || '').trim()
+    const captchaElRef = useRef(null)
+
+    useEffect(() => {
+      if (!captchaSiteKey) return
+      let cancelled = false
+      setCaptchaToken('')
+      ;(async () => {
+        await loadTurnstileScript().catch(() => null)
+        if (cancelled) return
+        if (!window.turnstile) return
+        const el = captchaElRef.current
+        if (!el) return
+        if (captchaRef.current.widgetId != null) {
+          try {
+            window.turnstile.remove(captchaRef.current.widgetId)
+          } catch {
+            void 0
+          }
+          captchaRef.current.widgetId = null
+        }
+        el.innerHTML = ''
+        captchaRef.current.widgetId = window.turnstile.render(el, {
+          sitekey: captchaSiteKey,
+          callback: (t) => {
+            setCaptchaToken(String(t || ''))
+          },
+          'expired-callback': () => {
+            setCaptchaToken('')
+          },
+          'error-callback': () => {
+            setCaptchaToken('')
+          },
+        })
+      })()
+      return () => {
+        cancelled = true
+      }
+    }, [captchaSiteKey, authMode])
 
     return React.createElement(
       'div',
@@ -1954,6 +2036,13 @@ function App() {
               disabled: busy,
             })
           ),
+          captchaSiteKey
+            ? React.createElement(
+                'div',
+                { className: 'flex justify-center' },
+                React.createElement('div', { className: 'w-full max-w-[340px] overflow-hidden rounded-2xl border border-gray-200 bg-white px-3 py-3' }, React.createElement('div', { ref: captchaElRef }))
+              )
+            : null,
           React.createElement(
             'button',
             {

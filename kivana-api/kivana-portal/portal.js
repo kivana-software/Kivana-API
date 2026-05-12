@@ -127,6 +127,8 @@ const els = {
   authSubtitle: document.getElementById('authSubtitle'),
   email: document.getElementById('email'),
   password: document.getElementById('password'),
+  captchaWrap: document.getElementById('captchaWrap'),
+  captchaWidget: document.getElementById('captchaWidget'),
   authError: document.getElementById('authError'),
   btnSubmitAuth: document.getElementById('btnSubmitAuth'),
   authToggleText: document.getElementById('authToggleText'),
@@ -249,6 +251,7 @@ function updateThemeButtons() {
 function toggleTheme() {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
   applyTheme(isDark ? 'light' : 'dark')
+  void renderCaptcha()
 }
 
 function enforceLoggedOutLanding() {
@@ -501,6 +504,77 @@ function computeApiBaseUrl() {
 
 const apiBaseUrl = computeApiBaseUrl()
 const apiUrl = (path) => `${apiBaseUrl}${path}`
+
+let captchaSiteKey = ''
+let captchaToken = ''
+let captchaWidgetId = null
+let captchaScriptPromise = null
+
+function loadTurnstileScript() {
+  if (window.turnstile) return Promise.resolve()
+  if (captchaScriptPromise) return captchaScriptPromise
+  captchaScriptPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+    s.async = true
+    s.defer = true
+    s.onload = () => resolve()
+    s.onerror = () => reject(new Error('captcha_load_failed'))
+    document.head.appendChild(s)
+  })
+  return captchaScriptPromise
+}
+
+async function loadCaptchaConfig() {
+  try {
+    const res = await fetch(apiUrl('/v1/public/config'), { cache: 'no-store' })
+    if (!res.ok) return
+    const json = await res.json().catch(() => ({}))
+    const key = json && json.captcha && json.captcha.provider === 'turnstile' ? String(json.captcha.siteKey || '').trim() : ''
+    captchaSiteKey = key
+    await renderCaptcha()
+  } catch {
+    void 0
+  }
+}
+
+async function renderCaptcha() {
+  if (!els.captchaWrap || !els.captchaWidget) return
+  if (!captchaSiteKey) {
+    els.captchaWrap.classList.add('hidden')
+    els.captchaWidget.innerHTML = ''
+    captchaToken = ''
+    captchaWidgetId = null
+    return
+  }
+  els.captchaWrap.classList.remove('hidden')
+  captchaToken = ''
+  await loadTurnstileScript().catch(() => void 0)
+  if (!window.turnstile) return
+  if (captchaWidgetId != null) {
+    try {
+      window.turnstile.remove(captchaWidgetId)
+    } catch {
+      void 0
+    }
+    captchaWidgetId = null
+  }
+  els.captchaWidget.innerHTML = ''
+  const theme = getTheme() === 'dark' ? 'dark' : 'light'
+  captchaWidgetId = window.turnstile.render(els.captchaWidget, {
+    sitekey: captchaSiteKey,
+    theme,
+    callback: (t) => {
+      captchaToken = String(t || '')
+    },
+    'expired-callback': () => {
+      captchaToken = ''
+    },
+    'error-callback': () => {
+      captchaToken = ''
+    },
+  })
+}
 
 function isAuthed() {
   return !!getAccessToken()
@@ -813,6 +887,8 @@ function toggleAuthMode(e) {
   e.preventDefault()
   isLoginMode = !isLoginMode
   els.authError.textContent = ''
+  captchaToken = ''
+  void renderCaptcha()
   if (isLoginMode) {
     els.authTitle.textContent = 'Sign in to Kivana'
     els.authSubtitle.textContent = 'Manage your Personal Finance app subscription.'
@@ -844,12 +920,17 @@ async function handleAuthSubmit(e) {
     return
   }
 
+  if (captchaSiteKey && !String(captchaToken || '').trim()) {
+    els.authError.textContent = 'Please complete the CAPTCHA.'
+    return
+  }
+
   els.btnSubmitAuth.disabled = true
   els.btnSubmitAuth.textContent = 'Please wait...'
 
   try {
     const endpoint = isLoginMode ? '/v1/auth/login' : '/v1/auth/signup'
-    const res = await apiFetch(endpoint, { method: 'POST', body: JSON.stringify({ email, password }) })
+    const res = await apiFetch(endpoint, { method: 'POST', body: JSON.stringify({ email, password, captchaToken: captchaToken || undefined }) })
     const json = await res.json()
     setTokens(json.accessToken, json.refreshToken)
     await showDashboard()
@@ -864,10 +945,14 @@ async function handleAuthSubmit(e) {
       ? 'Admin login is locked to the first login IP. Try from the same network/IP.'
       : code === 'admin_ip_required'
         ? 'Admin login requires a visible IP address. Try again from the main website (not a cached file) or disable privacy proxy/VPN.'
+        : code === 'captcha_required' || code === 'captcha_failed'
+          ? 'CAPTCHA failed. Please try again.'
         : code === 'too_many_requests'
           ? 'Too many attempts. Please wait a moment and try again.'
           : ''
     els.authError.textContent = friendly || (code || 'Failed to sign in.')
+    captchaToken = ''
+    void renderCaptcha()
   } finally {
     els.btnSubmitAuth.disabled = false
     els.btnSubmitAuth.textContent = isLoginMode ? 'Sign in' : 'Sign up'
@@ -1053,6 +1138,7 @@ async function showAuth() {
   showOnly('auth')
   currentMe = null
   currentEntitlement = null
+  await loadCaptchaConfig()
 }
 
 function fmtDateTime(v) {
