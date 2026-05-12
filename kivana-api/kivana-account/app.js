@@ -1796,6 +1796,7 @@ function App() {
                   disabled: busy,
                 },
                 React.createElement('option', { value: 'basic' }, 'Basic'),
+                React.createElement('option', { value: 'trial' }, 'Trial (admin override)'),
                 React.createElement('option', { value: 'standard' }, 'Ordinary'),
                 React.createElement('option', { value: 'pro' }, 'Pro'),
                 React.createElement('option', { value: 'lifetime_pro' }, 'Lifetime')
@@ -1808,9 +1809,15 @@ function App() {
                 type: 'datetime-local',
                 value: String(adminModal.endsAtLocal || ''),
                 onChange: (e) => updateAdminModal({ endsAtLocal: e.target.value }),
-                disabled: busy,
+                disabled: busy || String(adminModal.planCode || '').trim().toLowerCase() === 'trial',
               }),
-              React.createElement('div', { className: 'mt-2 text-sm text-gray-600' }, 'Leave empty for no end date. Uses your local time.')
+              React.createElement(
+                'div',
+                { className: 'mt-2 text-sm text-gray-600' },
+                String(adminModal.planCode || '').trim().toLowerCase() === 'trial'
+                  ? `Trial end is set automatically (${Number(adminConfig?.pricing?.trialDays || 14)} days).`
+                  : 'Leave empty for no end date. Uses your local time.'
+              )
             )
           : kind === 'discount'
             ? React.createElement(
