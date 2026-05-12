@@ -867,6 +867,7 @@
           loadReactBuild()
           installTryNowCta()
           installBasicGithubCta()
+          installRoadmapBadges()
           loadPublicConfig().then(function (cfg) {
             var tries = 0
             var timer = setInterval(function () {
@@ -911,6 +912,82 @@
           try {
             var obs = new MutationObserver(function () {})
             obs.observe(document.documentElement, { childList: true, subtree: true })
+          } catch (err) {}
+        }
+
+        function installRoadmapBadges() {
+          var styleBadge = function (el, kind) {
+            if (!el) return
+            if (kind === "green") {
+              el.style.background = "#E6F7EF"
+              el.style.color = "#1B7A55"
+              el.style.border = "1px solid rgba(27, 122, 85, 0.35)"
+            } else if (kind === "orange") {
+              el.style.background = "#FFF7ED"
+              el.style.color = "#9A3412"
+              el.style.border = "1px solid rgba(234, 88, 12, 0.35)"
+            }
+            el.style.borderRadius = "999px"
+            el.style.padding = "6px 10px"
+            el.style.fontWeight = "700"
+            el.style.display = "inline-flex"
+            el.style.alignItems = "center"
+            el.style.gap = "6px"
+          }
+
+          var findStatusEl = function (root) {
+            try {
+              var els = root.querySelectorAll ? root.querySelectorAll("span,div") : []
+              for (var i = 0; i < els.length; i++) {
+                var t = normalizeText(els[i].textContent)
+                if (t === "available now" || t === "under production" || t === "planned") return els[i]
+              }
+            } catch (err) {}
+            return null
+          }
+
+          var patchCard = function (section, name, nextStatus, color) {
+            try {
+              var nodes = section.querySelectorAll("h1,h2,h3,h4,h5,div,span")
+              for (var i = 0; i < nodes.length; i++) {
+                var n = nodes[i]
+                if (!n || !n.textContent) continue
+                if (normalizeText(n.textContent) !== normalizeText(name)) continue
+                var cur = n
+                for (var up = 0; up < 8 && cur; up++) {
+                  var statusEl = findStatusEl(cur)
+                  if (statusEl) {
+                    statusEl.textContent = nextStatus
+                    styleBadge(statusEl, color)
+                    return true
+                  }
+                  cur = cur.parentElement
+                }
+              }
+            } catch (err) {}
+            return false
+          }
+
+          var ensure = function () {
+            var section = document.getElementById("roadmap")
+            if (!section) return false
+            var ok1 = patchCard(section, "Ordinary", "Available now", "green")
+            var ok2 = patchCard(section, "Pro", "Available now", "green")
+            var ok3 = patchCard(section, "Accountant", "Under production", "orange")
+            return ok1 || ok2 || ok3
+          }
+
+          var tries = 0
+          var timer = setInterval(function () {
+            tries++
+            if (ensure() || tries > 80) clearInterval(timer)
+          }, 250)
+
+          try {
+            var obs = new MutationObserver(function () {
+              ensure()
+            })
+            obs.observe(document.body, { childList: true, subtree: true })
           } catch (err) {}
         }
 
