@@ -913,19 +913,66 @@
         }
 
         function installTryNowCta() {
+          var replaceFirstTextNode = function (el, testFn, newText) {
+            try {
+              var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+              var node = walker.nextNode()
+              while (node) {
+                var raw = node.nodeValue
+                var t = normalizeText(raw)
+                if (testFn(t)) {
+                  var prefix = raw && raw.startsWith(" ") ? " " : ""
+                  node.nodeValue = prefix + newText
+                  return true
+                }
+                node = walker.nextNode()
+              }
+            } catch (err) {}
+            return false
+          }
+
           var replace = function () {
             try {
+              var updatedMac = false
+              var updatedWin = false
               var candidates = Array.prototype.slice.call(document.querySelectorAll("button,a"))
               for (var i = 0; i < candidates.length; i++) {
                 var el = candidates[i]
                 if (!el || !el.textContent) continue
                 if (el.closest && (el.closest("#authModal") || el.closest("#kivanaFooter"))) continue
                 var t = normalizeText(el.textContent)
+
+                if (!updatedMac) {
+                  var macOk =
+                    replaceFirstTextNode(
+                      el,
+                      function (x) {
+                        return x.includes("download") && (x.includes("mac") || x.includes("macos") || x.includes("apple silicon"))
+                      },
+                      "Try now"
+                    )
+                  if (macOk) updatedMac = true
+                }
+
+                if (!updatedWin) {
+                  var winOk =
+                    replaceFirstTextNode(
+                      el,
+                      function (x) {
+                        return x === "windows" || (x.includes("download") && (x.includes("windows") || x.includes("win")))
+                      },
+                      "Sign in"
+                    )
+                  if (winOk) updatedWin = true
+                }
+
                 if (t === "download now" || t === "download" || t === "download app") {
                   if (t.includes("mac") || t.includes("windows") || t.includes("win")) continue
                   el.textContent = "Try now"
-                  return true
+                  updatedMac = true
                 }
+
+                if (updatedMac && updatedWin) return true
               }
             } catch (err) {}
             return false
