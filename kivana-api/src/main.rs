@@ -2,7 +2,7 @@ use anyhow::Context;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::Argon2;
 use axum::extract::{ConnectInfo, FromRef, Multipart, OriginalUri, Query, State};
-use axum::http::{Method, StatusCode};
+use axum::http::{HeaderValue, Method, StatusCode};
 use axum::response::IntoResponse;
 use axum::response::Redirect;
 use axum::routing::{delete, get, post};
@@ -18,10 +18,12 @@ use std::time::{Duration as StdDuration, Instant};
 use time::{Duration, OffsetDateTime};
 use tokio::sync::broadcast;
 use tokio::sync::Mutex;
+use tower::ServiceBuilder;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 use tracing::Level;
@@ -592,6 +594,20 @@ async fn main() -> anyhow::Result<()> {
         .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
         .allow_credentials(false);
 
+    let account_static = ServiceBuilder::new()
+        .layer(SetResponseHeaderLayer::overriding(
+            axum::http::header::CACHE_CONTROL,
+            HeaderValue::from_static("no-store"),
+        ))
+        .service(ServeDir::new("kivana-account").append_index_html_on_directories(true));
+
+    let portal_static = ServiceBuilder::new()
+        .layer(SetResponseHeaderLayer::overriding(
+            axum::http::header::CACHE_CONTROL,
+            HeaderValue::from_static("no-store"),
+        ))
+        .service(ServeDir::new("kivana-account").append_index_html_on_directories(true));
+
     let app = Router::new()
         .route("/healthz", get(healthz))
         .route("/favicon.ico", get(|| async { Redirect::permanent("/kivana-logo.png") }))
@@ -705,12 +721,12 @@ async fn main() -> anyhow::Result<()> {
         .route("/portal", get(portal_redirect))
         .nest_service(
             "/portal/",
-            ServeDir::new("kivana-account").append_index_html_on_directories(true),
+            portal_static,
         )
         .route("/account", get(account_redirect))
         .nest_service(
             "/account/",
-            ServeDir::new("kivana-account").append_index_html_on_directories(true),
+            account_static,
         )
         .route_service("/portal.css", ServeFile::new("kivana-portal/portal.css"))
         .nest_service(
