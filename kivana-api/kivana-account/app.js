@@ -551,7 +551,10 @@ function App() {
     if (s === 'security') return 'security'
     if (s === 'support' || s === 'contact') return 'support'
     if (s === 'data' || s === 'my-data') return 'data'
-    if (s === 'admin') return 'admin'
+    if (s === 'paypal') return 'paypal'
+    if (s === 'users' || s === 'admin-users') return 'admin_users'
+    if (s === 'messages' || s === 'admin-messages' || s === 'admin') return 'admin_messages'
+    if (s === 'admin-settings' || s === 'settings') return 'admin_settings'
     return 'profile'
   })
   const [sessions, setSessions] = useState([])
@@ -643,6 +646,17 @@ function App() {
   useEffect(() => {
     closeAllPopups()
   }, [section])
+
+  useEffect(() => {
+    if (!me?.isAdmin) return
+    if (section === 'paypal') setAdminPage('paypal')
+    if (section === 'admin_users') setAdminPage('users')
+    if (section === 'admin_messages') setAdminPage('messages')
+    if (section === 'admin_settings') setAdminPage('settings')
+    if ((section === 'paypal' || section === 'admin_users' || section === 'admin_messages' || section === 'admin_settings') && (!adminConfig || !adminPayPal)) {
+      void loadAdmin()
+    }
+  }, [section, me?.isAdmin])
 
   useEffect(() => {
     if (section !== 'support') return
@@ -1982,7 +1996,7 @@ function App() {
                     onClick: async () => {
                       closeAllPopups()
                       if (me?.isAdmin) {
-                        setSection('admin')
+                      setSection('admin_messages')
                         setAdminPage('messages')
                         await loadAdmin()
                       } else {
@@ -2314,7 +2328,7 @@ function App() {
               return
             }
             setSection(id)
-            if (id === 'admin') await loadAdmin()
+            if ((id === 'paypal' || id === 'admin_users' || id === 'admin_messages' || id === 'admin_settings') && me?.isAdmin) await loadAdmin()
           },
           className: `w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-[14px] font-semibold transition-colors ${
             active ? 'bg-[#F0EEFC] text-[#4F3DDD]' : 'text-gray-700 hover:bg-gray-50'
@@ -2951,7 +2965,7 @@ function App() {
           setStatus,
         })
       if (section === 'data') return React.createElement(DataSection, null)
-      if (section === 'admin') return React.createElement(Admin, null)
+      if (section === 'paypal' || section === 'admin_users' || section === 'admin_messages' || section === 'admin_settings') return React.createElement(Admin, null)
       return React.createElement(ProfileSection, null)
     }
 
@@ -2969,6 +2983,23 @@ function App() {
             label: 'Profile',
             icon: React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none' }, React.createElement('path', { d: 'M12 12a4.5 4.5 0 1 0-4.5-4.5A4.5 4.5 0 0 0 12 12Z', stroke: 'currentColor', strokeWidth: 1.8 }), React.createElement('path', { d: 'M4.5 20c1.8-3.2 5.1-5 7.5-5s5.7 1.8 7.5 5', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' })),
           }),
+          me?.isAdmin
+            ? React.createElement(NavItem, {
+                id: 'paypal',
+                label: 'PayPal',
+                onSelect: async () => {
+                  setSection('paypal')
+                  setAdminPage('paypal')
+                  await loadAdmin()
+                },
+                icon: React.createElement(
+                  'svg',
+                  { viewBox: '0 0 24 24', fill: 'none' },
+                  React.createElement('path', { d: 'M7 7.5C7 6.12 8.12 5 9.5 5H14.5C15.88 5 17 6.12 17 7.5V16.5C17 17.88 15.88 19 14.5 19H9.5C8.12 19 7 17.88 7 16.5V7.5Z', stroke: 'currentColor', strokeWidth: 1.8 }),
+                  React.createElement('path', { d: 'M9.5 9.5h5M9.5 12h5M9.5 14.5h3', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' })
+                ),
+              })
+            : null,
           React.createElement(NavItem, {
             id: 'billing',
             label: 'Plan & billing',
@@ -2985,22 +3016,59 @@ function App() {
             icon: React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none' }, React.createElement('path', { d: 'M7.5 11V8.5C7.5 6.02 9.52 4 12 4C14.48 4 16.5 6.02 16.5 8.5V11', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' }), React.createElement('path', { d: 'M7 11H17C18.1 11 19 11.9 19 13V18C19 19.1 18.1 20 17 20H7C5.9 20 5 19.1 5 18V13C5 11.9 5.9 11 7 11Z', stroke: 'currentColor', strokeWidth: 1.8 })),
           }),
           me?.isAdmin
-            ? React.createElement(NavItem, {
-                id: 'admin',
-                label: 'Messages',
-                count: adminSupportUnreadCount,
-                onSelect: async () => {
-                  setSection('admin')
-                  setAdminPage('messages')
-                  await loadAdmin()
-                },
-                icon: React.createElement(
-                  'svg',
-                  { viewBox: '0 0 24 24', fill: 'none' },
-                  React.createElement('path', { d: 'M4 6.5C4 5.12 5.12 4 6.5 4H17.5C18.88 4 20 5.12 20 6.5V15.5C20 16.88 18.88 18 17.5 18H9l-5 3v-3.5C4 16.12 4 6.5 4 6.5Z', stroke: 'currentColor', strokeWidth: 1.8, strokeLinejoin: 'round' }),
-                  React.createElement('path', { d: 'M7 8h10M7 11h8', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' })
-                ),
-              })
+            ? React.createElement(
+                React.Fragment,
+                null,
+                React.createElement(NavItem, {
+                  id: 'admin_users',
+                  label: 'Users',
+                  count: adminUsers.length,
+                  onSelect: async () => {
+                    setSection('admin_users')
+                    setAdminPage('users')
+                    await loadAdmin()
+                  },
+                  icon: React.createElement(
+                    'svg',
+                    { viewBox: '0 0 24 24', fill: 'none' },
+                    React.createElement('path', { d: 'M8 11a3.5 3.5 0 1 0-3.5-3.5A3.5 3.5 0 0 0 8 11Z', stroke: 'currentColor', strokeWidth: 1.8 }),
+                    React.createElement('path', { d: 'M4.5 20c.9-2.9 3-4.5 3.5-4.5s2.6 1.6 3.5 4.5', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' }),
+                    React.createElement('path', { d: 'M16 11a3.5 3.5 0 1 0-3.5-3.5A3.5 3.5 0 0 0 16 11Z', stroke: 'currentColor', strokeWidth: 1.8 }),
+                    React.createElement('path', { d: 'M12.5 20c.9-2.9 3-4.5 3.5-4.5s2.6 1.6 3.5 4.5', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' })
+                  ),
+                }),
+                React.createElement(NavItem, {
+                  id: 'admin_messages',
+                  label: 'Messages',
+                  count: adminSupportUnreadCount,
+                  onSelect: async () => {
+                    setSection('admin_messages')
+                    setAdminPage('messages')
+                    await loadAdmin()
+                  },
+                  icon: React.createElement(
+                    'svg',
+                    { viewBox: '0 0 24 24', fill: 'none' },
+                    React.createElement('path', { d: 'M4 6.5C4 5.12 5.12 4 6.5 4H17.5C18.88 4 20 5.12 20 6.5V15.5C20 16.88 18.88 18 17.5 18H9l-5 3v-3.5C4 16.12 4 6.5 4 6.5Z', stroke: 'currentColor', strokeWidth: 1.8, strokeLinejoin: 'round' }),
+                    React.createElement('path', { d: 'M7 8h10M7 11h8', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' })
+                  ),
+                }),
+                React.createElement(NavItem, {
+                  id: 'admin_settings',
+                  label: 'Admin settings',
+                  onSelect: async () => {
+                    setSection('admin_settings')
+                    setAdminPage('settings')
+                    await loadAdmin()
+                  },
+                  icon: React.createElement(
+                    'svg',
+                    { viewBox: '0 0 24 24', fill: 'none' },
+                    React.createElement('path', { d: 'M12 15a3 3 0 1 0-3-3 3 3 0 0 0 3 3Z', stroke: 'currentColor', strokeWidth: 1.8 }),
+                    React.createElement('path', { d: 'M19.4 15a7.9 7.9 0 0 0 .1-2l2-1.5-2-3.5-2.3.7a7.6 7.6 0 0 0-1.7-1l-.3-2.4H11l-.3 2.4a7.6 7.6 0 0 0-1.7 1L6.7 8 4.7 11.5 6.7 13a7.9 7.9 0 0 0 0 2l-2 1.5 2 3.5 2.3-.7a7.6 7.6 0 0 0 1.7 1l.3 2.4h4l.3-2.4a7.6 7.6 0 0 0 1.7-1l2.3.7 2-3.5Z', stroke: 'currentColor', strokeWidth: 1.8, strokeLinejoin: 'round' })
+                  ),
+                })
+              )
             : React.createElement(NavItem, {
                 id: 'support',
                 label: 'Contact support',
@@ -4010,8 +4078,58 @@ function App() {
           React.createElement(StatCard, { label: 'Active plans', value: activePlansCount }),
           React.createElement(StatCard, { label: 'New messages', value: newMessagesCount })
         ),
-        React.createElement('div', { className: 'mt-8' }, React.createElement(MessagesTable, null)),
-        React.createElement('div', { className: 'mt-8' }, React.createElement(SettingsPanel, null))
+        React.createElement(
+          'div',
+          { className: 'mt-8 grid grid-cols-1 md:grid-cols-3 gap-4' },
+          React.createElement(
+            'button',
+            {
+              type: 'button',
+              onClick: async () => {
+                setSection('admin_users')
+                setAdminPage('users')
+                await loadAdmin()
+              },
+              disabled: busy,
+              className:
+                'text-left rounded-3xl border border-gray-100 bg-white shadow-sm p-6 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
+            },
+            React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Users'),
+            React.createElement('div', { className: 'mt-1 text-xs text-gray-600' }, 'Manage roles, plans, discounts and passwords.')
+          ),
+          React.createElement(
+            'button',
+            {
+              type: 'button',
+              onClick: async () => {
+                setSection('admin_messages')
+                setAdminPage('messages')
+                await loadAdmin()
+              },
+              disabled: busy,
+              className:
+                'text-left rounded-3xl border border-gray-100 bg-white shadow-sm p-6 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
+            },
+            React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Messages'),
+            React.createElement('div', { className: 'mt-1 text-xs text-gray-600' }, 'Inbox and support threads.')
+          ),
+          React.createElement(
+            'button',
+            {
+              type: 'button',
+              onClick: async () => {
+                setSection('paypal')
+                setAdminPage('paypal')
+                await loadAdmin()
+              },
+              disabled: busy,
+              className:
+                'text-left rounded-3xl border border-gray-100 bg-white shadow-sm p-6 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
+            },
+            React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'PayPal'),
+            React.createElement('div', { className: 'mt-1 text-xs text-gray-600' }, 'Pricing, credentials, webhook and plan sync.')
+          )
+        )
       )
     }
 
@@ -4026,24 +4144,7 @@ function App() {
               ? React.createElement(PayPalPanel, null)
             : React.createElement(SettingsPanel, null)
 
-    return React.createElement(
-      'div',
-      { className: 'kp-shell' },
-      React.createElement(
-        'aside',
-        { className: 'kp-aside shrink-0' },
-        React.createElement(
-          'div',
-          { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-2' },
-          React.createElement(AdminNavItem, { id: 'overview', label: 'Overview' }),
-          React.createElement(AdminNavItem, { id: 'users', label: 'Users', count: adminUsers.length }),
-          React.createElement(AdminNavItem, { id: 'messages', label: 'Messages', count: newMessagesCount }),
-          React.createElement(AdminNavItem, { id: 'paypal', label: 'PayPal' }),
-          React.createElement(AdminNavItem, { id: 'settings', label: 'Settings' })
-        )
-      ),
-      React.createElement('div', { className: 'kp-main' }, panel)
-    )
+    return panel
   }
 
   function PasswordModal() {
