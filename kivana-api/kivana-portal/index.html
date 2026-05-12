@@ -25,7 +25,7 @@
       }
     })()
   </script>
-  <link rel="stylesheet" href="portal.css?v=0.4.20" />
+  <link rel="stylesheet" href="portal.css?v=0.4.21" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -137,8 +137,10 @@
                   <label for="password">Password</label>
                   <input type="password" id="password" required />
                 </div>
-                <div class="captchaWrap hidden" id="captchaWrap">
-                  <div id="captchaWidget"></div>
+                <div class="input-group" id="captchaGroup">
+                  <label for="captchaAnswer">Human check</label>
+                  <div class="captchaQuestion" id="captchaQuestion">Loading…</div>
+                  <input type="text" id="captchaAnswer" inputmode="numeric" autocomplete="off" placeholder="Answer" required />
                 </div>
 
                 <div id="authError" class="error-msg"></div>
@@ -623,6 +625,6 @@
     </div>
   </div>
 
-  <script src="portal.js?v=0.4.22"></script>
+  <script src="portal.js?v=0.4.23"></script>
 </body>
 </html>

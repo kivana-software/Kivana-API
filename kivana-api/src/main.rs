@@ -32,8 +32,6 @@ struct AppConfig {
     access_token_ttl_seconds: i64,
     refresh_token_ttl_days: i64,
     bind_addr: SocketAddr,
-    turnstile_site_key: Option<String>,
-    turnstile_secret_key: Option<String>,
 }
 
 #[derive(Clone)]
@@ -109,6 +107,7 @@ struct SignupRequest {
     email: String,
     password: String,
     captcha_token: Option<String>,
+    captcha_answer: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -117,6 +116,7 @@ struct LoginRequest {
     email: String,
     password: String,
     captcha_token: Option<String>,
+    captcha_answer: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -564,6 +564,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/robots.txt", get(robots_txt))
         .route("/sitemap.xml", get(sitemap_xml))
         .route("/v1/public/config", get(public_config))
+        .route("/v1/captcha/challenge", get(captcha_challenge))
         .route("/v1/contact", post(contact))
         .route("/v1/crypto/public-key", get(get_public_key))
         .route("/v1/crypto/public-key", post(set_public_key))
@@ -719,61 +720,168 @@ async fn set_portal_config(pool: &PgPool, cfg: &PortalConfig) -> anyhow::Result<
 
 async fn public_config(State(state): State<AppState>) -> axum::response::Response {
     let cfg = get_portal_config(&state.pool).await;
-    let mut v = match serde_json::to_value(cfg) {
-        Ok(v) => v,
-        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "config_error").into_response(),
+    (StatusCode::OK, Json(cfg)).into_response()
+}
+
+async fn captcha_challenge(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+) -> axum::response::Response {
+    let client_ip = get_client_ip(&headers, connect_info);
+    match captcha_make(&state, client_ip) {
+        Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "captcha_error").into_response(),
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct CaptchaPayloadV1 {
+    v: i32,
+    exp: i64,
+    a: i32,
+    b: i32,
+    op: String,
+    ip: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CaptchaChallengeResponse {
+    question: String,
+    token: String,
+}
+
+fn captcha_sign(jwt_secret: &str, payload_b64: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(payload_b64.as_bytes());
+    hasher.update(b":");
+    hasher.update(jwt_secret.as_bytes());
+    let digest = hasher.finalize();
+    hex::encode(digest)
+}
+
+fn captcha_make(state: &AppState, client_ip: Option<String>) -> Result<CaptchaChallengeResponse, ()> {
+    let mut b = [0u8; 4];
+    rand::rngs::OsRng.fill_bytes(&mut b);
+    let r0 = u32::from_le_bytes(b);
+    rand::rngs::OsRng.fill_bytes(&mut b);
+    let r1 = u32::from_le_bytes(b);
+
+    let a = 2 + (r0 % 18) as i32;
+    let b2 = 2 + (r1 % 18) as i32;
+    let op = "+".to_string();
+    let exp = OffsetDateTime::now_utc().unix_timestamp() + 10 * 60;
+
+    let payload = CaptchaPayloadV1 {
+        v: 1,
+        exp,
+        a,
+        b: b2,
+        op: op.clone(),
+        ip: client_ip.clone(),
     };
-    if let (Some(site_key), Some(secret_key)) = (
-        state.cfg.turnstile_site_key.clone(),
-        state.cfg.turnstile_secret_key.clone(),
-    ) {
-        if !site_key.trim().is_empty() && !secret_key.trim().is_empty() {
-            if let Some(obj) = v.as_object_mut() {
-                obj.insert(
-                    "captcha".to_string(),
-                    serde_json::json!({ "provider": "turnstile", "siteKey": site_key }),
-                );
+    let bytes = serde_json::to_vec(&payload).map_err(|_| ())?;
+    let payload_b64 = base64_url(&bytes);
+    let sig = captcha_sign(&state.cfg.jwt_secret, &payload_b64);
+    let token = format!("c1.{}.{}", payload_b64, sig);
+    let question = format!("What is {} {} {}?", a, op, b2);
+    Ok(CaptchaChallengeResponse { question, token })
+}
+
+fn captcha_verify(state: &AppState, token: &str, answer: &str, client_ip: Option<String>) -> bool {
+    let t = token.trim();
+    let parts: Vec<&str> = t.split('.').collect();
+    if parts.len() != 3 {
+        return false;
+    }
+    if parts[0] != "c1" {
+        return false;
+    }
+    let payload_b64 = parts[1];
+    let sig = parts[2];
+    let expected = captcha_sign(&state.cfg.jwt_secret, payload_b64);
+    if expected != sig {
+        return false;
+    }
+    let bytes = match base64_url_decode(payload_b64) {
+        Some(v) => v,
+        None => return false,
+    };
+    let payload: CaptchaPayloadV1 = match serde_json::from_slice(&bytes) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    if payload.v != 1 {
+        return false;
+    }
+    if OffsetDateTime::now_utc().unix_timestamp() > payload.exp {
+        return false;
+    }
+    if let Some(expected_ip) = payload.ip {
+        if let Some(ip) = client_ip {
+            if expected_ip != ip {
+                return false;
             }
+        } else {
+            return false;
         }
     }
-    (StatusCode::OK, Json(v)).into_response()
+    let ans = answer.trim().parse::<i32>().ok();
+    let ans = match ans {
+        Some(v) => v,
+        None => return false,
+    };
+    let correct = if payload.op == "+" {
+        payload.a + payload.b
+    } else if payload.op == "-" {
+        payload.a - payload.b
+    } else {
+        return false;
+    };
+    ans == correct
 }
 
-#[derive(Deserialize)]
-struct TurnstileVerifyResponse {
-    success: bool,
-}
-
-async fn verify_turnstile(
-    secret: &str,
-    token: &str,
-    remote_ip: Option<String>,
-) -> Result<bool, ()> {
-    let token = token.trim();
-    if token.is_empty() {
-        return Ok(false);
-    }
-    let client = reqwest::Client::builder()
-        .timeout(StdDuration::from_secs(6))
-        .build()
-        .map_err(|_| ())?;
-
-    let mut form: Vec<(&str, String)> = vec![("secret", secret.to_string()), ("response", token.to_string())];
-    if let Some(ip) = remote_ip {
-        let ip = ip.trim().to_string();
-        if !ip.is_empty() {
-            form.push(("remoteip", ip));
+fn base64_url_decode(s: &str) -> Option<Vec<u8>> {
+    fn val(c: u8) -> Option<u8> {
+        match c {
+            b'A'..=b'Z' => Some(c - b'A'),
+            b'a'..=b'z' => Some(c - b'a' + 26),
+            b'0'..=b'9' => Some(c - b'0' + 52),
+            b'-' => Some(62),
+            b'_' => Some(63),
+            _ => None,
         }
     }
-
-    let res = client
-        .post("https://challenges.cloudflare.com/turnstile/v0/siteverify")
-        .form(&form)
-        .send()
-        .await
-        .map_err(|_| ())?;
-    let json = res.json::<TurnstileVerifyResponse>().await.map_err(|_| ())?;
-    Ok(json.success)
+    let bytes = s.as_bytes();
+    if bytes.is_empty() {
+        return Some(Vec::new());
+    }
+    let mut vals = Vec::with_capacity(bytes.len());
+    for &c in bytes {
+        vals.push(val(c)?);
+    }
+    let mut out = Vec::with_capacity((vals.len() * 3) / 4 + 4);
+    let mut i = 0;
+    while i < vals.len() {
+        let v0 = vals.get(i).copied()?;
+        let v1 = vals.get(i + 1).copied()?;
+        let v2 = vals.get(i + 2).copied().unwrap_or(64);
+        let v3 = vals.get(i + 3).copied().unwrap_or(64);
+        let triple = ((v0 as u32) << 18)
+            | ((v1 as u32) << 12)
+            | (((v2.min(63)) as u32) << 6)
+            | ((v3.min(63)) as u32);
+        out.push(((triple >> 16) & 0xff) as u8);
+        if v2 != 64 {
+            out.push(((triple >> 8) & 0xff) as u8);
+        }
+        if v3 != 64 {
+            out.push((triple & 0xff) as u8);
+        }
+        i += 4;
+    }
+    Some(out)
 }
 
 async fn admin_get_config(
@@ -2152,20 +2260,13 @@ async fn signup(
         return err(StatusCode::TOO_MANY_REQUESTS, "too_many_requests").into_response();
     }
 
-    if let (Some(site_key), Some(secret)) = (
-        state.cfg.turnstile_site_key.clone(),
-        state.cfg.turnstile_secret_key.clone(),
-    ) {
-        if !site_key.trim().is_empty() && !secret.trim().is_empty() {
-            let tok = req.captcha_token.clone().unwrap_or_default();
-            if tok.trim().is_empty() {
-                return err(StatusCode::BAD_REQUEST, "captcha_required").into_response();
-            }
-            let ok = verify_turnstile(&secret, &tok, client_ip.clone()).await.unwrap_or(false);
-            if !ok {
-                return err(StatusCode::BAD_REQUEST, "captcha_failed").into_response();
-            }
-        }
+    let cap_tok = req.captcha_token.clone().unwrap_or_default();
+    let cap_ans = req.captcha_answer.clone().unwrap_or_default();
+    if cap_tok.trim().is_empty() || cap_ans.trim().is_empty() {
+        return err(StatusCode::BAD_REQUEST, "captcha_required").into_response();
+    }
+    if !captcha_verify(&state, &cap_tok, &cap_ans, client_ip.clone()) {
+        return err(StatusCode::BAD_REQUEST, "captcha_failed").into_response();
     }
 
     let user_id = Uuid::new_v4();
@@ -2335,20 +2436,13 @@ async fn login(
         return err(StatusCode::TOO_MANY_REQUESTS, "too_many_requests").into_response();
     }
 
-    if let (Some(site_key), Some(secret)) = (
-        state.cfg.turnstile_site_key.clone(),
-        state.cfg.turnstile_secret_key.clone(),
-    ) {
-        if !site_key.trim().is_empty() && !secret.trim().is_empty() {
-            let tok = req.captcha_token.clone().unwrap_or_default();
-            if tok.trim().is_empty() {
-                return err(StatusCode::BAD_REQUEST, "captcha_required").into_response();
-            }
-            let ok = verify_turnstile(&secret, &tok, client_ip.clone()).await.unwrap_or(false);
-            if !ok {
-                return err(StatusCode::BAD_REQUEST, "captcha_failed").into_response();
-            }
-        }
+    let cap_tok = req.captcha_token.clone().unwrap_or_default();
+    let cap_ans = req.captcha_answer.clone().unwrap_or_default();
+    if cap_tok.trim().is_empty() || cap_ans.trim().is_empty() {
+        return err(StatusCode::BAD_REQUEST, "captcha_required").into_response();
+    }
+    if !captcha_verify(&state, &cap_tok, &cap_ans, client_ip.clone()) {
+        return err(StatusCode::BAD_REQUEST, "captcha_failed").into_response();
     }
 
     let row = sqlx::query(
@@ -4299,14 +4393,6 @@ fn load_config() -> anyhow::Result<AppConfig> {
         .unwrap_or(30);
     let bind = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
     let bind_addr = bind.parse::<SocketAddr>().context("BIND_ADDR")?;
-    let turnstile_site_key = std::env::var("TURNSTILE_SITE_KEY")
-        .ok()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
-    let turnstile_secret_key = std::env::var("TURNSTILE_SECRET_KEY")
-        .ok()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
 
     Ok(AppConfig {
         database_url,
@@ -4314,8 +4400,6 @@ fn load_config() -> anyhow::Result<AppConfig> {
         access_token_ttl_seconds,
         refresh_token_ttl_days,
         bind_addr,
-        turnstile_site_key,
-        turnstile_secret_key,
     })
 }
 

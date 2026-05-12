@@ -164,19 +164,14 @@ function Pill({ kind, children }) {
 const te = new TextEncoder()
 const td = new TextDecoder()
 
-function loadTurnstileScript() {
-  if (window.turnstile) return Promise.resolve()
-  if (window.__kivanaTurnstilePromise) return window.__kivanaTurnstilePromise
-  window.__kivanaTurnstilePromise = new Promise((resolve, reject) => {
-    const s = document.createElement('script')
-    s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
-    s.async = true
-    s.defer = true
-    s.onload = () => resolve()
-    s.onerror = () => reject(new Error('captcha_load_failed'))
-    document.head.appendChild(s)
-  })
-  return window.__kivanaTurnstilePromise
+async function fetchCaptchaChallenge() {
+  const res = await fetch(apiUrl('/v1/captcha/challenge'), { cache: 'no-store' })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json = await res.json().catch(() => ({}))
+  const question = String(json?.question || '').trim()
+  const token = String(json?.token || '').trim()
+  if (!question || !token) throw new Error('captcha_error')
+  return { question, token }
 }
 
 function bytesToB64(bytes) {
@@ -519,7 +514,9 @@ function App() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [captchaQuestion, setCaptchaQuestion] = useState('')
   const [captchaToken, setCaptchaToken] = useState('')
+  const [captchaAnswer, setCaptchaAnswer] = useState('')
 
   const [displayName, setDisplayName] = useState('')
 
@@ -558,7 +555,6 @@ function App() {
 
   const displayNameInputRef = useRef(null)
   const chatKeyRef = useRef({ userId: '', publicJwk: null, privateKey: null })
-  const captchaRef = useRef({ widgetId: null })
 
   function closeAllPopups() {
     setAdminModal(null)
@@ -745,6 +741,19 @@ function App() {
     return json
   }
 
+  async function refreshCaptcha() {
+    try {
+      const c = await fetchCaptchaChallenge()
+      setCaptchaQuestion(c.question)
+      setCaptchaToken(c.token)
+      setCaptchaAnswer('')
+    } catch {
+      setCaptchaQuestion('Reload the page to try again.')
+      setCaptchaToken('')
+      setCaptchaAnswer('')
+    }
+  }
+
   async function loadSession() {
     setBusy(true)
     try {
@@ -768,13 +777,12 @@ function App() {
     setStatus({ kind: 'muted', text: '' })
     const em = String(email || '').trim()
     const pw = String(password || '')
-    const captchaSiteKey = String(publicConfig?.captcha?.siteKey || '').trim()
     if (!em || !pw) {
       setStatus({ kind: 'err', text: 'Missing email or password.' })
       return
     }
-    if (captchaSiteKey && !String(captchaToken || '').trim()) {
-      setStatus({ kind: 'err', text: 'Please complete the CAPTCHA.' })
+    if (!String(captchaToken || '').trim() || !String(captchaAnswer || '').trim()) {
+      setStatus({ kind: 'err', text: 'Please complete the human check.' })
       return
     }
     setBusy(true)
@@ -782,13 +790,13 @@ function App() {
       const endpoint = authMode === 'signup' ? '/v1/auth/signup' : '/v1/auth/login'
       const res = await apiFetch(
         endpoint,
-        { method: 'POST', body: JSON.stringify({ email: em, password: pw, captchaToken: captchaToken || undefined }) },
+        { method: 'POST', body: JSON.stringify({ email: em, password: pw, captchaToken: captchaToken, captchaAnswer: captchaAnswer }) },
         { allowRetry: false }
       )
       const json = await res.json()
       setTokens(json.accessToken, json.refreshToken)
       setPassword('')
-      setCaptchaToken('')
+      setCaptchaAnswer('')
       await loadSession()
     } catch (err) {
       const msg = String(err?.message || err)
@@ -796,17 +804,10 @@ function App() {
         kind: 'err',
         text:
           msg === 'captcha_required' || msg === 'captcha_failed'
-            ? 'CAPTCHA failed. Please try again.'
+            ? 'Human check failed. Please try again.'
             : msg,
       })
-      setCaptchaToken('')
-      if (window.turnstile && captchaRef.current.widgetId != null) {
-        try {
-          window.turnstile.reset(captchaRef.current.widgetId)
-        } catch {
-          void 0
-        }
-      }
+      await refreshCaptcha().catch(() => null)
     } finally {
       setBusy(false)
     }
@@ -1935,45 +1936,9 @@ function App() {
         : 'Sign in to manage your subscription and account.'
     const toggleText = authMode === 'signup' ? 'Already have an account?' : "Don't have an account?"
     const toggleBtn = authMode === 'signup' ? 'Sign in' : 'Create one'
-    const captchaSiteKey = String(publicConfig?.captcha?.siteKey || '').trim()
-    const captchaElRef = useRef(null)
-
     useEffect(() => {
-      if (!captchaSiteKey) return
-      let cancelled = false
-      setCaptchaToken('')
-      ;(async () => {
-        await loadTurnstileScript().catch(() => null)
-        if (cancelled) return
-        if (!window.turnstile) return
-        const el = captchaElRef.current
-        if (!el) return
-        if (captchaRef.current.widgetId != null) {
-          try {
-            window.turnstile.remove(captchaRef.current.widgetId)
-          } catch {
-            void 0
-          }
-          captchaRef.current.widgetId = null
-        }
-        el.innerHTML = ''
-        captchaRef.current.widgetId = window.turnstile.render(el, {
-          sitekey: captchaSiteKey,
-          callback: (t) => {
-            setCaptchaToken(String(t || ''))
-          },
-          'expired-callback': () => {
-            setCaptchaToken('')
-          },
-          'error-callback': () => {
-            setCaptchaToken('')
-          },
-        })
-      })()
-      return () => {
-        cancelled = true
-      }
-    }, [captchaSiteKey, authMode])
+      void refreshCaptcha()
+    }, [authMode])
 
     return React.createElement(
       'div',
@@ -2036,13 +2001,23 @@ function App() {
               disabled: busy,
             })
           ),
-          captchaSiteKey
-            ? React.createElement(
-                'div',
-                { className: 'flex justify-center' },
-                React.createElement('div', { className: 'w-full max-w-[340px] overflow-hidden rounded-2xl border border-gray-200 bg-white px-3 py-3' }, React.createElement('div', { ref: captchaElRef }))
-              )
-            : null,
+          React.createElement(
+            'div',
+            null,
+            React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Human check'),
+            React.createElement('div', { className: 'mt-2 text-sm text-gray-600 font-semibold' }, captchaQuestion || 'Loading…'),
+            React.createElement('input', {
+              className:
+                'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[15px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+              type: 'text',
+              inputMode: 'numeric',
+              value: captchaAnswer,
+              onChange: (e) => setCaptchaAnswer(e.target.value),
+              autoComplete: 'off',
+              placeholder: 'Answer',
+              disabled: busy || !String(captchaToken || '').trim(),
+            })
+          ),
           React.createElement(
             'button',
             {

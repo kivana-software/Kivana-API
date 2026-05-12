@@ -697,21 +697,12 @@ body {
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
 }
 
-.captchaWrap {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 1.25rem;
-}
-
-.captchaWrap > div {
-  width: 100%;
-  max-width: 320px;
-  overflow: hidden;
-  border-radius: 12px;
-}
-
-.captchaWrap iframe {
-  border-radius: 12px;
+.captchaQuestion {
+  margin-top: 0.4rem;
+  margin-bottom: 0.6rem;
+  color: rgba(229, 231, 235, 0.72);
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 .btn {
