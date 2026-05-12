@@ -341,6 +341,52 @@
         font-size: 12px;
         color: rgba(255, 255, 255, 0.4);
       }
+      #kivanaFooterCtas {
+        margin-top: 18px;
+        padding-top: 18px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      #kivanaFooterCtaText {
+        color: rgba(255, 255, 255, 0.75);
+        font-weight: 700;
+        font-size: 13px;
+      }
+      #kivanaFooterCtaButtons {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .kivanaFooterCtaBtn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 14px;
+        border-radius: 999px;
+        text-decoration: none;
+        font-weight: 800;
+        font-size: 13px;
+        border: 2px solid rgba(255, 255, 255, 0.18);
+        color: #0b0a19;
+        background: #fff;
+        transition: transform 0.08s ease, background 0.15s ease, border-color 0.15s ease;
+      }
+      .kivanaFooterCtaBtn:hover {
+        transform: translateY(-1px);
+      }
+      .kivanaFooterCtaBtnGhost {
+        background: transparent;
+        color: #fff;
+        border-color: rgba(255, 255, 255, 0.28);
+      }
+      .kivanaFooterCtaBtnGhost:hover {
+        border-color: rgba(255, 255, 255, 0.42);
+        background: rgba(255, 255, 255, 0.06);
+      }
     </style>
     <script>
       window.addEventListener(
@@ -406,6 +452,14 @@
         <div id="kivanaFooterBottom">
           <div id="kivanaFooterBottomLeft">kivana.eu • All rights reserved © 2026</div>
           <div id="kivanaFooterBottomRight">Built with care, for people who own their data.</div>
+        </div>
+        <div id="kivanaFooterCtas">
+          <div id="kivanaFooterCtaText">Try Kivana with an account (14-day trial available).</div>
+          <div id="kivanaFooterCtaButtons">
+            <a class="kivanaFooterCtaBtn" href="#">Try now</a>
+            <a class="kivanaFooterCtaBtn kivanaFooterCtaBtnGhost" href="#">Sign in</a>
+            <a class="kivanaFooterCtaBtn kivanaFooterCtaBtnGhost" href="https://github.com/kivana-software/Kivana/releases" target="_blank" rel="noopener">Download Basic (Free &amp; Open Source)</a>
+          </div>
         </div>
       </div>
     </footer>
@@ -710,7 +764,7 @@
           if (el.closest && el.closest("#authModal")) return ""
           var t = normalizeText(el.textContent)
           if (t === "sign in") return "auth:login"
-          if (t === "try free" || t === "create account") return "auth:signup"
+          if (t === "try free" || t === "try now" || t === "create account") return "auth:signup"
           if (t.includes("download") && (t.includes("mac") || t.includes("windows") || t.includes("win"))) return "download"
           if (t === "download" || t === "download now" || t === "download app") return "download"
           return ""
@@ -810,6 +864,7 @@
 
         function init() {
           loadReactBuild()
+          installTryNowCta()
           loadPublicConfig().then(function (cfg) {
             var tries = 0
             var timer = setInterval(function () {
@@ -854,6 +909,93 @@
           try {
             var obs = new MutationObserver(function () {})
             obs.observe(document.documentElement, { childList: true, subtree: true })
+          } catch (err) {}
+        }
+
+        function installTryNowCta() {
+          var replace = function () {
+            try {
+              var candidates = Array.prototype.slice.call(document.querySelectorAll("button,a"))
+              for (var i = 0; i < candidates.length; i++) {
+                var el = candidates[i]
+                if (!el || !el.textContent) continue
+                if (el.closest && (el.closest("#authModal") || el.closest("#kivanaFooter"))) continue
+                var t = normalizeText(el.textContent)
+                if (t === "download now" || t === "download" || t === "download app") {
+                  if (t.includes("mac") || t.includes("windows") || t.includes("win")) continue
+                  el.textContent = "Try now"
+                  return true
+                }
+              }
+            } catch (err) {}
+            return false
+          }
+
+          var tries = 0
+          var timer = setInterval(function () {
+            tries++
+            if (replace() || tries > 40) clearInterval(timer)
+          }, 250)
+
+          try {
+            var obs = new MutationObserver(function () {
+              replace()
+            })
+            obs.observe(document.body, { childList: true, subtree: true })
+          } catch (err) {}
+        }
+
+        if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init)
+        else init()
+      })()
+    </script>
+    <script>
+      ;(() => {
+        const sanitizeText = (text) => {
+          if (!text) return text
+          let t = String(text)
+          t = t.replace(/\bv0\.\d+\.\d+(?:\.\d+)?(?:-[a-z0-9.-]+)?\b/gi, "Basic")
+          t = t.replace(/\b0\.\d+\.\d+(?:\.\d+)?(?:-[a-z0-9.-]+)?\b/gi, "Basic")
+          return t
+        }
+
+        const sanitizeTree = (root) => {
+          if (!root) return
+          const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+          let node = walker.nextNode()
+          while (node) {
+            const v = node.nodeValue
+            const nv = sanitizeText(v)
+            if (nv !== v) node.nodeValue = nv
+            node = walker.nextNode()
+          }
+        }
+
+        const sanitizeNode = (node) => {
+          if (!node) return
+          if (node.nodeType === Node.TEXT_NODE) {
+            const v = node.nodeValue
+            const nv = sanitizeText(v)
+            if (nv !== v) node.nodeValue = nv
+            return
+          }
+          if (node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+            sanitizeTree(node)
+          }
+        }
+
+        const init = () => {
+          sanitizeTree(document.body)
+          try {
+            const obs = new MutationObserver((mutations) => {
+              for (const m of mutations) {
+                if (m.type === "characterData") sanitizeNode(m.target)
+                else if (m.type === "childList") {
+                  for (const n of m.addedNodes) sanitizeNode(n)
+                }
+              }
+            })
+            obs.observe(document.body, { childList: true, subtree: true, characterData: true })
           } catch (err) {}
         }
 
