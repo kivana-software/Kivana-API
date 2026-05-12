@@ -547,6 +547,8 @@ function App() {
   const [deleteModal, setDeleteModal] = useState(null)
   const [publicConfig, setPublicConfig] = useState(null)
   const [adminConfig, setAdminConfig] = useState(null)
+  const [adminPayPal, setAdminPayPal] = useState(null)
+  const [adminPayPalSecret, setAdminPayPalSecret] = useState('')
   const [adminPage, setAdminPage] = useState('overview')
   const [msgModal, setMsgModal] = useState(null)
   const [adminMsgFilter, setAdminMsgFilter] = useState('new')
@@ -570,6 +572,19 @@ function App() {
 
     ;(async () => {
       await loadPublicConfig().catch(() => null)
+      try {
+        const sp = new URLSearchParams(window.location.search)
+        const subId = String(sp.get('subscription_id') || sp.get('subscriptionId') || '').trim()
+        if (subId) {
+          localStorage.setItem('kivana/paypalPendingSubId', subId)
+          sp.delete('subscription_id')
+          sp.delete('subscriptionId')
+          const next = `${window.location.pathname}${sp.toString() ? `?${sp.toString()}` : ''}`
+          window.history.replaceState({}, '', next)
+        }
+      } catch {
+        void 0
+      }
       if (!getAccessToken()) return
       try {
         await refreshAccessToken()
@@ -580,6 +595,37 @@ function App() {
       await loadSession()
     })()
   }, [])
+
+  useEffect(() => {
+    if (!me?.id) return
+    let cancelled = false
+    ;(async () => {
+      let subId = ''
+      try {
+        subId = String(localStorage.getItem('kivana/paypalPendingSubId') || '').trim()
+      } catch {
+        subId = ''
+      }
+      if (!subId) return
+      try {
+        await apiFetch('/v1/portal/paypal/confirm', { method: 'POST', body: JSON.stringify({ subscriptionId: subId }) })
+        if (cancelled) return
+        try {
+          localStorage.removeItem('kivana/paypalPendingSubId')
+        } catch {
+          void 0
+        }
+        await loadEntitlements()
+        setStatus({ kind: 'ok', text: 'Subscription activated.' })
+      } catch (e) {
+        const msg = String(e?.message || e)
+        setStatus({ kind: 'err', text: msg === 'paypal_subscription_not_found' ? 'PayPal subscription not found.' : msg })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [me?.id])
 
   useEffect(() => {
     closeAllPopups()
@@ -927,7 +973,33 @@ function App() {
     setStatus({ kind: 'muted', text: '' })
     try {
       const c = String(planCode || '').trim().toLowerCase()
-      await apiFetch('/v1/portal/select-plan', { method: 'POST', body: JSON.stringify({ planCode: c === 'lifetime' ? 'lifetime_pro' : c, billingCycle }) })
+      const normalized = c === 'lifetime' ? 'lifetime_pro' : c
+      if (normalized === 'standard' || normalized === 'pro') {
+        const currency = pricing?.code || 'EUR'
+        const returnUrl = `${window.location.origin}/account/?section=billing&paypal=1`
+        const cancelUrl = `${window.location.origin}/account/?section=billing&paypal=0`
+        try {
+          const res = await apiFetch('/v1/portal/paypal/start', {
+            method: 'POST',
+            body: JSON.stringify({ planCode: normalized, billingCycle, currency, returnUrl, cancelUrl }),
+          })
+          const json = await res.json()
+          const url = String(json?.approvalUrl || '').trim()
+          if (!url) throw new Error('paypal_start_failed')
+          window.location.assign(url)
+          return
+        } catch (e) {
+          const msg = String(e?.message || e)
+          if (msg === 'paypal_disabled') {
+            await apiFetch('/v1/portal/select-plan', { method: 'POST', body: JSON.stringify({ planCode: normalized, billingCycle }) })
+            setStatus({ kind: 'ok', text: 'Plan updated.' })
+            await loadEntitlements()
+            return
+          }
+          throw e
+        }
+      }
+      await apiFetch('/v1/portal/select-plan', { method: 'POST', body: JSON.stringify({ planCode: normalized, billingCycle }) })
       setStatus({ kind: 'ok', text: 'Plan updated.' })
       await loadEntitlements()
     } catch (e) {
@@ -958,17 +1030,21 @@ function App() {
     setBusy(true)
     setStatus({ kind: 'muted', text: '' })
     try {
-      const [uRes, mRes, cRes] = await Promise.all([
+      const [uRes, mRes, cRes, pRes] = await Promise.all([
         apiFetch('/v1/admin/users', { method: 'GET' }),
         apiFetch('/v1/admin/support/threads', { method: 'GET' }),
         apiFetch('/v1/admin/config', { method: 'GET' }),
+        apiFetch('/v1/admin/paypal/config', { method: 'GET' }),
       ])
       const uJson = await uRes.json()
       const mJson = await mRes.json()
       const cJson = await cRes.json()
+      const pJson = await pRes.json()
       setAdminUsers(Array.isArray(uJson?.users) ? uJson.users : [])
       setAdminMessages(Array.isArray(mJson?.threads) ? mJson.threads : [])
       setAdminConfig(cJson || null)
+      setAdminPayPal(pJson || null)
+      setAdminPayPalSecret('')
     } catch (e) {
       setStatus({ kind: 'err', text: String(e?.message || e) })
     } finally {
@@ -985,6 +1061,37 @@ function App() {
       setStatus({ kind: 'ok', text: 'Settings saved.' })
       setAdminConfig(nextCfg)
       await loadPublicConfig()
+    } catch (e) {
+      setStatus({ kind: 'err', text: String(e?.message || e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function savePayPalConfig(nextCfg) {
+    if (busy) return
+    setBusy(true)
+    setStatus({ kind: 'muted', text: '' })
+    try {
+      const payload = { ...(nextCfg || {}), secret: adminPayPalSecret || undefined }
+      await apiFetch('/v1/admin/paypal/config', { method: 'POST', body: JSON.stringify(payload) })
+      setStatus({ kind: 'ok', text: 'PayPal settings saved.' })
+      await loadAdmin()
+    } catch (e) {
+      setStatus({ kind: 'err', text: String(e?.message || e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function syncPayPalPlans() {
+    if (busy) return
+    setBusy(true)
+    setStatus({ kind: 'muted', text: '' })
+    try {
+      await apiFetch('/v1/admin/paypal/sync-plans', { method: 'POST', body: JSON.stringify({}) })
+      setStatus({ kind: 'ok', text: 'PayPal plans synced.' })
+      await loadAdmin()
     } catch (e) {
       setStatus({ kind: 'err', text: String(e?.message || e) })
     } finally {
@@ -3562,6 +3669,131 @@ function App() {
             obj: cfg.pricing?.proMonthly,
             onUpdate: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), proMonthly: v } })),
           }),
+          React.createElement(
+            'div',
+            { className: 'rounded-2xl border border-gray-100 px-5 py-4' },
+            React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'PayPal subscriptions'),
+            React.createElement('div', { className: 'mt-1 text-xs text-gray-600' }, 'Save credentials, then sync plans to match your current pricing.'),
+            adminPayPal
+              ? React.createElement(
+                  'div',
+                  { className: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3' },
+                  React.createElement(
+                    'label',
+                    { className: 'flex items-center gap-3 rounded-2xl border border-gray-100 px-4 py-3' },
+                    React.createElement('input', {
+                      type: 'checkbox',
+                      checked: !!adminPayPal.enabled,
+                      onChange: (e) => setAdminPayPal((p) => ({ ...(p || {}), enabled: !!e.target.checked })),
+                      disabled: busy,
+                      className: 'w-5 h-5 accent-[#4F3DDD]',
+                    }),
+                    React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Enabled')
+                  ),
+                  React.createElement(
+                    'div',
+                    null,
+                    React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Mode'),
+                    React.createElement(
+                      'select',
+                      {
+                        value: String(adminPayPal.mode || 'sandbox'),
+                        onChange: (e) => setAdminPayPal((p) => ({ ...(p || {}), mode: e.target.value })),
+                        disabled: busy,
+                        className:
+                          'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                      },
+                      React.createElement('option', { value: 'sandbox' }, 'Sandbox'),
+                      React.createElement('option', { value: 'live' }, 'Live')
+                    )
+                  ),
+                  React.createElement(
+                    'div',
+                    { className: 'sm:col-span-2' },
+                    React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Client ID'),
+                    React.createElement('input', {
+                      value: String(adminPayPal.clientId || ''),
+                      onChange: (e) => setAdminPayPal((p) => ({ ...(p || {}), clientId: e.target.value })),
+                      disabled: busy,
+                      className:
+                        'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                      placeholder: 'PayPal Client ID',
+                    })
+                  ),
+                  React.createElement(
+                    'div',
+                    { className: 'sm:col-span-2' },
+                    React.createElement(
+                      'div',
+                      { className: 'flex items-center justify-between gap-3' },
+                      React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Secret'),
+                      React.createElement('div', { className: 'text-xs text-gray-600' }, adminPayPal.hasSecret ? 'Saved' : 'Not saved')
+                    ),
+                    React.createElement('input', {
+                      value: adminPayPalSecret,
+                      onChange: (e) => setAdminPayPalSecret(e.target.value),
+                      disabled: busy,
+                      type: 'password',
+                      className:
+                        'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                      placeholder: adminPayPal.hasSecret ? '•••••••• (leave blank to keep current)' : 'PayPal Secret',
+                    })
+                  ),
+                  React.createElement(
+                    'div',
+                    { className: 'sm:col-span-2' },
+                    React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Webhook ID'),
+                    React.createElement('input', {
+                      value: String(adminPayPal.webhookId || ''),
+                      onChange: (e) => setAdminPayPal((p) => ({ ...(p || {}), webhookId: e.target.value })),
+                      disabled: busy,
+                      className:
+                        'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                      placeholder: 'PayPal Webhook ID (from Developer dashboard)',
+                    })
+                  ),
+                  React.createElement(
+                    'div',
+                    { className: 'sm:col-span-2' },
+                    React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Product ID'),
+                    React.createElement('input', {
+                      value: String(adminPayPal.productId || ''),
+                      onChange: (e) => setAdminPayPal((p) => ({ ...(p || {}), productId: e.target.value })),
+                      disabled: busy,
+                      className:
+                        'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                      placeholder: 'Leave empty to auto-create',
+                    })
+                  )
+                )
+              : React.createElement('div', { className: 'mt-4 text-sm text-gray-600' }, 'Load admin data to edit PayPal settings.'),
+            React.createElement(
+              'div',
+              { className: 'mt-4 flex flex-wrap items-center justify-end gap-3' },
+              React.createElement(
+                'button',
+                {
+                  type: 'button',
+                  onClick: () => savePayPalConfig(adminPayPal),
+                  disabled: busy || !adminPayPal,
+                  className:
+                    'px-6 py-2.5 rounded-full text-[14px] font-semibold text-white bg-[#1B1748] hover:bg-black disabled:opacity-60 disabled:pointer-events-none',
+                },
+                'Save PayPal'
+              ),
+              React.createElement(
+                'button',
+                {
+                  type: 'button',
+                  onClick: () => syncPayPalPlans(),
+                  disabled: busy || !adminPayPal,
+                  className:
+                    'px-6 py-2.5 rounded-full text-[14px] font-semibold text-white bg-[#4F3DDD] hover:bg-[#3F2FCB] disabled:opacity-60 disabled:pointer-events-none',
+                },
+                'Sync plans'
+              )
+            )
+          ),
           React.createElement(
             'div',
             { className: 'flex items-center justify-end gap-3' },

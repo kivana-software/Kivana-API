@@ -593,6 +593,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/bootstrap", post(admin_bootstrap))
         .route("/v1/admin/config", get(admin_get_config))
         .route("/v1/admin/config", post(admin_set_config))
+        .route("/v1/admin/paypal/config", get(admin_get_paypal_config))
+        .route("/v1/admin/paypal/config", post(admin_set_paypal_config))
+        .route("/v1/admin/paypal/sync-plans", post(admin_paypal_sync_plans))
         .route("/v1/admin/users", get(admin_users))
         .route("/v1/admin/contact-messages", get(admin_contact_messages))
         .route(
@@ -649,6 +652,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/discount", post(admin_set_discount))
         .route("/v1/admin/grant", post(admin_grant))
         .route("/v1/portal/select-plan", post(portal_select_plan))
+        .route("/v1/portal/paypal/start", post(portal_paypal_start))
+        .route("/v1/portal/paypal/confirm", post(portal_paypal_confirm))
+        .route("/v1/paypal/webhook", post(paypal_webhook))
         .route("/v1/events/poll", get(poll_events))
         .route("/admin", get(|| async { Redirect::permanent("/admin/") }))
         .nest_service(
@@ -924,6 +930,364 @@ async fn admin_set_config(
         Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
         Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
     }
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct PayPalPlanCycleCurrency {
+    eur: Option<String>,
+    gbp: Option<String>,
+    nok: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct PayPalPlanCycles {
+    monthly: PayPalPlanCycleCurrency,
+    yearly: PayPalPlanCycleCurrency,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct PayPalPlanIds {
+    standard: PayPalPlanCycles,
+    pro: PayPalPlanCycles,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct PayPalConfig {
+    enabled: bool,
+    mode: String,
+    client_id: String,
+    secret: String,
+    webhook_id: String,
+    product_id: Option<String>,
+    plans: PayPalPlanIds,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PayPalConfigResponse {
+    enabled: bool,
+    mode: String,
+    client_id: String,
+    has_secret: bool,
+    webhook_id: String,
+    product_id: Option<String>,
+    plans: PayPalPlanIds,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PayPalConfigUpdateRequest {
+    enabled: bool,
+    mode: String,
+    client_id: String,
+    secret: Option<String>,
+    webhook_id: String,
+    product_id: Option<String>,
+    plans: Option<PayPalPlanIds>,
+}
+
+async fn get_paypal_config(pool: &PgPool) -> PayPalConfig {
+    let row = sqlx::query("SELECT value FROM app_settings WHERE key = 'paypal_config' LIMIT 1")
+        .fetch_optional(pool)
+        .await;
+    let v: Option<serde_json::Value> = match row {
+        Ok(Some(r)) => r.try_get("value").ok(),
+        _ => None,
+    };
+    let mut cfg = match v {
+        Some(val) => serde_json::from_value::<PayPalConfig>(val).unwrap_or_default(),
+        None => PayPalConfig::default(),
+    };
+    if cfg.mode.trim().is_empty() {
+        cfg.mode = "sandbox".to_string();
+    }
+    cfg
+}
+
+async fn set_paypal_config(pool: &PgPool, cfg: &PayPalConfig) -> anyhow::Result<()> {
+    let now = OffsetDateTime::now_utc();
+    let value = serde_json::to_value(cfg)?;
+    sqlx::query(
+        r#"
+      INSERT INTO app_settings (key, value, updated_at)
+      VALUES ('paypal_config', $1, $2)
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+    "#,
+    )
+    .bind(value)
+    .bind(now)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn admin_get_paypal_config(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+    let cfg = get_paypal_config(&state.pool).await;
+    (
+        StatusCode::OK,
+        Json(PayPalConfigResponse {
+            enabled: cfg.enabled,
+            mode: cfg.mode,
+            client_id: cfg.client_id,
+            has_secret: !cfg.secret.trim().is_empty(),
+            webhook_id: cfg.webhook_id,
+            product_id: cfg.product_id,
+            plans: cfg.plans,
+        }),
+    )
+        .into_response()
+}
+
+async fn admin_set_paypal_config(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    Json(req): Json<PayPalConfigUpdateRequest>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+    let mode = req.mode.trim().to_lowercase();
+    if mode != "sandbox" && mode != "live" {
+        return err(StatusCode::BAD_REQUEST, "invalid_mode").into_response();
+    }
+    let mut cfg = get_paypal_config(&state.pool).await;
+    cfg.enabled = req.enabled;
+    cfg.mode = mode;
+    cfg.client_id = req.client_id.trim().to_string();
+    cfg.webhook_id = req.webhook_id.trim().to_string();
+    cfg.product_id = req.product_id.clone().and_then(|s| {
+        let t = s.trim().to_string();
+        if t.is_empty() { None } else { Some(t) }
+    });
+    if let Some(plans) = req.plans {
+        cfg.plans = plans;
+    }
+    if let Some(sec) = req.secret {
+        let s = sec.trim().to_string();
+        if !s.is_empty() {
+            cfg.secret = s;
+        }
+    }
+    if let Err(_) = set_paypal_config(&state.pool, &cfg).await {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+    }
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+}
+
+fn paypal_base_url(mode: &str) -> &'static str {
+    if mode == "live" {
+        "https://api-m.paypal.com"
+    } else {
+        "https://api-m.sandbox.paypal.com"
+    }
+}
+
+#[derive(Deserialize)]
+struct PayPalTokenResponse {
+    access_token: String,
+}
+
+async fn paypal_access_token(cfg: &PayPalConfig) -> anyhow::Result<String> {
+    let base = paypal_base_url(cfg.mode.as_str());
+    let client = reqwest::Client::builder()
+        .timeout(StdDuration::from_secs(10))
+        .build()?;
+    let res = client
+        .post(format!("{}/v1/oauth2/token", base))
+        .basic_auth(cfg.client_id.clone(), Some(cfg.secret.clone()))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body("grant_type=client_credentials")
+        .send()
+        .await?;
+    if !res.status().is_success() {
+        anyhow::bail!("paypal_auth_failed");
+    }
+    let json = res.json::<PayPalTokenResponse>().await?;
+    Ok(json.access_token)
+}
+
+#[derive(Deserialize)]
+struct PayPalCreateProductResponse {
+    id: String,
+}
+
+async fn paypal_create_product(cfg: &PayPalConfig, token: &str) -> anyhow::Result<String> {
+    let base = paypal_base_url(cfg.mode.as_str());
+    let client = reqwest::Client::builder()
+        .timeout(StdDuration::from_secs(10))
+        .build()?;
+    let res = client
+        .post(format!("{}/v1/catalogs/products", base))
+        .bearer_auth(token)
+        .json(&serde_json::json!({
+          "name": "Kivana Subscription",
+          "type": "SERVICE",
+          "category": "SOFTWARE"
+        }))
+        .send()
+        .await?;
+    if !res.status().is_success() {
+        anyhow::bail!("paypal_product_failed");
+    }
+    let json = res.json::<PayPalCreateProductResponse>().await?;
+    Ok(json.id)
+}
+
+#[derive(Deserialize)]
+struct PayPalCreatePlanResponse {
+    id: String,
+}
+
+async fn paypal_create_plan(
+    cfg: &PayPalConfig,
+    token: &str,
+    product_id: &str,
+    name: &str,
+    currency: &str,
+    interval_unit: &str,
+    price: f64,
+) -> anyhow::Result<String> {
+    let base = paypal_base_url(cfg.mode.as_str());
+    let client = reqwest::Client::builder()
+        .timeout(StdDuration::from_secs(10))
+        .build()?;
+    let value = if currency == "NOK" {
+        format!("{}", (price.round() as i64))
+    } else {
+        format!("{:.2}", price)
+    };
+    let res = client
+        .post(format!("{}/v1/billing/plans", base))
+        .bearer_auth(token)
+        .json(&serde_json::json!({
+          "product_id": product_id,
+          "name": name,
+          "billing_cycles": [{
+            "frequency": { "interval_unit": interval_unit, "interval_count": 1 },
+            "tenure_type": "REGULAR",
+            "sequence": 1,
+            "total_cycles": 0,
+            "pricing_scheme": { "fixed_price": { "value": value, "currency_code": currency } }
+          }],
+          "payment_preferences": {
+            "auto_bill_outstanding": true,
+            "setup_fee_failure_action": "CANCEL",
+            "payment_failure_threshold": 1
+          }
+        }))
+        .send()
+        .await?;
+    if !res.status().is_success() {
+        anyhow::bail!("paypal_plan_failed");
+    }
+    let json = res.json::<PayPalCreatePlanResponse>().await?;
+    Ok(json.id)
+}
+
+async fn admin_paypal_sync_plans(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+    let portal_cfg = get_portal_config(&state.pool).await;
+    let mut cfg = get_paypal_config(&state.pool).await;
+    if cfg.client_id.trim().is_empty() || cfg.secret.trim().is_empty() {
+        return err(StatusCode::BAD_REQUEST, "paypal_not_configured").into_response();
+    }
+    let token = match paypal_access_token(&cfg).await {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::BAD_REQUEST, "paypal_auth_failed").into_response(),
+    };
+    let product_id = match cfg.product_id.clone() {
+        Some(v) if !v.trim().is_empty() => v,
+        _ => match paypal_create_product(&cfg, &token).await {
+            Ok(id) => id,
+            Err(_) => return err(StatusCode::BAD_REQUEST, "paypal_product_failed").into_response(),
+        },
+    };
+
+    let yearly_factor = portal_cfg.pricing.yearly_factor as f64;
+    let std_eur_m = portal_cfg.pricing.standard_monthly.eur;
+    let std_gbp_m = portal_cfg.pricing.standard_monthly.gbp;
+    let std_nok_m = portal_cfg.pricing.standard_monthly.nok;
+    let pro_eur_m = portal_cfg.pricing.pro_monthly.eur;
+    let pro_gbp_m = portal_cfg.pricing.pro_monthly.gbp;
+    let pro_nok_m = portal_cfg.pricing.pro_monthly.nok;
+
+    let mut plans = PayPalPlanIds::default();
+
+    let mk = |tier: &str, cycle: &str, cur: &str| format!("Kivana {} {} ({})", tier, cycle, cur);
+
+    let std_eur_m_id = paypal_create_plan(&cfg, &token, &product_id, &mk("Ordinary", "Monthly", "EUR"), "EUR", "MONTH", std_eur_m).await;
+    let std_eur_y_id = paypal_create_plan(&cfg, &token, &product_id, &mk("Ordinary", "Yearly", "EUR"), "EUR", "YEAR", std_eur_m * yearly_factor).await;
+    let std_gbp_m_id = paypal_create_plan(&cfg, &token, &product_id, &mk("Ordinary", "Monthly", "GBP"), "GBP", "MONTH", std_gbp_m).await;
+    let std_gbp_y_id = paypal_create_plan(&cfg, &token, &product_id, &mk("Ordinary", "Yearly", "GBP"), "GBP", "YEAR", std_gbp_m * yearly_factor).await;
+    let std_nok_m_id = paypal_create_plan(&cfg, &token, &product_id, &mk("Ordinary", "Monthly", "NOK"), "NOK", "MONTH", std_nok_m).await;
+    let std_nok_y_id = paypal_create_plan(&cfg, &token, &product_id, &mk("Ordinary", "Yearly", "NOK"), "NOK", "YEAR", std_nok_m * yearly_factor).await;
+
+    let pro_eur_m_id = paypal_create_plan(&cfg, &token, &product_id, &mk("Pro", "Monthly", "EUR"), "EUR", "MONTH", pro_eur_m).await;
+    let pro_eur_y_id = paypal_create_plan(&cfg, &token, &product_id, &mk("Pro", "Yearly", "EUR"), "EUR", "YEAR", pro_eur_m * yearly_factor).await;
+    let pro_gbp_m_id = paypal_create_plan(&cfg, &token, &product_id, &mk("Pro", "Monthly", "GBP"), "GBP", "MONTH", pro_gbp_m).await;
+    let pro_gbp_y_id = paypal_create_plan(&cfg, &token, &product_id, &mk("Pro", "Yearly", "GBP"), "GBP", "YEAR", pro_gbp_m * yearly_factor).await;
+    let pro_nok_m_id = paypal_create_plan(&cfg, &token, &product_id, &mk("Pro", "Monthly", "NOK"), "NOK", "MONTH", pro_nok_m).await;
+    let pro_nok_y_id = paypal_create_plan(&cfg, &token, &product_id, &mk("Pro", "Yearly", "NOK"), "NOK", "YEAR", pro_nok_m * yearly_factor).await;
+
+    let ids = [
+        std_eur_m_id,
+        std_eur_y_id,
+        std_gbp_m_id,
+        std_gbp_y_id,
+        std_nok_m_id,
+        std_nok_y_id,
+        pro_eur_m_id,
+        pro_eur_y_id,
+        pro_gbp_m_id,
+        pro_gbp_y_id,
+        pro_nok_m_id,
+        pro_nok_y_id,
+    ];
+    if ids.iter().any(|r| r.is_err()) {
+        return err(StatusCode::BAD_REQUEST, "paypal_plan_failed").into_response();
+    }
+
+    plans.standard.monthly.eur = Some(ids[0].as_ref().unwrap().clone());
+    plans.standard.yearly.eur = Some(ids[1].as_ref().unwrap().clone());
+    plans.standard.monthly.gbp = Some(ids[2].as_ref().unwrap().clone());
+    plans.standard.yearly.gbp = Some(ids[3].as_ref().unwrap().clone());
+    plans.standard.monthly.nok = Some(ids[4].as_ref().unwrap().clone());
+    plans.standard.yearly.nok = Some(ids[5].as_ref().unwrap().clone());
+    plans.pro.monthly.eur = Some(ids[6].as_ref().unwrap().clone());
+    plans.pro.yearly.eur = Some(ids[7].as_ref().unwrap().clone());
+    plans.pro.monthly.gbp = Some(ids[8].as_ref().unwrap().clone());
+    plans.pro.yearly.gbp = Some(ids[9].as_ref().unwrap().clone());
+    plans.pro.monthly.nok = Some(ids[10].as_ref().unwrap().clone());
+    plans.pro.yearly.nok = Some(ids[11].as_ref().unwrap().clone());
+
+    cfg.product_id = Some(product_id);
+    cfg.plans = plans.clone();
+    if let Err(_) = set_paypal_config(&state.pool, &cfg).await {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+    }
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "ok": true, "productId": cfg.product_id, "plans": plans })),
+    )
+        .into_response()
 }
 
 async fn portal_redirect(uri: OriginalUri) -> impl IntoResponse {
@@ -3434,6 +3798,11 @@ async fn portal_select_plan(
     } else {
         plan_code.clone()
     };
+
+    let paypal_cfg = get_paypal_config(&state.pool).await;
+    if paypal_cfg.enabled && (plan_code_to_lookup == "standard" || plan_code_to_lookup == "pro") {
+        return err(StatusCode::PAYMENT_REQUIRED, "payment_required").into_response();
+    }
     let plan_id = if plan_code == "basic" {
         None
     } else {
@@ -3455,6 +3824,25 @@ async fn portal_select_plan(
     };
 
     let now = OffsetDateTime::now_utc();
+
+    if plan_code == "basic" && paypal_cfg.enabled {
+        let row = sqlx::query(
+            "SELECT provider_subscription_id FROM subscriptions WHERE user_id = $1 AND product_id = $2 AND status = 'active' AND provider = 'paypal' AND provider_subscription_id IS NOT NULL ORDER BY started_at DESC LIMIT 1",
+        )
+        .bind(user_id)
+        .bind(product_id)
+        .fetch_optional(&mut *tx)
+        .await;
+        if let Ok(Some(r)) = row {
+            let sub_id: String = r.get("provider_subscription_id");
+            if !sub_id.trim().is_empty() && !paypal_cfg.client_id.trim().is_empty() && !paypal_cfg.secret.trim().is_empty() {
+                if let Ok(tok) = paypal_access_token(&paypal_cfg).await {
+                    let _ = paypal_cancel_subscription(&paypal_cfg, &tok, &sub_id, "User canceled via portal").await;
+                }
+            }
+        }
+    }
+
     let _ = sqlx::query("UPDATE subscriptions SET status = 'canceled', canceled_at = $1 WHERE user_id = $2 AND product_id = $3 AND status = 'active'")
         .bind(now)
         .bind(user_id)
@@ -3506,6 +3894,463 @@ async fn portal_select_plan(
     });
 
     (StatusCode::OK, Json(serde_json::json!({ "success": true }))).into_response()
+}
+
+async fn paypal_cancel_subscription(
+    cfg: &PayPalConfig,
+    token: &str,
+    subscription_id: &str,
+    reason: &str,
+) -> anyhow::Result<()> {
+    let base = paypal_base_url(cfg.mode.as_str());
+    let client = reqwest::Client::builder()
+        .timeout(StdDuration::from_secs(10))
+        .build()?;
+    let res = client
+        .post(format!(
+            "{}/v1/billing/subscriptions/{}/cancel",
+            base,
+            subscription_id
+        ))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "reason": reason }))
+        .send()
+        .await?;
+    if !res.status().is_success() {
+        anyhow::bail!("paypal_cancel_failed");
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PortalPayPalStartRequest {
+    plan_code: String,
+    billing_cycle: String,
+    currency: String,
+    return_url: String,
+    cancel_url: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PortalPayPalStartResponse {
+    approval_url: String,
+    subscription_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PortalPayPalConfirmRequest {
+    subscription_id: String,
+}
+
+#[derive(Deserialize)]
+struct PayPalLink {
+    rel: String,
+    href: String,
+}
+
+#[derive(Deserialize)]
+struct PayPalCreateSubscriptionResponse {
+    id: String,
+    links: Vec<PayPalLink>,
+}
+
+#[derive(Deserialize)]
+struct PayPalBillingInfo {
+    next_billing_time: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct PayPalSubscriptionDetails {
+    id: String,
+    status: String,
+    billing_info: Option<PayPalBillingInfo>,
+    plan_id: Option<String>,
+}
+
+fn paypal_plan_id_for(cfg: &PayPalConfig, plan_code: &str, billing_cycle: &str, currency: &str) -> Option<String> {
+    let cur = currency.trim().to_uppercase();
+    let k = if cur == "NOK" { "nok" } else if cur == "GBP" { "gbp" } else { "eur" };
+    let cycle = billing_cycle.trim().to_lowercase();
+    let plan = plan_code.trim().to_lowercase();
+    let cycles = if plan == "standard" { &cfg.plans.standard } else if plan == "pro" { &cfg.plans.pro } else { return None };
+    let cc = if cycle == "yearly" { &cycles.yearly } else { &cycles.monthly };
+    if k == "eur" { cc.eur.clone() } else if k == "gbp" { cc.gbp.clone() } else { cc.nok.clone() }
+}
+
+async fn paypal_create_subscription(
+    cfg: &PayPalConfig,
+    token: &str,
+    paypal_plan_id: &str,
+    return_url: &str,
+    cancel_url: &str,
+) -> anyhow::Result<PortalPayPalStartResponse> {
+    let base = paypal_base_url(cfg.mode.as_str());
+    let client = reqwest::Client::builder()
+        .timeout(StdDuration::from_secs(12))
+        .build()?;
+    let res = client
+        .post(format!("{}/v1/billing/subscriptions", base))
+        .bearer_auth(token)
+        .json(&serde_json::json!({
+          "plan_id": paypal_plan_id,
+          "application_context": {
+            "brand_name": "Kivana",
+            "user_action": "SUBSCRIBE_NOW",
+            "return_url": return_url,
+            "cancel_url": cancel_url
+          }
+        }))
+        .send()
+        .await?;
+    if !res.status().is_success() {
+        anyhow::bail!("paypal_subscription_failed");
+    }
+    let json = res.json::<PayPalCreateSubscriptionResponse>().await?;
+    let approve = json
+        .links
+        .iter()
+        .find(|l| l.rel.trim().to_lowercase() == "approve")
+        .map(|l| l.href.clone())
+        .unwrap_or_default();
+    if approve.trim().is_empty() {
+        anyhow::bail!("paypal_subscription_failed");
+    }
+    Ok(PortalPayPalStartResponse {
+        approval_url: approve,
+        subscription_id: json.id,
+    })
+}
+
+async fn paypal_get_subscription_details(
+    cfg: &PayPalConfig,
+    token: &str,
+    subscription_id: &str,
+) -> anyhow::Result<PayPalSubscriptionDetails> {
+    let base = paypal_base_url(cfg.mode.as_str());
+    let client = reqwest::Client::builder()
+        .timeout(StdDuration::from_secs(10))
+        .build()?;
+    let res = client
+        .get(format!(
+            "{}/v1/billing/subscriptions/{}",
+            base, subscription_id
+        ))
+        .bearer_auth(token)
+        .send()
+        .await?;
+    if !res.status().is_success() {
+        anyhow::bail!("paypal_subscription_not_found");
+    }
+    Ok(res.json::<PayPalSubscriptionDetails>().await?)
+}
+
+async fn portal_paypal_start(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<PortalPayPalStartRequest>,
+) -> axum::response::Response {
+    let user_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let plan_code = req.plan_code.trim().to_lowercase();
+    if plan_code != "standard" && plan_code != "pro" {
+        return err(StatusCode::BAD_REQUEST, "invalid_plan").into_response();
+    }
+    let billing_cycle = req.billing_cycle.trim().to_lowercase();
+    if billing_cycle != "monthly" && billing_cycle != "yearly" {
+        return err(StatusCode::BAD_REQUEST, "invalid_billing_cycle").into_response();
+    }
+    let currency = req.currency.trim().to_uppercase();
+    if currency != "EUR" && currency != "GBP" && currency != "NOK" {
+        return err(StatusCode::BAD_REQUEST, "invalid_currency").into_response();
+    }
+    let paypal_cfg = get_paypal_config(&state.pool).await;
+    if !paypal_cfg.enabled {
+        return err(StatusCode::BAD_REQUEST, "paypal_disabled").into_response();
+    }
+    if paypal_cfg.client_id.trim().is_empty() || paypal_cfg.secret.trim().is_empty() {
+        return err(StatusCode::BAD_REQUEST, "paypal_not_configured").into_response();
+    }
+    let paypal_plan_id = match paypal_plan_id_for(&paypal_cfg, &plan_code, &billing_cycle, &currency) {
+        Some(v) if !v.trim().is_empty() => v,
+        _ => return err(StatusCode::BAD_REQUEST, "paypal_plan_missing").into_response(),
+    };
+
+    let product_code = "kivana";
+    let prod_row = sqlx::query("SELECT id FROM products WHERE code = $1")
+        .bind(product_code)
+        .fetch_optional(&state.pool)
+        .await;
+    let product_id: Uuid = match prod_row {
+        Ok(Some(r)) => r.get("id"),
+        _ => return err(StatusCode::NOT_FOUND, "product_not_found").into_response(),
+    };
+    let plan_row = sqlx::query("SELECT id FROM plans WHERE product_id = $1 AND code = $2")
+        .bind(product_id)
+        .bind(&plan_code)
+        .fetch_optional(&state.pool)
+        .await;
+    let internal_plan_id: Uuid = match plan_row {
+        Ok(Some(r)) => r.get("id"),
+        _ => return err(StatusCode::NOT_FOUND, "plan_not_found").into_response(),
+    };
+
+    let tok = match paypal_access_token(&paypal_cfg).await {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::BAD_REQUEST, "paypal_auth_failed").into_response(),
+    };
+    let created = match paypal_create_subscription(
+        &paypal_cfg,
+        &tok,
+        &paypal_plan_id,
+        &req.return_url,
+        &req.cancel_url,
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::BAD_REQUEST, "paypal_subscription_failed").into_response(),
+    };
+
+    let tx = state.pool.begin().await;
+    let mut tx = match tx {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+    let now = OffsetDateTime::now_utc();
+    let _ = sqlx::query("UPDATE subscriptions SET status = 'canceled', canceled_at = $1 WHERE user_id = $2 AND product_id = $3 AND status = 'active'")
+        .bind(now)
+        .bind(user_id)
+        .bind(product_id)
+        .execute(&mut *tx)
+        .await;
+    let inserted = sqlx::query(
+        r#"INSERT INTO subscriptions (id, user_id, product_id, plan_id, status, started_at, ends_at, trial_ends_at, provider, provider_subscription_id, provider_plan_id, billing_cycle, currency, provider_status, provider_last_event_at)
+           VALUES ($1,$2,$3,$4,'pending',$5,NULL,NULL,'paypal',$6,$7,$8,$9,$10,$11)"#,
+    )
+    .bind(Uuid::new_v4())
+    .bind(user_id)
+    .bind(product_id)
+    .bind(internal_plan_id)
+    .bind(now)
+    .bind(&created.subscription_id)
+    .bind(&paypal_plan_id)
+    .bind(&billing_cycle)
+    .bind(&currency)
+    .bind("APPROVAL_PENDING")
+    .bind(now)
+    .execute(&mut *tx)
+    .await;
+    if inserted.is_err() || tx.commit().await.is_err() {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+    }
+
+    (StatusCode::OK, Json(created)).into_response()
+}
+
+async fn portal_paypal_confirm(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<PortalPayPalConfirmRequest>,
+) -> axum::response::Response {
+    let user_id = match access_user_id(&state, &headers) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let subscription_id = req.subscription_id.trim().to_string();
+    if subscription_id.is_empty() {
+        return err(StatusCode::BAD_REQUEST, "invalid_subscription").into_response();
+    }
+    let paypal_cfg = get_paypal_config(&state.pool).await;
+    if !paypal_cfg.enabled {
+        return err(StatusCode::BAD_REQUEST, "paypal_disabled").into_response();
+    }
+    let tok = match paypal_access_token(&paypal_cfg).await {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::BAD_REQUEST, "paypal_auth_failed").into_response(),
+    };
+    let details = match paypal_get_subscription_details(&paypal_cfg, &tok, &subscription_id).await {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::BAD_REQUEST, "paypal_subscription_not_found").into_response(),
+    };
+    let now = OffsetDateTime::now_utc();
+    let status = details.status.trim().to_uppercase();
+    let ends_at = details
+        .billing_info
+        .as_ref()
+        .and_then(|b| b.next_billing_time.clone())
+        .and_then(|s| OffsetDateTime::parse(&s, &time::format_description::well_known::Rfc3339).ok());
+    let next_state = if status == "ACTIVE" { "active" } else { "pending" };
+    let res = sqlx::query(
+        "UPDATE subscriptions SET status = $1, provider_status = $2, ends_at = COALESCE($3, ends_at), provider_last_event_at = $4 WHERE user_id = $5 AND provider = 'paypal' AND provider_subscription_id = $6",
+    )
+    .bind(next_state)
+    .bind(&status)
+    .bind(ends_at)
+    .bind(now)
+    .bind(user_id)
+    .bind(&subscription_id)
+    .execute(&state.pool)
+    .await;
+    if res.is_err() {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+    }
+    let _ = state.tx_events.send(UserEvent {
+        user_id: user_id.to_string(),
+        event_type: "entitlements_updated".to_string(),
+    });
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true, "status": status }))).into_response()
+}
+
+#[derive(Deserialize)]
+struct PayPalVerifyWebhookResponse {
+    verification_status: String,
+}
+
+async fn paypal_verify_webhook(
+    cfg: &PayPalConfig,
+    token: &str,
+    webhook_id: &str,
+    headers: &axum::http::HeaderMap,
+    event: &serde_json::Value,
+) -> anyhow::Result<bool> {
+    let base = paypal_base_url(cfg.mode.as_str());
+    let client = reqwest::Client::builder()
+        .timeout(StdDuration::from_secs(10))
+        .build()?;
+    let auth_algo = headers
+        .get("PAYPAL-AUTH-ALGO")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let cert_url = headers
+        .get("PAYPAL-CERT-URL")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let transmission_id = headers
+        .get("PAYPAL-TRANSMISSION-ID")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let transmission_sig = headers
+        .get("PAYPAL-TRANSMISSION-SIG")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let transmission_time = headers
+        .get("PAYPAL-TRANSMISSION-TIME")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    if auth_algo.is_empty()
+        || cert_url.is_empty()
+        || transmission_id.is_empty()
+        || transmission_sig.is_empty()
+        || transmission_time.is_empty()
+        || webhook_id.trim().is_empty()
+    {
+        return Ok(false);
+    }
+    let res = client
+        .post(format!("{}/v1/notifications/verify-webhook-signature", base))
+        .bearer_auth(token)
+        .json(&serde_json::json!({
+          "auth_algo": auth_algo,
+          "cert_url": cert_url,
+          "transmission_id": transmission_id,
+          "transmission_sig": transmission_sig,
+          "transmission_time": transmission_time,
+          "webhook_id": webhook_id,
+          "webhook_event": event
+        }))
+        .send()
+        .await?;
+    if !res.status().is_success() {
+        return Ok(false);
+    }
+    let json = res.json::<PayPalVerifyWebhookResponse>().await?;
+    Ok(json.verification_status.trim().to_uppercase() == "SUCCESS")
+}
+
+async fn paypal_webhook(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    body: axum::body::Bytes,
+) -> axum::response::Response {
+    let paypal_cfg = get_paypal_config(&state.pool).await;
+    if paypal_cfg.client_id.trim().is_empty() || paypal_cfg.secret.trim().is_empty() {
+        return StatusCode::NO_CONTENT.into_response();
+    }
+    let event: serde_json::Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+    };
+    let tok = match paypal_access_token(&paypal_cfg).await {
+        Ok(v) => v,
+        Err(_) => return StatusCode::NO_CONTENT.into_response(),
+    };
+    let ok = match paypal_verify_webhook(&paypal_cfg, &tok, &paypal_cfg.webhook_id, &headers, &event).await {
+        Ok(v) => v,
+        Err(_) => false,
+    };
+    if !ok {
+        return StatusCode::NO_CONTENT.into_response();
+    }
+
+    let event_type = event
+        .get("event_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let resource = event.get("resource").cloned().unwrap_or(serde_json::json!({}));
+    let sub_id = resource.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    if sub_id.trim().is_empty() {
+        return StatusCode::NO_CONTENT.into_response();
+    }
+    let status = resource
+        .get("status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_uppercase();
+    let next_billing_time = resource
+        .get("billing_info")
+        .and_then(|b| b.get("next_billing_time"))
+        .and_then(|v| v.as_str())
+        .and_then(|s| OffsetDateTime::parse(s, &time::format_description::well_known::Rfc3339).ok());
+    let now = OffsetDateTime::now_utc();
+
+    let next_state = if status == "ACTIVE" { "active" } else if status == "CANCELLED" || status == "SUSPENDED" || status == "EXPIRED" { "canceled" } else { "pending" };
+    let _ = sqlx::query(
+        "UPDATE subscriptions SET status = $1, provider_status = $2, ends_at = COALESCE($3, ends_at), provider_last_event_at = $4 WHERE provider = 'paypal' AND provider_subscription_id = $5",
+    )
+    .bind(next_state)
+    .bind(&status)
+    .bind(next_billing_time)
+    .bind(now)
+    .bind(&sub_id)
+    .execute(&state.pool)
+    .await;
+
+    let user_row = sqlx::query("SELECT user_id FROM subscriptions WHERE provider = 'paypal' AND provider_subscription_id = $1 LIMIT 1")
+        .bind(&sub_id)
+        .fetch_optional(&state.pool)
+        .await;
+    if let Ok(Some(r)) = user_row {
+        let user_id: Uuid = r.get("user_id");
+        let _ = state.tx_events.send(UserEvent {
+            user_id: user_id.to_string(),
+            event_type: "entitlements_updated".to_string(),
+        });
+    }
+
+    let _ = event_type;
+    StatusCode::OK.into_response()
 }
 
 async fn poll_events(
