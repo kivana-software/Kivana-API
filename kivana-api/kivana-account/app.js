@@ -2503,6 +2503,8 @@ function App() {
           'ACTIVE PLAN'
         )
 
+      const canCancel = currentKey === 'standard' || currentKey === 'pro' || isTrial
+
       const PlanCard = ({ id, title, price, meta, actionLabel, disabled, tone }) => {
         const active = currentKey === id
         const dark = tone === 'dark' || active
@@ -2581,6 +2583,24 @@ function App() {
                     'px-5 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 opacity-60 cursor-not-allowed',
                 },
                 'Manage billing'
+              ),
+              canCancel
+                ? React.createElement(
+                    'button',
+                    {
+                      type: 'button',
+                      onClick: () => {
+                        if (busy) return
+                        if (!window.confirm('Cancel your subscription and switch to Basic?')) return
+                        selectPlan('basic')
+                      },
+                      disabled: busy,
+                      className:
+                        'px-5 py-2.5 rounded-full text-[14px] font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none',
+                    },
+                    'Cancel subscription'
+                  )
+                : null
               )
             )
           )
