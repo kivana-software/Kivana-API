@@ -568,26 +568,35 @@
         }
 
         function loadReactBuild() {
+          function inject(cssHref, jsSrc) {
+            if (cssHref) {
+              var link = document.createElement("link")
+              link.rel = "stylesheet"
+              link.href = cssHref
+              document.head.appendChild(link)
+            }
+            if (jsSrc) {
+              var s = document.createElement("script")
+              s.defer = true
+              s.src = jsSrc
+              document.head.appendChild(s)
+            }
+          }
+
+          var fallbackCss = "/static/css/main.2a5ca006.css"
+          var fallbackJs = "/static/js/main.e964d4c9.js"
+
           fetch("/asset-manifest.json", { cache: "no-store" })
-            .then(function (r) { return r.json() })
+            .then(function (r) { return r && r.ok ? r.json() : null })
             .then(function (m) {
               var files = (m && m.files) || {}
-              var cssHref = files["main.css"]
-              var jsSrc = files["main.js"]
-              if (cssHref) {
-                var link = document.createElement("link")
-                link.rel = "stylesheet"
-                link.href = cssHref
-                document.head.appendChild(link)
-              }
-              if (jsSrc) {
-                var s = document.createElement("script")
-                s.defer = true
-                s.src = jsSrc
-                document.head.appendChild(s)
-              }
+              var cssHref = files["main.css"] || fallbackCss
+              var jsSrc = files["main.js"] || fallbackJs
+              inject(cssHref, jsSrc)
             })
-            .catch(function () {})
+            .catch(function () {
+              inject(fallbackCss, fallbackJs)
+            })
         }
 
         function detectCurrency() {
