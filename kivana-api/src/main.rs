@@ -703,13 +703,11 @@ async fn main() -> anyhow::Result<()> {
         .route("/downloads", get(|| async { Redirect::permanent("/downloads/") }))
         .nest_service("/downloads/", ServeDir::new("downloads"))
         .route("/portal", get(portal_redirect))
-        .route("/portal/", get(serve_account_index))
         .nest_service(
             "/portal/",
             ServeDir::new("kivana-account").append_index_html_on_directories(true),
         )
         .route("/account", get(account_redirect))
-        .route("/account/", get(serve_account_index))
         .nest_service(
             "/account/",
             ServeDir::new("kivana-account").append_index_html_on_directories(true),
@@ -1645,20 +1643,6 @@ async fn account_redirect(uri: OriginalUri) -> impl IntoResponse {
     let q = uri.0.query().map(|v| format!("?{}", v)).unwrap_or_default();
     let target = format!("/account/{}", q);
     Redirect::permanent(&target)
-}
-
-async fn serve_account_index() -> axum::response::Response {
-    match fs::read_to_string("kivana-account/index.html").await {
-        Ok(body) => (
-            [
-                (axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8"),
-                (axum::http::header::CACHE_CONTROL, "no-store"),
-            ],
-            body,
-        )
-            .into_response(),
-        Err(_) => err(StatusCode::NOT_FOUND, "not_found").into_response(),
-    }
 }
 
 async fn robots_txt() -> impl IntoResponse {
