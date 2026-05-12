@@ -483,6 +483,45 @@
         }, 1500)
       })()
     </script>
+    <script>
+      ;(() => {
+        const replaceInRoot = () => {
+          const root = document.getElementById('root')
+          if (!root) return 0
+          let changes = 0
+          const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+          let node = walker.nextNode()
+          while (node) {
+            const v = node.nodeValue
+            if (v && (v.includes('0.4.16') || v.toLowerCase().includes('v0.4.16'))) {
+              let nv = v
+              nv = nv.replace(/v0\.4\.16-basic/gi, 'Basic')
+              nv = nv.replace(/0\.4\.16-basic/gi, 'Basic')
+              nv = nv.replace(/v0\.4\.16\b/gi, 'Basic')
+              if (nv !== v) {
+                node.nodeValue = nv
+                changes++
+              }
+            }
+            node = walker.nextNode()
+          }
+          return changes
+        }
+
+        const run = () => {
+          let tries = 0
+          const tick = () => {
+            tries++
+            const n = replaceInRoot()
+            if (tries < 8) setTimeout(tick, n > 0 ? 250 : 350)
+          }
+          tick()
+        }
+
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run)
+        else run()
+      })()
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
