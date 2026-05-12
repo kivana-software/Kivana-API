@@ -3897,36 +3897,56 @@ function App() {
               ),
               React.createElement(
                 'div',
-                { className: 'mt-2 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between rounded-2xl border border-gray-100 bg-[#F6F7FB] px-4 py-3' },
-                React.createElement('div', null,
-                  React.createElement('div', { className: 'text-xs font-bold text-[#1B1748]' }, 'Upload paid builds'),
-                  React.createElement('div', { className: 'mt-1 text-xs text-gray-600' }, 'Uploads to the server and updates Paid URLs automatically.')
-                ),
+                { className: 'mt-4 rounded-2xl border border-gray-100 bg-[#F6F7FB] p-4' },
+                React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Upload paid builds'),
+                React.createElement('div', { className: 'mt-1 text-xs text-gray-600' }, 'Choose a file and it will upload to the server and set the Paid URL automatically.'),
                 React.createElement(
                   'div',
-                  { className: 'flex flex-col sm:flex-row gap-2 w-full sm:w-auto' },
-                  React.createElement('input', {
-                    type: 'file',
-                    accept: '.dmg',
-                    disabled: busy,
-                    className: 'w-full sm:w-[260px] text-xs',
-                    onChange: (e) => {
-                      const f = e?.target?.files && e.target.files[0]
-                      if (f) void adminUploadDownload('paid_mac', f)
-                      if (e?.target) e.target.value = ''
-                    },
-                  }),
-                  React.createElement('input', {
-                    type: 'file',
-                    accept: '.msi,.exe',
-                    disabled: busy,
-                    className: 'w-full sm:w-[260px] text-xs',
-                    onChange: (e) => {
-                      const f = e?.target?.files && e.target.files[0]
-                      if (f) void adminUploadDownload('paid_windows', f)
-                      if (e?.target) e.target.value = ''
-                    },
-                  })
+                  { className: 'mt-4 grid grid-cols-1 gap-4' },
+                  React.createElement(
+                    'div',
+                    { className: 'rounded-2xl border border-gray-100 bg-white px-4 py-4' },
+                    React.createElement('div', { className: 'text-sm font-semibold text-[#1B1748]' }, 'Paid macOS (.dmg)'),
+                    React.createElement(
+                      'div',
+                      { className: 'mt-1 text-xs text-gray-600 break-all' },
+                      String(cfg?.downloads?.paidMacUrl || '').trim() ? `Current: ${String(cfg?.downloads?.paidMacUrl || '')}` : 'Current: not set'
+                    ),
+                    React.createElement('input', {
+                      type: 'file',
+                      accept: '.dmg',
+                      disabled: busy,
+                      className:
+                        'mt-3 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                      onChange: (e) => {
+                        const f = e?.target?.files && e.target.files[0]
+                        if (f) void adminUploadDownload('paid_mac', f)
+                        if (e?.target) e.target.value = ''
+                      },
+                    })
+                  ),
+                  React.createElement(
+                    'div',
+                    { className: 'rounded-2xl border border-gray-100 bg-white px-4 py-4' },
+                    React.createElement('div', { className: 'text-sm font-semibold text-[#1B1748]' }, 'Paid Windows (.msi/.exe)'),
+                    React.createElement(
+                      'div',
+                      { className: 'mt-1 text-xs text-gray-600 break-all' },
+                      String(cfg?.downloads?.paidWindowsUrl || '').trim() ? `Current: ${String(cfg?.downloads?.paidWindowsUrl || '')}` : 'Current: not set'
+                    ),
+                    React.createElement('input', {
+                      type: 'file',
+                      accept: '.msi,.exe',
+                      disabled: busy,
+                      className:
+                        'mt-3 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                      onChange: (e) => {
+                        const f = e?.target?.files && e.target.files[0]
+                        if (f) void adminUploadDownload('paid_windows', f)
+                        if (e?.target) e.target.value = ''
+                      },
+                    })
+                  )
                 )
               )
             )
