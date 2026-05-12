@@ -206,6 +206,52 @@ function randomBytes(len) {
   return out
 }
 
+function ghReleaseCacheKey(repo) {
+  return `kivanaPortal/ghRelease:${String(repo || '')}`
+}
+
+function readJsonStorage(key) {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return null
+    const j = JSON.parse(raw)
+    return j && typeof j === 'object' ? j : null
+  } catch {
+    return null
+  }
+}
+
+function writeJsonStorage(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+  }
+}
+
+async function fetchGithubLatestRelease(repo) {
+  const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
+    cache: 'no-store',
+    headers: { accept: 'application/vnd.github+json' },
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json = await res.json().catch(() => ({}))
+  const tag = String(json?.tag_name || '').trim()
+  const htmlUrl = String(json?.html_url || '').trim()
+  const assets = Array.isArray(json?.assets) ? json.assets : []
+  const findAssetUrl = (exts) => {
+    for (const a of assets) {
+      const name = String(a?.name || '').toLowerCase()
+      const url = String(a?.browser_download_url || '').trim()
+      if (!url) continue
+      if (exts.some((e) => name.endsWith(e))) return url
+    }
+    return ''
+  }
+  const macUrl = findAssetUrl(['.dmg'])
+  const winUrl = findAssetUrl(['.msi', '.exe'])
+  return { tag, htmlUrl, macUrl, winUrl }
+}
+
 function chatKeyStorageKey(userId) {
   return `kivanaPortal/chatKey:${String(userId || '')}`
 }
@@ -2603,7 +2649,8 @@ function App() {
     }
 
     function DownloadsSection() {
-      const releaseUrl = 'https://github.com/kivana-software/Kivana/releases/latest'
+      const basicReleasesUrl = 'https://github.com/kivana-software/Kivana/releases/latest'
+      const proReleasesUrl = 'https://github.com/kivana-software/Kivana-Pro/releases/latest'
       const basicMacUrl = 'https://github.com/kivana-software/Kivana/releases/download/v0.4.16-basic/Kivana_0.4.16_aarch64.dmg'
       const basicWinUrl = 'https://github.com/kivana-software/Kivana/releases/download/v0.4.16-basic/Kivana_0.4.16_x64_en-US.msi'
       const basicSourceUrl = 'https://github.com/kivana-software/Kivana/archive/refs/tags/v0.4.16-basic.zip'
@@ -2612,6 +2659,34 @@ function App() {
       const showWindows = dl?.showWindows !== false
       const showSource = dl?.showSource === true
       const isBasic = currentKey === 'basic'
+      const [proRelease, setProRelease] = useState(null)
+
+      useEffect(() => {
+        if (isBasic) return
+        const repo = 'kivana-software/Kivana-Pro'
+        const cached = readJsonStorage(ghReleaseCacheKey(repo))
+        const cachedAt = cached?.cachedAt ? Number(cached.cachedAt) : 0
+        const maxAgeMs = 10 * 60 * 1000
+        if (cached && cachedAt > 0 && Date.now() - cachedAt < maxAgeMs && cached?.data) {
+          setProRelease(cached.data)
+          return
+        }
+        ;(async () => {
+          try {
+            const data = await fetchGithubLatestRelease(repo)
+            setProRelease(data)
+            writeJsonStorage(ghReleaseCacheKey(repo), { cachedAt: Date.now(), data })
+          } catch {
+            setProRelease(null)
+          }
+        })()
+      }, [isBasic])
+
+      const releasesUrl = isBasic ? basicReleasesUrl : proReleasesUrl
+      const proTag = String(proRelease?.tag || '').trim()
+      const proMac = String(proRelease?.macUrl || '').trim() || releasesUrl
+      const proWin = String(proRelease?.winUrl || '').trim() || releasesUrl
+      const proLabel = proTag ? proTag : 'latest'
       const DlCard = ({ title, sub, href }) =>
         React.createElement(
           'a',
@@ -2631,10 +2706,22 @@ function App() {
         children: React.createElement(
           'div',
           { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
-          showMac ? React.createElement(DlCard, { title: 'macOS', sub: 'Apple Silicon • v0.4.16 Basic', href: basicMacUrl }) : null,
-          showWindows ? React.createElement(DlCard, { title: 'Windows', sub: 'x64 • v0.4.16 Basic', href: basicWinUrl }) : null,
+          showMac
+            ? React.createElement(DlCard, {
+                title: 'macOS',
+                sub: isBasic ? 'Apple Silicon • v0.4.16 Basic' : `macOS • ${proLabel}`,
+                href: isBasic ? basicMacUrl : proMac,
+              })
+            : null,
+          showWindows
+            ? React.createElement(DlCard, {
+                title: 'Windows',
+                sub: isBasic ? 'x64 • v0.4.16 Basic' : `Windows • ${proLabel}`,
+                href: isBasic ? basicWinUrl : proWin,
+              })
+            : null,
           showSource && isBasic ? React.createElement(DlCard, { title: 'Source', sub: 'v0.4.16 Basic • .zip', href: basicSourceUrl }) : null,
-          React.createElement(DlCard, { title: 'All releases', sub: 'GitHub • changelog', href: releaseUrl })
+          React.createElement(DlCard, { title: 'All releases', sub: 'GitHub • changelog', href: releasesUrl })
         ),
       })
     }
