@@ -22,7 +22,7 @@ use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 use tracing::Level;
 use uuid::Uuid;
@@ -712,6 +712,7 @@ async fn main() -> anyhow::Result<()> {
             "/account/",
             ServeDir::new("kivana-account").append_index_html_on_directories(true),
         )
+        .route_service("/portal.css", ServeFile::new("kivana-portal/portal.css"))
         .nest_service(
             "/",
             ServeDir::new("kivana-site").append_index_html_on_directories(true),

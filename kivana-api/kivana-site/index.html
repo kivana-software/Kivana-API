@@ -866,6 +866,7 @@
         function init() {
           loadReactBuild()
           installTryNowCta()
+          installBasicGithubCta()
           loadPublicConfig().then(function (cfg) {
             var tries = 0
             var timer = setInterval(function () {
@@ -910,6 +911,50 @@
           try {
             var obs = new MutationObserver(function () {})
             obs.observe(document.documentElement, { childList: true, subtree: true })
+          } catch (err) {}
+        }
+
+        function installBasicGithubCta() {
+          var ensure = function () {
+            try {
+              var candidates = Array.prototype.slice.call(document.querySelectorAll("a"))
+              for (var i = 0; i < candidates.length; i++) {
+                var a = candidates[i]
+                if (!a || !a.textContent) continue
+                if (a.closest && (a.closest("#authModal") || a.closest("#kivanaFooter"))) continue
+                var t = normalizeText(a.textContent)
+                if (t === "view on github") {
+                  a.href = "https://github.com/kivana-software/Kivana/releases"
+                  a.target = "_blank"
+                  a.rel = "noopener"
+                  a.textContent = "Download Basic (Free & Open Source)"
+                  if (a.dataset && a.dataset.kivanaBasicNote === "1") return true
+                  var note = document.createElement("div")
+                  note.textContent = "Basic is open source and totally free."
+                  note.style.marginTop = "8px"
+                  note.style.fontSize = "13px"
+                  note.style.fontWeight = "600"
+                  note.style.color = "rgba(27, 23, 72, 0.7)"
+                  a.insertAdjacentElement("afterend", note)
+                  if (a.dataset) a.dataset.kivanaBasicNote = "1"
+                  return true
+                }
+              }
+            } catch (err) {}
+            return false
+          }
+
+          var tries = 0
+          var timer = setInterval(function () {
+            tries++
+            if (ensure() || tries > 40) clearInterval(timer)
+          }, 250)
+
+          try {
+            var obs = new MutationObserver(function () {
+              ensure()
+            })
+            obs.observe(document.body, { childList: true, subtree: true })
           } catch (err) {}
         }
 
