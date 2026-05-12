@@ -48,6 +48,18 @@ function computeApiBaseUrl() {
 const apiBaseUrl = computeApiBaseUrl()
 const apiUrl = (path) => `${apiBaseUrl}${path}`
 
+function computeDefaultPayPalWebhookUrl() {
+  try {
+    const u = new URL(window.location.href)
+    const hn = String(u.hostname || '').trim().toLowerCase()
+    const isLocal = hn === 'localhost' || hn === '127.0.0.1' || hn === '::1'
+    if (isLocal) return ''
+    return `https://${u.host}/v1/paypal/webhook`
+  } catch {
+    return ''
+  }
+}
+
 function formatRfc3339Short(value) {
   const s = String(value || '').trim()
   if (!s) return ''
@@ -549,6 +561,7 @@ function App() {
   const [adminConfig, setAdminConfig] = useState(null)
   const [adminPayPal, setAdminPayPal] = useState(null)
   const [adminPayPalSecret, setAdminPayPalSecret] = useState('')
+  const [adminPayPalWebhookUrl, setAdminPayPalWebhookUrl] = useState('')
   const [adminPage, setAdminPage] = useState('overview')
   const [msgModal, setMsgModal] = useState(null)
   const [adminMsgFilter, setAdminMsgFilter] = useState('new')
@@ -1045,6 +1058,7 @@ function App() {
       setAdminConfig(cJson || null)
       setAdminPayPal(pJson || null)
       setAdminPayPalSecret('')
+      setAdminPayPalWebhookUrl((prev) => prev || computeDefaultPayPalWebhookUrl())
     } catch (e) {
       setStatus({ kind: 'err', text: String(e?.message || e) })
     } finally {
@@ -1091,6 +1105,22 @@ function App() {
     try {
       await apiFetch('/v1/admin/paypal/sync-plans', { method: 'POST', body: JSON.stringify({}) })
       setStatus({ kind: 'ok', text: 'PayPal plans synced.' })
+      await loadAdmin()
+    } catch (e) {
+      setStatus({ kind: 'err', text: String(e?.message || e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function createPayPalWebhook(nextWebhookUrl) {
+    if (busy) return
+    setBusy(true)
+    setStatus({ kind: 'muted', text: '' })
+    try {
+      const webhookUrl = String(nextWebhookUrl || '').trim()
+      await apiFetch('/v1/admin/paypal/webhook/create', { method: 'POST', body: JSON.stringify({ webhookUrl: webhookUrl || undefined }) })
+      setStatus({ kind: 'ok', text: 'PayPal webhook created.' })
       await loadAdmin()
     } catch (e) {
       setStatus({ kind: 'err', text: String(e?.message || e) })
@@ -3540,7 +3570,7 @@ function App() {
           'div',
           { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
           React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Settings'),
-          React.createElement('div', { className: 'mt-2 text-sm text-gray-600' }, 'Load settings to edit plan visibility and pricing.'),
+          React.createElement('div', { className: 'mt-2 text-sm text-gray-600' }, 'Reload to edit settings.'),
           React.createElement(
             'button',
             {
@@ -3555,13 +3585,68 @@ function App() {
         )
       }
 
-      const Toggle = ({ label, value, onChange }) =>
+      return React.createElement(
+        'div',
+        { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+        React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Settings'),
+        React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, 'Global portal toggles.'),
         React.createElement(
           'div',
-          { className: 'flex items-center justify-between gap-4 rounded-2xl border border-gray-100 px-5 py-4' },
-          React.createElement('div', null, React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, label)),
-          React.createElement('input', { type: 'checkbox', checked: !!value, onChange: (e) => onChange(!!e.target.checked), disabled: busy, className: 'w-5 h-5 accent-[#4F3DDD]' })
+          { className: 'mt-6 grid gap-4' },
+          React.createElement(
+            'div',
+            { className: 'flex items-center justify-between gap-4 rounded-2xl border border-gray-100 px-5 py-4' },
+            React.createElement('div', null, React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Allow new signups')),
+            React.createElement('input', {
+              type: 'checkbox',
+              checked: !!cfg.allowSignups,
+              onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), allowSignups: !!e.target.checked })),
+              disabled: busy,
+              className: 'w-5 h-5 accent-[#4F3DDD]',
+            })
+          ),
+          React.createElement(
+            'div',
+            { className: 'flex items-center justify-end gap-3' },
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                onClick: () => saveAdminConfig(adminConfig),
+                disabled: busy,
+                className:
+                  'px-6 py-2.5 rounded-full text-[14px] font-semibold text-white bg-[#4F3DDD] hover:bg-[#3F2FCB] disabled:opacity-60 disabled:pointer-events-none',
+              },
+              'Save settings'
+            )
+          )
         )
+      )
+    }
+
+    function PayPalPanel() {
+      const cfg = adminConfig || null
+      const pp = adminPayPal || null
+
+      if (!cfg || !pp) {
+        return React.createElement(
+          'div',
+          { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+          React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'PayPal'),
+          React.createElement('div', { className: 'mt-2 text-sm text-gray-600' }, 'Reload to edit PayPal, pricing and automation.'),
+          React.createElement(
+            'button',
+            {
+              type: 'button',
+              onClick: loadAdmin,
+              disabled: busy,
+              className:
+                'mt-6 px-5 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
+            },
+            'Reload'
+          )
+        )
+      }
 
       const PriceRow = ({ title, obj, onUpdate }) =>
         React.createElement(
@@ -3587,228 +3672,326 @@ function App() {
           )
         )
 
+      const webhookUrl = String(adminPayPalWebhookUrl || '')
+      const credsOk = !!String(pp.clientId || '').trim() && !!pp.hasSecret
+      const webhookOk = !!String(pp.webhookId || '').trim()
+      const planCells = [
+        { label: 'Ordinary • Monthly • EUR', id: pp.plans?.standard?.monthly?.eur },
+        { label: 'Ordinary • Monthly • GBP', id: pp.plans?.standard?.monthly?.gbp },
+        { label: 'Ordinary • Monthly • NOK', id: pp.plans?.standard?.monthly?.nok },
+        { label: 'Ordinary • Yearly • EUR', id: pp.plans?.standard?.yearly?.eur },
+        { label: 'Ordinary • Yearly • GBP', id: pp.plans?.standard?.yearly?.gbp },
+        { label: 'Ordinary • Yearly • NOK', id: pp.plans?.standard?.yearly?.nok },
+        { label: 'Pro • Monthly • EUR', id: pp.plans?.pro?.monthly?.eur },
+        { label: 'Pro • Monthly • GBP', id: pp.plans?.pro?.monthly?.gbp },
+        { label: 'Pro • Monthly • NOK', id: pp.plans?.pro?.monthly?.nok },
+        { label: 'Pro • Yearly • EUR', id: pp.plans?.pro?.yearly?.eur },
+        { label: 'Pro • Yearly • GBP', id: pp.plans?.pro?.yearly?.gbp },
+        { label: 'Pro • Yearly • NOK', id: pp.plans?.pro?.yearly?.nok },
+      ]
+      const plansMissing = planCells.filter((c) => !String(c.id || '').trim()).length
+      const plansOk = plansMissing === 0
+      const discountedUsers = adminUsers
+        .filter((u) => Number(u?.discountPercent || 0) > 0)
+        .slice()
+        .sort((a, b) => Number(b?.discountPercent || 0) - Number(a?.discountPercent || 0))
+
       return React.createElement(
         'div',
-        { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
-        React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Settings'),
-        React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, 'Global toggles for the portal and pricing.'),
+        { className: 'grid gap-6' },
         React.createElement(
           'div',
-          { className: 'mt-6 grid gap-4' },
-          Toggle({
-            label: 'Allow new signups',
-            value: cfg.allowSignups,
-            onChange: (v) => setAdminConfig((c) => ({ ...(c || {}), allowSignups: v })),
-          }),
-          Toggle({
-            label: 'Show Basic',
-            value: cfg.pricing?.showBasic,
-            onChange: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), showBasic: v } })),
-          }),
-          Toggle({
-            label: 'Show Trial',
-            value: cfg.pricing?.showTrial,
-            onChange: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), showTrial: v } })),
-          }),
-          Toggle({
-            label: 'Show Ordinary',
-            value: cfg.pricing?.showStandard,
-            onChange: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), showStandard: v } })),
-          }),
-          Toggle({
-            label: 'Show Pro',
-            value: cfg.pricing?.showPro,
-            onChange: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), showPro: v } })),
-          }),
-          Toggle({
-            label: 'Show Lifetime',
-            value: cfg.pricing?.showLifetime,
-            onChange: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), showLifetime: v } })),
-          }),
-          Toggle({
-            label: 'Show Accountant',
-            value: cfg.pricing?.showAccountant,
-            onChange: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), showAccountant: v } })),
-          }),
+          { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+          React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Setup status'),
+          React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, 'Everything needed to run subscriptions from admin.'),
           React.createElement(
             'div',
-            { className: 'rounded-2xl border border-gray-100 px-5 py-4' },
-            React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Yearly factor'),
-            React.createElement('div', { className: 'mt-1 text-xs text-gray-600' }, 'Yearly price = monthly * factor.'),
-            React.createElement('input', {
-              type: 'number',
-              step: '1',
-              value: String(cfg.pricing?.yearlyFactor ?? ''),
-              onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), yearlyFactor: Number(e.target.value) } })),
-              disabled: busy,
-              className:
-                'mt-3 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
-            })
+            { className: 'mt-5 flex items-center gap-2 flex-wrap' },
+            React.createElement(Pill, { kind: credsOk ? 'ok' : 'warn' }, credsOk ? 'Credentials OK' : 'Missing credentials'),
+            React.createElement(Pill, { kind: webhookOk ? 'ok' : 'warn' }, webhookOk ? 'Webhook OK' : 'Missing webhook'),
+            React.createElement(Pill, { kind: plansOk ? 'ok' : 'warn' }, plansOk ? 'Plans OK' : `${plansMissing} missing plan IDs`)
           ),
           React.createElement(
             'div',
-            { className: 'rounded-2xl border border-gray-100 px-5 py-4' },
-            React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Trial days'),
-            React.createElement('input', {
-              type: 'number',
-              step: '1',
-              value: String(cfg.pricing?.trialDays ?? ''),
-              onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), trialDays: Number(e.target.value) } })),
-              disabled: busy,
-              className:
-                'mt-3 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
-            })
-          ),
-          PriceRow({
-            title: 'Ordinary monthly prices',
-            obj: cfg.pricing?.standardMonthly,
-            onUpdate: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), standardMonthly: v } })),
-          }),
-          PriceRow({
-            title: 'Pro monthly prices',
-            obj: cfg.pricing?.proMonthly,
-            onUpdate: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), proMonthly: v } })),
-          }),
-          React.createElement(
-            'div',
-            { className: 'rounded-2xl border border-gray-100 px-5 py-4' },
-            React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'PayPal subscriptions'),
-            React.createElement('div', { className: 'mt-1 text-xs text-gray-600' }, 'Save credentials, then sync plans to match your current pricing.'),
-            adminPayPal
-              ? React.createElement(
-                  'div',
-                  { className: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3' },
-                  React.createElement(
-                    'label',
-                    { className: 'flex items-center gap-3 rounded-2xl border border-gray-100 px-4 py-3' },
-                    React.createElement('input', {
-                      type: 'checkbox',
-                      checked: !!adminPayPal.enabled,
-                      onChange: (e) => setAdminPayPal((p) => ({ ...(p || {}), enabled: !!e.target.checked })),
-                      disabled: busy,
-                      className: 'w-5 h-5 accent-[#4F3DDD]',
-                    }),
-                    React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Enabled')
-                  ),
-                  React.createElement(
-                    'div',
-                    null,
-                    React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Mode'),
-                    React.createElement(
-                      'select',
-                      {
-                        value: String(adminPayPal.mode || 'sandbox'),
-                        onChange: (e) => setAdminPayPal((p) => ({ ...(p || {}), mode: e.target.value })),
-                        disabled: busy,
-                        className:
-                          'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
-                      },
-                      React.createElement('option', { value: 'sandbox' }, 'Sandbox'),
-                      React.createElement('option', { value: 'live' }, 'Live')
-                    )
-                  ),
-                  React.createElement(
-                    'div',
-                    { className: 'sm:col-span-2' },
-                    React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Client ID'),
-                    React.createElement('input', {
-                      value: String(adminPayPal.clientId || ''),
-                      onChange: (e) => setAdminPayPal((p) => ({ ...(p || {}), clientId: e.target.value })),
-                      disabled: busy,
-                      className:
-                        'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
-                      placeholder: 'PayPal Client ID',
-                    })
-                  ),
-                  React.createElement(
-                    'div',
-                    { className: 'sm:col-span-2' },
-                    React.createElement(
-                      'div',
-                      { className: 'flex items-center justify-between gap-3' },
-                      React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Secret'),
-                      React.createElement('div', { className: 'text-xs text-gray-600' }, adminPayPal.hasSecret ? 'Saved' : 'Not saved')
-                    ),
-                    React.createElement('input', {
-                      value: adminPayPalSecret,
-                      onChange: (e) => setAdminPayPalSecret(e.target.value),
-                      disabled: busy,
-                      type: 'password',
-                      className:
-                        'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
-                      placeholder: adminPayPal.hasSecret ? '•••••••• (leave blank to keep current)' : 'PayPal Secret',
-                    })
-                  ),
-                  React.createElement(
-                    'div',
-                    { className: 'sm:col-span-2' },
-                    React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Webhook ID'),
-                    React.createElement('input', {
-                      value: String(adminPayPal.webhookId || ''),
-                      onChange: (e) => setAdminPayPal((p) => ({ ...(p || {}), webhookId: e.target.value })),
-                      disabled: busy,
-                      className:
-                        'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
-                      placeholder: 'PayPal Webhook ID (from Developer dashboard)',
-                    })
-                  ),
-                  React.createElement(
-                    'div',
-                    { className: 'sm:col-span-2' },
-                    React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Product ID'),
-                    React.createElement('input', {
-                      value: String(adminPayPal.productId || ''),
-                      onChange: (e) => setAdminPayPal((p) => ({ ...(p || {}), productId: e.target.value })),
-                      disabled: busy,
-                      className:
-                        'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
-                      placeholder: 'Leave empty to auto-create',
-                    })
-                  )
-                )
-              : React.createElement('div', { className: 'mt-4 text-sm text-gray-600' }, 'Load admin data to edit PayPal settings.'),
-            React.createElement(
-              'div',
-              { className: 'mt-4 flex flex-wrap items-center justify-end gap-3' },
-              React.createElement(
-                'button',
-                {
-                  type: 'button',
-                  onClick: () => savePayPalConfig(adminPayPal),
-                  disabled: busy || !adminPayPal,
-                  className:
-                    'px-6 py-2.5 rounded-full text-[14px] font-semibold text-white bg-[#1B1748] hover:bg-black disabled:opacity-60 disabled:pointer-events-none',
-                },
-                'Save PayPal'
-              ),
-              React.createElement(
-                'button',
-                {
-                  type: 'button',
-                  onClick: () => syncPayPalPlans(),
-                  disabled: busy || !adminPayPal,
-                  className:
-                    'px-6 py-2.5 rounded-full text-[14px] font-semibold text-white bg-[#4F3DDD] hover:bg-[#3F2FCB] disabled:opacity-60 disabled:pointer-events-none',
-                },
-                'Sync plans'
-              )
-            )
-          ),
-          React.createElement(
-            'div',
-            { className: 'flex items-center justify-end gap-3' },
+            { className: 'mt-5 flex flex-wrap items-center justify-end gap-3' },
             React.createElement(
               'button',
               {
                 type: 'button',
-                onClick: () => saveAdminConfig(adminConfig),
+                onClick: () => savePayPalConfig(adminPayPal),
+                disabled: busy,
+                className:
+                  'px-6 py-2.5 rounded-full text-[14px] font-semibold text-white bg-[#1B1748] hover:bg-black disabled:opacity-60 disabled:pointer-events-none',
+              },
+              'Save PayPal'
+            ),
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                onClick: () => createPayPalWebhook(adminPayPalWebhookUrl),
+                disabled: busy,
+                className:
+                  'px-6 py-2.5 rounded-full text-[14px] font-semibold text-white bg-[#0E7490] hover:bg-[#0B5F76] disabled:opacity-60 disabled:pointer-events-none',
+              },
+              'Create webhook'
+            ),
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                onClick: () => syncPayPalPlans(),
                 disabled: busy,
                 className:
                   'px-6 py-2.5 rounded-full text-[14px] font-semibold text-white bg-[#4F3DDD] hover:bg-[#3F2FCB] disabled:opacity-60 disabled:pointer-events-none',
               },
-              'Save settings'
+              'Sync plans'
             )
           )
+        ),
+        React.createElement(
+          'div',
+          { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+          React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Plans & pricing'),
+          React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, 'Edit pricing, then sync PayPal plans to apply it.'),
+          React.createElement(
+            'div',
+            { className: 'mt-6 grid gap-4' },
+            React.createElement(
+              'div',
+              { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },
+              React.createElement(
+                'div',
+                { className: 'rounded-2xl border border-gray-100 px-5 py-4' },
+                React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Yearly factor'),
+                React.createElement('div', { className: 'mt-1 text-xs text-gray-600' }, 'Yearly price = monthly * factor.'),
+                React.createElement('input', {
+                  type: 'number',
+                  step: '1',
+                  value: String(cfg.pricing?.yearlyFactor ?? ''),
+                  onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), yearlyFactor: Number(e.target.value) } })),
+                  disabled: busy,
+                  className:
+                    'mt-3 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                })
+              ),
+              React.createElement(
+                'div',
+                { className: 'rounded-2xl border border-gray-100 px-5 py-4' },
+                React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Trial days'),
+                React.createElement('input', {
+                  type: 'number',
+                  step: '1',
+                  value: String(cfg.pricing?.trialDays ?? ''),
+                  onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), trialDays: Number(e.target.value) } })),
+                  disabled: busy,
+                  className:
+                    'mt-3 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                })
+              )
+            ),
+            PriceRow({
+              title: 'Ordinary monthly prices',
+              obj: cfg.pricing?.standardMonthly,
+              onUpdate: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), standardMonthly: v } })),
+            }),
+            PriceRow({
+              title: 'Pro monthly prices',
+              obj: cfg.pricing?.proMonthly,
+              onUpdate: (v) => setAdminConfig((c) => ({ ...(c || {}), pricing: { ...(c?.pricing || {}), proMonthly: v } })),
+            }),
+            React.createElement(
+              'div',
+              { className: 'flex items-center justify-end gap-3' },
+              React.createElement(
+                'button',
+                {
+                  type: 'button',
+                  onClick: () => saveAdminConfig(adminConfig),
+                  disabled: busy,
+                  className:
+                    'px-6 py-2.5 rounded-full text-[14px] font-semibold text-white bg-[#4F3DDD] hover:bg-[#3F2FCB] disabled:opacity-60 disabled:pointer-events-none',
+                },
+                'Save pricing'
+              )
+            )
+          )
+        ),
+        React.createElement(
+          'div',
+          { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+          React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'PayPal connection'),
+          React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, 'Credentials, webhook and product mapping.'),
+          React.createElement(
+            'div',
+            { className: 'mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3' },
+            React.createElement(
+              'label',
+              { className: 'flex items-center gap-3 rounded-2xl border border-gray-100 px-4 py-3' },
+              React.createElement('input', {
+                type: 'checkbox',
+                checked: !!pp.enabled,
+                onChange: (e) => setAdminPayPal((p) => ({ ...(p || {}), enabled: !!e.target.checked })),
+                disabled: busy,
+                className: 'w-5 h-5 accent-[#4F3DDD]',
+              }),
+              React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Enabled')
+            ),
+            React.createElement(
+              'div',
+              null,
+              React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Mode'),
+              React.createElement(
+                'select',
+                {
+                  value: String(pp.mode || 'sandbox'),
+                  onChange: (e) => setAdminPayPal((p) => ({ ...(p || {}), mode: e.target.value })),
+                  disabled: busy,
+                  className:
+                    'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                },
+                React.createElement('option', { value: 'sandbox' }, 'Sandbox'),
+                React.createElement('option', { value: 'live' }, 'Live')
+              )
+            ),
+            React.createElement(
+              'div',
+              { className: 'sm:col-span-2' },
+              React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Client ID'),
+              React.createElement('input', {
+                value: String(pp.clientId || ''),
+                onChange: (e) => setAdminPayPal((p) => ({ ...(p || {}), clientId: e.target.value })),
+                disabled: busy,
+                className:
+                  'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                placeholder: 'PayPal Client ID',
+              })
+            ),
+            React.createElement(
+              'div',
+              { className: 'sm:col-span-2' },
+              React.createElement(
+                'div',
+                { className: 'flex items-center justify-between gap-3' },
+                React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Secret'),
+                React.createElement('div', { className: 'text-xs text-gray-600' }, pp.hasSecret ? 'Saved' : 'Not saved')
+              ),
+              React.createElement('input', {
+                value: adminPayPalSecret,
+                onChange: (e) => setAdminPayPalSecret(e.target.value),
+                disabled: busy,
+                type: 'password',
+                className:
+                  'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                placeholder: pp.hasSecret ? '•••••••• (leave blank to keep current)' : 'PayPal Secret',
+              })
+            ),
+            React.createElement(
+              'div',
+              { className: 'sm:col-span-2' },
+              React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Webhook ID'),
+              React.createElement('input', {
+                value: String(pp.webhookId || ''),
+                onChange: (e) => setAdminPayPal((p) => ({ ...(p || {}), webhookId: e.target.value })),
+                disabled: busy,
+                className:
+                  'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                placeholder: 'Auto-created or from PayPal dashboard',
+              })
+            ),
+            React.createElement(
+              'div',
+              { className: 'sm:col-span-2' },
+              React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Product ID'),
+              React.createElement('input', {
+                value: String(pp.productId || ''),
+                onChange: (e) => setAdminPayPal((p) => ({ ...(p || {}), productId: e.target.value })),
+                disabled: busy,
+                className:
+                  'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                placeholder: 'Leave empty to auto-create',
+              })
+            ),
+            React.createElement(
+              'div',
+              { className: 'sm:col-span-2' },
+              React.createElement('div', { className: 'text-sm font-medium text-[#1B1748]' }, 'Webhook URL'),
+              React.createElement('input', {
+                value: webhookUrl,
+                onChange: (e) => setAdminPayPalWebhookUrl(e.target.value),
+                disabled: busy,
+                className:
+                  'mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#4F3DDD]/20 focus:border-[#4F3DDD]',
+                placeholder: computeDefaultPayPalWebhookUrl() || 'https://your-domain.com/v1/paypal/webhook',
+              })
+            )
+          ),
+          React.createElement(
+            'div',
+            { className: 'mt-4 flex flex-wrap items-center justify-between gap-3' },
+            React.createElement(
+              'div',
+              { className: 'text-xs text-gray-600' },
+              webhookUrl.trim() ? 'Webhook URL is ready. Create webhook to auto-save webhook ID.' : 'Set your HTTPS webhook URL (public domain) to create it automatically.'
+            )
+          )
+        ),
+        React.createElement(
+          'div',
+          { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+          React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Plan IDs'),
+          React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, 'These are filled automatically by Sync plans.'),
+          React.createElement(
+            'div',
+            { className: 'mt-5 grid gap-2' },
+            planCells.map((c) =>
+              React.createElement(
+                'div',
+                { key: c.label, className: 'flex items-center justify-between gap-3 rounded-2xl border border-gray-100 px-4 py-3 flex-wrap' },
+                React.createElement('div', { className: 'text-sm font-semibold text-[#1B1748]' }, c.label),
+                React.createElement('div', { className: `text-sm font-mono ${String(c.id || '').trim() ? 'text-gray-700' : 'text-gray-400'}` }, String(c.id || '—'))
+              )
+            )
+          )
+        ),
+        React.createElement(
+          'div',
+          { className: 'rounded-3xl border border-gray-100 bg-white shadow-sm p-8' },
+          React.createElement('div', { className: 'text-lg font-bold text-[#1B1748]' }, 'Discounts'),
+          React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, 'Per-user discounts (auto-applied to PayPal by creating discounted PayPal plans).'),
+          discountedUsers.length
+            ? React.createElement(
+                'div',
+                { className: 'mt-5 grid gap-2' },
+                discountedUsers.slice(0, 12).map((u) => {
+                  const email = String(u.email || '')
+                  const pct = Number(u.discountPercent || 0)
+                  const until = u.discountExpiresAt ? formatRfc3339Short(u.discountExpiresAt) : ''
+                  const label = String(u.discountLabel || '')
+                  return React.createElement(
+                    'div',
+                    { key: String(u.id || email), className: 'flex items-center justify-between gap-3 rounded-2xl border border-gray-100 px-4 py-3 flex-wrap' },
+                    React.createElement(
+                      'div',
+                      null,
+                      React.createElement('div', { className: 'text-sm font-semibold text-[#1B1748]' }, email || '—'),
+                      React.createElement('div', { className: 'mt-0.5 text-xs text-gray-600' }, `${pct}%${label ? ` • ${label}` : ''}${until ? ` • until ${until}` : ''}`)
+                    ),
+                    React.createElement(
+                      'button',
+                      {
+                        type: 'button',
+                        onClick: () => openDiscountModal(u),
+                        disabled: busy || !!u.isAdmin,
+                        className:
+                          'px-4 py-2 rounded-full text-xs font-semibold text-[#4F3DDD] border-2 border-[#4F3DDD] hover:bg-[#F0EEFC] disabled:opacity-60 disabled:pointer-events-none',
+                      },
+                      'Edit'
+                    )
+                  )
+                })
+              )
+            : React.createElement('div', { className: 'mt-5 text-sm text-gray-600' }, 'No active discounts.')
         )
       )
     }
@@ -3839,6 +4022,8 @@ function App() {
           ? React.createElement(UsersTable, null)
           : adminPage === 'messages'
             ? React.createElement(MessagesTable, null)
+            : adminPage === 'paypal'
+              ? React.createElement(PayPalPanel, null)
             : React.createElement(SettingsPanel, null)
 
     return React.createElement(
@@ -3853,6 +4038,7 @@ function App() {
           React.createElement(AdminNavItem, { id: 'overview', label: 'Overview' }),
           React.createElement(AdminNavItem, { id: 'users', label: 'Users', count: adminUsers.length }),
           React.createElement(AdminNavItem, { id: 'messages', label: 'Messages', count: newMessagesCount }),
+          React.createElement(AdminNavItem, { id: 'paypal', label: 'PayPal' }),
           React.createElement(AdminNavItem, { id: 'settings', label: 'Settings' })
         )
       ),

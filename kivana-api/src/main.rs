@@ -12,7 +12,7 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Row};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::net::SocketAddr;
 use std::time::{Duration as StdDuration, Instant};
 use time::{Duration, OffsetDateTime};
@@ -596,6 +596,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/paypal/config", get(admin_get_paypal_config))
         .route("/v1/admin/paypal/config", post(admin_set_paypal_config))
         .route("/v1/admin/paypal/sync-plans", post(admin_paypal_sync_plans))
+        .route(
+            "/v1/admin/paypal/webhook/create",
+            post(admin_paypal_create_webhook),
+        )
         .route("/v1/admin/users", get(admin_users))
         .route("/v1/admin/contact-messages", get(admin_contact_messages))
         .route(
@@ -964,6 +968,7 @@ struct PayPalConfig {
     webhook_id: String,
     product_id: Option<String>,
     plans: PayPalPlanIds,
+    discount_plans: BTreeMap<String, PayPalPlanIds>,
 }
 
 #[derive(Serialize)]
@@ -1194,6 +1199,98 @@ async fn paypal_create_plan(
     }
     let json = res.json::<PayPalCreatePlanResponse>().await?;
     Ok(json.id)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AdminCreateWebhookRequest {
+    webhook_url: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct PayPalCreateWebhookResponse {
+    id: String,
+}
+
+async fn paypal_create_webhook(
+    cfg: &PayPalConfig,
+    token: &str,
+    url: &str,
+) -> anyhow::Result<String> {
+    let base = paypal_base_url(cfg.mode.as_str());
+    let client = reqwest::Client::builder()
+        .timeout(StdDuration::from_secs(12))
+        .build()?;
+    let res = client
+        .post(format!("{}/v1/notifications/webhooks", base))
+        .bearer_auth(token)
+        .json(&serde_json::json!({
+          "url": url,
+          "event_types": [
+            { "name": "BILLING.SUBSCRIPTION.ACTIVATED" },
+            { "name": "BILLING.SUBSCRIPTION.CANCELLED" },
+            { "name": "BILLING.SUBSCRIPTION.SUSPENDED" },
+            { "name": "BILLING.SUBSCRIPTION.EXPIRED" },
+            { "name": "BILLING.SUBSCRIPTION.UPDATED" }
+          ]
+        }))
+        .send()
+        .await?;
+    if !res.status().is_success() {
+        anyhow::bail!("paypal_webhook_failed");
+    }
+    let json = res.json::<PayPalCreateWebhookResponse>().await?;
+    Ok(json.id)
+}
+
+async fn admin_paypal_create_webhook(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    Json(req): Json<AdminCreateWebhookRequest>,
+) -> axum::response::Response {
+    if let Err(r) = require_staff(&state, &headers, connect_info).await {
+        return r;
+    }
+    let mut cfg = get_paypal_config(&state.pool).await;
+    if cfg.client_id.trim().is_empty() || cfg.secret.trim().is_empty() {
+        return err(StatusCode::BAD_REQUEST, "paypal_not_configured").into_response();
+    }
+    let url = req
+        .webhook_url
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let webhook_url = if !url.is_empty() {
+        url
+    } else {
+        let domain = std::env::var("KIVANA_DOMAIN")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "kivana.eu".to_string());
+        format!("https://{}/v1/paypal/webhook", domain)
+    };
+    if !webhook_url.starts_with("https://") {
+        return err(StatusCode::BAD_REQUEST, "invalid_webhook_url").into_response();
+    }
+    let token = match paypal_access_token(&cfg).await {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::BAD_REQUEST, "paypal_auth_failed").into_response(),
+    };
+    let webhook_id = match paypal_create_webhook(&cfg, &token, &webhook_url).await {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::BAD_REQUEST, "paypal_webhook_failed").into_response(),
+    };
+    cfg.webhook_id = webhook_id.clone();
+    if let Err(_) = set_paypal_config(&state.pool, &cfg).await {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+    }
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "ok": true, "webhookId": webhook_id, "webhookUrl": webhook_url })),
+    )
+        .into_response()
 }
 
 async fn admin_paypal_sync_plans(
@@ -3970,14 +4067,122 @@ struct PayPalSubscriptionDetails {
     plan_id: Option<String>,
 }
 
-fn paypal_plan_id_for(cfg: &PayPalConfig, plan_code: &str, billing_cycle: &str, currency: &str) -> Option<String> {
+fn paypal_plan_id_from(plans: &PayPalPlanIds, plan_code: &str, billing_cycle: &str, currency: &str) -> Option<String> {
     let cur = currency.trim().to_uppercase();
     let k = if cur == "NOK" { "nok" } else if cur == "GBP" { "gbp" } else { "eur" };
     let cycle = billing_cycle.trim().to_lowercase();
     let plan = plan_code.trim().to_lowercase();
-    let cycles = if plan == "standard" { &cfg.plans.standard } else if plan == "pro" { &cfg.plans.pro } else { return None };
+    let cycles = if plan == "standard" {
+        &plans.standard
+    } else if plan == "pro" {
+        &plans.pro
+    } else {
+        return None;
+    };
     let cc = if cycle == "yearly" { &cycles.yearly } else { &cycles.monthly };
-    if k == "eur" { cc.eur.clone() } else if k == "gbp" { cc.gbp.clone() } else { cc.nok.clone() }
+    if k == "eur" {
+        cc.eur.clone()
+    } else if k == "gbp" {
+        cc.gbp.clone()
+    } else {
+        cc.nok.clone()
+    }
+}
+
+fn paypal_plan_slot<'a>(
+    plans: &'a mut PayPalPlanIds,
+    plan_code: &str,
+    billing_cycle: &str,
+    currency: &str,
+) -> Option<&'a mut Option<String>> {
+    let plan = plan_code.trim().to_lowercase();
+    let cycle = billing_cycle.trim().to_lowercase();
+    let cur = currency.trim().to_uppercase();
+    let cycles = if plan == "standard" {
+        &mut plans.standard
+    } else if plan == "pro" {
+        &mut plans.pro
+    } else {
+        return None;
+    };
+    let cc = if cycle == "yearly" { &mut cycles.yearly } else { &mut cycles.monthly };
+    if cur == "EUR" {
+        Some(&mut cc.eur)
+    } else if cur == "GBP" {
+        Some(&mut cc.gbp)
+    } else if cur == "NOK" {
+        Some(&mut cc.nok)
+    } else {
+        None
+    }
+}
+
+async fn paypal_ensure_discount_plan(
+    pool: &PgPool,
+    cfg: &mut PayPalConfig,
+    token: &str,
+    discount_percent: i32,
+    plan_code: &str,
+    billing_cycle: &str,
+    currency: &str,
+    base_price: f64,
+) -> anyhow::Result<String> {
+    let pct = discount_percent.clamp(0, 90);
+    if pct <= 0 {
+        anyhow::bail!("invalid_discount");
+    }
+
+    let key = pct.to_string();
+    let entry = cfg
+        .discount_plans
+        .entry(key.clone())
+        .or_insert_with(PayPalPlanIds::default);
+
+    if let Some(existing) = paypal_plan_id_from(entry, plan_code, billing_cycle, currency) {
+        if !existing.trim().is_empty() {
+            return Ok(existing);
+        }
+    }
+
+    let product_id = match cfg.product_id.clone() {
+        Some(v) if !v.trim().is_empty() => v,
+        _ => paypal_create_product(cfg, token).await?,
+    };
+
+    let tier = if plan_code.trim().eq_ignore_ascii_case("pro") {
+        "Pro"
+    } else {
+        "Ordinary"
+    };
+    let cycle_label = if billing_cycle.trim().eq_ignore_ascii_case("yearly") {
+        "Yearly"
+    } else {
+        "Monthly"
+    };
+    let interval_unit = if billing_cycle.trim().eq_ignore_ascii_case("yearly") {
+        "YEAR"
+    } else {
+        "MONTH"
+    };
+    let discounted = base_price * ((100 - pct) as f64 / 100.0);
+    let name = format!("Kivana {} {} ({}) - {}% off", tier, cycle_label, currency, pct);
+
+    let plan_id = paypal_create_plan(cfg, token, &product_id, &name, currency, interval_unit, discounted).await?;
+
+    if let Some(slot) = paypal_plan_slot(entry, plan_code, billing_cycle, currency) {
+        *slot = Some(plan_id.clone());
+    }
+
+    if cfg.product_id.as_deref().unwrap_or("").trim().is_empty() {
+        cfg.product_id = Some(product_id);
+    }
+    set_paypal_config(pool, cfg).await?;
+
+    Ok(plan_id)
+}
+
+fn paypal_plan_id_for(cfg: &PayPalConfig, plan_code: &str, billing_cycle: &str, currency: &str) -> Option<String> {
+    paypal_plan_id_from(&cfg.plans, plan_code, billing_cycle, currency)
 }
 
 async fn paypal_create_subscription(
@@ -4068,17 +4273,77 @@ async fn portal_paypal_start(
     if currency != "EUR" && currency != "GBP" && currency != "NOK" {
         return err(StatusCode::BAD_REQUEST, "invalid_currency").into_response();
     }
-    let paypal_cfg = get_paypal_config(&state.pool).await;
+    let now = OffsetDateTime::now_utc();
+    let portal_cfg = get_portal_config(&state.pool).await;
+    let mut paypal_cfg = get_paypal_config(&state.pool).await;
     if !paypal_cfg.enabled {
         return err(StatusCode::BAD_REQUEST, "paypal_disabled").into_response();
     }
     if paypal_cfg.client_id.trim().is_empty() || paypal_cfg.secret.trim().is_empty() {
         return err(StatusCode::BAD_REQUEST, "paypal_not_configured").into_response();
     }
-    let paypal_plan_id = match paypal_plan_id_for(&paypal_cfg, &plan_code, &billing_cycle, &currency) {
-        Some(v) if !v.trim().is_empty() => v,
-        _ => return err(StatusCode::BAD_REQUEST, "paypal_plan_missing").into_response(),
+
+    let tok = match paypal_access_token(&paypal_cfg).await {
+        Ok(v) => v,
+        Err(_) => return err(StatusCode::BAD_REQUEST, "paypal_auth_failed").into_response(),
     };
+
+    let discount_row = sqlx::query("SELECT discount_percent, discount_expires_at FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(&state.pool)
+        .await;
+    let discount_percent = match discount_row {
+        Ok(Some(r)) => {
+            let pct: Option<i32> = r.try_get("discount_percent").ok().flatten();
+            let expires_at: Option<sqlx::types::time::OffsetDateTime> =
+                r.try_get("discount_expires_at").ok().flatten();
+            let active = expires_at.map(|t| t > now).unwrap_or(true);
+            if active { pct.unwrap_or(0) } else { 0 }
+        }
+        _ => 0,
+    };
+
+    let monthly_price = if plan_code == "pro" {
+        if currency == "GBP" {
+            portal_cfg.pricing.pro_monthly.gbp
+        } else if currency == "NOK" {
+            portal_cfg.pricing.pro_monthly.nok
+        } else {
+            portal_cfg.pricing.pro_monthly.eur
+        }
+    } else if currency == "GBP" {
+        portal_cfg.pricing.standard_monthly.gbp
+    } else if currency == "NOK" {
+        portal_cfg.pricing.standard_monthly.nok
+    } else {
+        portal_cfg.pricing.standard_monthly.eur
+    };
+    let base_price = if billing_cycle == "yearly" {
+        monthly_price * (portal_cfg.pricing.yearly_factor as f64)
+    } else {
+        monthly_price
+    };
+
+    let mut paypal_plan_id = paypal_plan_id_for(&paypal_cfg, &plan_code, &billing_cycle, &currency).unwrap_or_default();
+    if discount_percent > 0 {
+        if let Ok(v) = paypal_ensure_discount_plan(
+            &state.pool,
+            &mut paypal_cfg,
+            &tok,
+            discount_percent,
+            &plan_code,
+            &billing_cycle,
+            &currency,
+            base_price,
+        )
+        .await
+        {
+            paypal_plan_id = v;
+        }
+    }
+    if paypal_plan_id.trim().is_empty() {
+        return err(StatusCode::BAD_REQUEST, "paypal_plan_missing").into_response();
+    }
 
     let product_code = "kivana";
     let prod_row = sqlx::query("SELECT id FROM products WHERE code = $1")
@@ -4099,10 +4364,6 @@ async fn portal_paypal_start(
         _ => return err(StatusCode::NOT_FOUND, "plan_not_found").into_response(),
     };
 
-    let tok = match paypal_access_token(&paypal_cfg).await {
-        Ok(v) => v,
-        Err(_) => return err(StatusCode::BAD_REQUEST, "paypal_auth_failed").into_response(),
-    };
     let created = match paypal_create_subscription(
         &paypal_cfg,
         &tok,
@@ -4121,7 +4382,6 @@ async fn portal_paypal_start(
         Ok(v) => v,
         Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
     };
-    let now = OffsetDateTime::now_utc();
     let _ = sqlx::query("UPDATE subscriptions SET status = 'canceled', canceled_at = $1 WHERE user_id = $2 AND product_id = $3 AND status = 'active'")
         .bind(now)
         .bind(user_id)
