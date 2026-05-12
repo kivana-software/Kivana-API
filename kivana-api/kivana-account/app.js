@@ -2599,6 +2599,12 @@ function App() {
       const releaseUrl = 'https://github.com/kivana-software/Kivana/releases/latest'
       const basicMacUrl = 'https://github.com/kivana-software/Kivana/releases/download/v0.4.16-basic/Kivana_0.4.16_aarch64.dmg'
       const basicWinUrl = 'https://github.com/kivana-software/Kivana/releases/download/v0.4.16-basic/Kivana_0.4.16_x64_en-US.msi'
+      const basicSourceUrl = 'https://github.com/kivana-software/Kivana/archive/refs/tags/v0.4.16-basic.zip'
+      const dl = cfg?.downloads || {}
+      const showMac = dl?.showMac !== false
+      const showWindows = dl?.showWindows !== false
+      const showSource = dl?.showSource === true
+      const isBasic = currentKey === 'basic'
       const DlCard = ({ title, sub, href }) =>
         React.createElement(
           'a',
@@ -2618,8 +2624,9 @@ function App() {
         children: React.createElement(
           'div',
           { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
-          React.createElement(DlCard, { title: 'macOS', sub: 'Apple Silicon • v0.4.16 Basic', href: basicMacUrl }),
-          React.createElement(DlCard, { title: 'Windows', sub: 'x64 • v0.4.16 Basic', href: basicWinUrl }),
+          showMac ? React.createElement(DlCard, { title: 'macOS', sub: 'Apple Silicon • v0.4.16 Basic', href: basicMacUrl }) : null,
+          showWindows ? React.createElement(DlCard, { title: 'Windows', sub: 'x64 • v0.4.16 Basic', href: basicWinUrl }) : null,
+          showSource && isBasic ? React.createElement(DlCard, { title: 'Source', sub: 'v0.4.16 Basic • .zip', href: basicSourceUrl }) : null,
           React.createElement(DlCard, { title: 'All releases', sub: 'GitHub • changelog', href: releaseUrl })
         ),
       })
@@ -3684,6 +3691,52 @@ function App() {
               disabled: busy,
               className: 'w-5 h-5 accent-[#4F3DDD]',
             })
+          ),
+          React.createElement(
+            'div',
+            { className: 'rounded-2xl border border-gray-100 px-5 py-4' },
+            React.createElement('div', { className: 'text-sm font-bold text-[#1B1748]' }, 'Downloads visibility'),
+            React.createElement('div', { className: 'mt-1 text-xs text-gray-600' }, 'Controls what appears in the Downloads page. Source is only shown for Basic.'),
+            React.createElement(
+              'div',
+              { className: 'mt-4 grid gap-3' },
+              React.createElement(
+                'label',
+                { className: 'flex items-center justify-between gap-4 rounded-2xl border border-gray-100 px-4 py-3' },
+                React.createElement('div', { className: 'text-sm font-semibold text-[#1B1748]' }, 'Show macOS'),
+                React.createElement('input', {
+                  type: 'checkbox',
+                  checked: cfg?.downloads?.showMac !== false,
+                  onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), downloads: { ...(c?.downloads || {}), showMac: !!e.target.checked } })),
+                  disabled: busy,
+                  className: 'w-5 h-5 accent-[#4F3DDD]',
+                })
+              ),
+              React.createElement(
+                'label',
+                { className: 'flex items-center justify-between gap-4 rounded-2xl border border-gray-100 px-4 py-3' },
+                React.createElement('div', { className: 'text-sm font-semibold text-[#1B1748]' }, 'Show Windows'),
+                React.createElement('input', {
+                  type: 'checkbox',
+                  checked: cfg?.downloads?.showWindows !== false,
+                  onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), downloads: { ...(c?.downloads || {}), showWindows: !!e.target.checked } })),
+                  disabled: busy,
+                  className: 'w-5 h-5 accent-[#4F3DDD]',
+                })
+              ),
+              React.createElement(
+                'label',
+                { className: 'flex items-center justify-between gap-4 rounded-2xl border border-gray-100 px-4 py-3' },
+                React.createElement('div', { className: 'text-sm font-semibold text-[#1B1748]' }, 'Show Source (Basic only)'),
+                React.createElement('input', {
+                  type: 'checkbox',
+                  checked: cfg?.downloads?.showSource === true,
+                  onChange: (e) => setAdminConfig((c) => ({ ...(c || {}), downloads: { ...(c?.downloads || {}), showSource: !!e.target.checked } })),
+                  disabled: busy,
+                  className: 'w-5 h-5 accent-[#4F3DDD]',
+                })
+              )
+            )
           ),
           React.createElement(
             'div',

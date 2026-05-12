@@ -479,9 +479,29 @@ struct PricingConfig {
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+struct DownloadsConfig {
+    show_mac: bool,
+    show_windows: bool,
+    show_source: bool,
+}
+
+impl Default for DownloadsConfig {
+    fn default() -> Self {
+        Self {
+            show_mac: true,
+            show_windows: true,
+            show_source: false,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct PortalConfig {
     allow_signups: bool,
     pricing: PricingConfig,
+    #[serde(default)]
+    downloads: DownloadsConfig,
 }
 
 impl Default for PortalConfig {
@@ -508,6 +528,7 @@ impl Default for PortalConfig {
                     nok: 299.0,
                 },
             },
+            downloads: DownloadsConfig::default(),
         }
     }
 }
@@ -1161,6 +1182,26 @@ async fn paypal_create_product(cfg: &PayPalConfig, token: &str) -> anyhow::Resul
     Ok(json.id)
 }
 
+async fn paypal_product_exists(cfg: &PayPalConfig, token: &str, product_id: &str) -> anyhow::Result<bool> {
+    let pid = product_id.trim();
+    if pid.is_empty() {
+        return Ok(false);
+    }
+    let base = paypal_base_url(cfg.mode.as_str());
+    let client = reqwest::Client::builder()
+        .timeout(StdDuration::from_secs(10))
+        .build()?;
+    let res = client
+        .get(format!("{}/v1/catalogs/products/{}", base, pid))
+        .bearer_auth(token)
+        .send()
+        .await?;
+    if res.status().as_u16() == 404 {
+        return Ok(false);
+    }
+    Ok(res.status().is_success())
+}
+
 #[derive(Deserialize)]
 struct PayPalCreatePlanResponse {
     id: String,
@@ -1384,11 +1425,25 @@ async fn admin_paypal_sync_plans(
         Ok(v) => v,
         Err(_) => return err(StatusCode::BAD_REQUEST, "paypal_auth_failed").into_response(),
     };
+
+    if let Some(ref pid) = cfg.product_id.clone() {
+        if !pid.trim().is_empty() {
+            let ok = paypal_product_exists(&cfg, &token, pid).await.unwrap_or(false);
+            if !ok {
+                cfg.product_id = None;
+                cfg.webhook_id = "".to_string();
+                cfg.plans = PayPalPlanIds::default();
+                cfg.discount_plans = BTreeMap::new();
+                let _ = set_paypal_config(&state.pool, &cfg).await;
+            }
+        }
+    }
+
     let product_id = match cfg.product_id.clone() {
         Some(v) if !v.trim().is_empty() => v,
         _ => match paypal_create_product(&cfg, &token).await {
             Ok(id) => id,
-            Err(_) => return err(StatusCode::BAD_REQUEST, "paypal_product_failed").into_response(),
+            Err(e) => return err(StatusCode::BAD_REQUEST, &e.to_string()).into_response(),
         },
     };
 
@@ -4225,10 +4280,10 @@ async fn paypal_ensure_discount_plan(
         }
     }
 
-    let product_id = match cfg.product_id.clone() {
-        Some(v) if !v.trim().is_empty() => v,
-        _ => paypal_create_product(&*cfg, token).await?,
-    };
+    let mut product_id = cfg.product_id.clone().unwrap_or_default();
+    if product_id.trim().is_empty() || !paypal_product_exists(&*cfg, token, &product_id).await.unwrap_or(false) {
+        product_id = paypal_create_product(&*cfg, token).await?;
+    }
 
     let tier = if plan_code.trim().eq_ignore_ascii_case("pro") {
         "Pro"
