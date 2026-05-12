@@ -407,6 +407,82 @@
     </script>
     <link rel="stylesheet" href="/static/css/main.2a5ca006.css" />
     <script defer src="/static/js/main.e964d4c9.js"></script>
+    <script>
+      ;(() => {
+        const errors = []
+        const pushErr = (kind, msg, src, line, col) => {
+          const parts = []
+          if (kind) parts.push(kind)
+          if (msg) parts.push(String(msg))
+          if (src) parts.push(String(src))
+          if (line) parts.push(`:${line}`)
+          if (col) parts.push(`:${col}`)
+          errors.push(parts.join(' '))
+          if (errors.length > 6) errors.shift()
+        }
+
+        window.addEventListener('error', (e) => {
+          try {
+            pushErr('error', e && e.message, e && e.filename, e && e.lineno, e && e.colno)
+          } catch {}
+        })
+        window.addEventListener('unhandledrejection', (e) => {
+          try {
+            const r = e && e.reason
+            pushErr('promise', r && r.message ? r.message : String(r))
+          } catch {}
+        })
+
+        const showDiag = (title, extra) => {
+          try {
+            const root = document.getElementById('root')
+            if (!root) return
+            const box = document.createElement('div')
+            box.style.marginTop = '16px'
+            box.style.padding = '14px 14px'
+            box.style.borderRadius = '14px'
+            box.style.border = '1px solid rgba(220, 38, 38, 0.25)'
+            box.style.background = 'rgba(220, 38, 38, 0.06)'
+            box.style.color = '#7f1d1d'
+            box.style.fontSize = '13px'
+            box.style.lineHeight = '1.5'
+            const head = document.createElement('div')
+            head.style.fontWeight = '800'
+            head.textContent = title
+            box.appendChild(head)
+            if (extra) {
+              const p = document.createElement('div')
+              p.style.marginTop = '6px'
+              p.textContent = extra
+              box.appendChild(p)
+            }
+            if (errors.length) {
+              const pre = document.createElement('pre')
+              pre.style.marginTop = '10px'
+              pre.style.whiteSpace = 'pre-wrap'
+              pre.style.wordBreak = 'break-word'
+              pre.textContent = errors.join('\n')
+              box.appendChild(pre)
+            }
+            const links = document.createElement('div')
+            links.style.marginTop = '10px'
+            links.innerHTML =
+              '<a href="/static/js/main.e964d4c9.js" target="_blank" rel="noopener">Open main.js</a> • ' +
+              '<a href="/asset-manifest.json" target="_blank" rel="noopener">Open asset-manifest.json</a>'
+            box.appendChild(links)
+            root.appendChild(box)
+          } catch {}
+        }
+
+        setTimeout(() => {
+          try {
+            const app = document.querySelector('#root .App')
+            if (app) return
+            showDiag('Website did not start (app.js crash or blocked).', 'Open DevTools → Console and send the first red error line.')
+          } catch {}
+        }, 1500)
+      })()
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
