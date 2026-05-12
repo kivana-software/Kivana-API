@@ -4133,20 +4133,17 @@ async fn paypal_ensure_discount_plan(
     }
 
     let key = pct.to_string();
-    let entry = cfg
-        .discount_plans
-        .entry(key.clone())
-        .or_insert_with(PayPalPlanIds::default);
-
-    if let Some(existing) = paypal_plan_id_from(entry, plan_code, billing_cycle, currency) {
-        if !existing.trim().is_empty() {
-            return Ok(existing);
+    if let Some(entry) = cfg.discount_plans.get(&key) {
+        if let Some(existing) = paypal_plan_id_from(entry, plan_code, billing_cycle, currency) {
+            if !existing.trim().is_empty() {
+                return Ok(existing);
+            }
         }
     }
 
     let product_id = match cfg.product_id.clone() {
         Some(v) if !v.trim().is_empty() => v,
-        _ => paypal_create_product(cfg, token).await?,
+        _ => paypal_create_product(&*cfg, token).await?,
     };
 
     let tier = if plan_code.trim().eq_ignore_ascii_case("pro") {
@@ -4167,8 +4164,13 @@ async fn paypal_ensure_discount_plan(
     let discounted = base_price * ((100 - pct) as f64 / 100.0);
     let name = format!("Kivana {} {} ({}) - {}% off", tier, cycle_label, currency, pct);
 
-    let plan_id = paypal_create_plan(cfg, token, &product_id, &name, currency, interval_unit, discounted).await?;
+    let plan_id =
+        paypal_create_plan(&*cfg, token, &product_id, &name, currency, interval_unit, discounted).await?;
 
+    let entry = cfg
+        .discount_plans
+        .entry(key)
+        .or_insert_with(PayPalPlanIds::default);
     if let Some(slot) = paypal_plan_slot(entry, plan_code, billing_cycle, currency) {
         *slot = Some(plan_id.clone());
     }
