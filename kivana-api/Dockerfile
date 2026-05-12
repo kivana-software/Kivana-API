@@ -6,6 +6,7 @@ RUN mkdir -p src && echo "fn main() {}" > src/main.rs
 RUN cargo build --release
 
 COPY . .
+RUN mkdir -p downloads
 RUN find src migrations -type f -exec touch {} +
 RUN cargo build --release
 
@@ -17,6 +18,7 @@ COPY --from=build /app/kivana-admin /app/kivana-admin
 COPY --from=build /app/kivana-portal /app/kivana-portal
 COPY --from=build /app/kivana-account /app/kivana-account
 COPY --from=build /app/kivana-site /app/kivana-site
+COPY --from=build /app/downloads /app/downloads
 ENV RUST_LOG=info
 EXPOSE 8080
 CMD ["/app/kivana-api"]

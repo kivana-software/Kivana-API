@@ -697,6 +697,8 @@ async fn main() -> anyhow::Result<()> {
             "/admin/",
             ServeDir::new("kivana-admin").append_index_html_on_directories(true),
         )
+        .route("/downloads", get(|| async { Redirect::permanent("/downloads/") }))
+        .nest_service("/downloads/", ServeDir::new("downloads"))
         .route("/portal", get(portal_redirect))
         .nest_service(
             "/portal/",

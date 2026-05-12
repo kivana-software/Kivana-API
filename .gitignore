@@ -1,3 +1,4 @@
 kivana-api/.env
 kivana-api/target/
 **/target/
+kivana-api/downloads/
