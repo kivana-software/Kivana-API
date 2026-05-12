@@ -724,6 +724,14 @@ async fn main() -> anyhow::Result<()> {
             portal_static,
         )
         .route("/account", get(account_redirect))
+        .route_service(
+            "/account/app.v0.3.10.js",
+            ServeFile::new("kivana-account/app.js"),
+        )
+        .route_service(
+            "/account/app.v0.3.10.css",
+            ServeFile::new("kivana-account/app.css"),
+        )
         .nest_service(
             "/account/",
             account_static,
