@@ -460,6 +460,15 @@
               </button>
             </div>
           </div>
+          <div class="authField authHidden" id="authConfirmField">
+            <div class="authInputWrap">
+              <svg class="authIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M7.5 11V8.5C7.5 6.02 9.52 4 12 4C14.48 4 16.5 6.02 16.5 8.5V11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                <path d="M7 11H17C18.1 11 19 11.9 19 13V18C19 19.1 18.1 20 17 20H7C5.9 20 5 19.1 5 18V13C5 11.9 5.9 11 7 11Z" stroke="currentColor" stroke-width="1.8" />
+              </svg>
+              <input class="authInput" id="authConfirm" name="confirm" type="password" autocomplete="new-password" placeholder="Confirm password" />
+            </div>
+          </div>
           <div class="authField" id="authCaptchaField">
             <label class="authLabel" for="authCaptchaAnswer">Human check</label>
             <div id="authCaptchaQuestion">Loading…</div>
@@ -469,15 +478,6 @@
                 <path d="M9 10h6M10 14h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
               </svg>
               <input class="authInput" id="authCaptchaAnswer" name="captcha" type="text" inputmode="numeric" autocomplete="off" placeholder="Answer" required />
-            </div>
-          </div>
-          <div class="authField authHidden" id="authConfirmField">
-            <div class="authInputWrap">
-              <svg class="authIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M7.5 11V8.5C7.5 6.02 9.52 4 12 4C14.48 4 16.5 6.02 16.5 8.5V11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-                <path d="M7 11H17C18.1 11 19 11.9 19 13V18C19 19.1 18.1 20 17 20H7C5.9 20 5 19.1 5 18V13C5 11.9 5.9 11 7 11Z" stroke="currentColor" stroke-width="1.8" />
-              </svg>
-              <input class="authInput" id="authConfirm" name="confirm" type="password" autocomplete="new-password" placeholder="Confirm password" />
             </div>
           </div>
           <div id="authMetaRow">
