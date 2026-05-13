@@ -586,7 +586,7 @@
         </div>
         <div style="margin-top: 18px; display:flex; gap: 10px; flex-wrap: wrap;">
           <a href="/account/?portal=1&mode=signup" style="appearance:none;border:2px solid #4f3ddd;background:#4f3ddd;color:#fff;border-radius:999px;padding:12px 16px;font-weight:800;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;">
-            Try now — 14-day risk-free
+            Try now (14 days risk free)
           </a>
           <a href="/account/?portal=1&mode=login" style="appearance:none;border:2px solid rgba(27,23,72,0.18);background:#fff;color:#1b1748;border-radius:999px;padding:12px 16px;font-weight:800;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;">
             Sign in
@@ -648,7 +648,7 @@
         <div id="kivanaFooterCtas">
           <div id="kivanaFooterCtaText">Try Kivana with an account (14-day trial available).</div>
           <div id="kivanaFooterCtaButtons">
-            <a class="kivanaFooterCtaBtn" href="/account/?portal=1&mode=signup">Try now — 14-day risk-free</a>
+            <a class="kivanaFooterCtaBtn" href="/account/?portal=1&mode=signup">Try now (14 days risk free)</a>
             <a class="kivanaFooterCtaBtn kivanaFooterCtaBtnGhost" href="/account/?portal=1&mode=login">Sign in</a>
             <a class="kivanaFooterCtaBtn kivanaFooterCtaBtnGhost" href="https://github.com/kivana-software/Kivana/releases" target="_blank" rel="noopener">Download Basic (Free &amp; Open Source)</a>
           </div>
@@ -965,8 +965,8 @@
           if (el.closest && el.closest("#authModal")) return ""
           var t = normalizeText(el.textContent)
           if (t === "sign in") return "auth:login"
-          if (t === "try free" || t === "try now" || t === "create account") return "auth:signup"
-          if (t.includes("download") && (t.includes("mac") || t.includes("windows") || t.includes("win"))) return "download"
+          if (t === "try free" || t === "create account" || t.startsWith("try now")) return "auth:signup"
+          if (t.includes("download") && (t.includes("mac") || t.includes("windows") || t.includes("win"))) return "auth:signup"
           if (t === "download" || t === "download now" || t === "download app") return "download"
           return ""
         }
@@ -1119,7 +1119,7 @@
       ;(function () {
         var signupUrl = "/account/?portal=1&mode=signup"
         var loginUrl = "/account/?portal=1&mode=login"
-        var STR_TRY = "Try now — 14-day risk-free"
+        var STR_TRY = "Try now (14 days risk free)"
         var STR_LOGIN = "Sign in"
 
         function norm(s) {
@@ -1178,6 +1178,21 @@
           }
         }
 
+        function hideOsButtons() {
+          var nodes = Array.prototype.slice.call(document.querySelectorAll("button,a"))
+          for (var i = 0; i < nodes.length; i++) {
+            var el = nodes[i]
+            if (!el || el.getAttribute("data-kivana-os-hidden") === "1") continue
+            var t = norm(el.textContent || "")
+            if (t !== "windows" && t !== "macos" && t !== "mac" && t !== "apple silicon") continue
+            var p = el.parentElement
+            var pt = p ? norm(p.textContent || "") : ""
+            if (pt.indexOf("download") === -1 && pt.indexOf("try now") === -1) continue
+            el.setAttribute("data-kivana-os-hidden", "1")
+            el.style.display = "none"
+          }
+        }
+
         function injectRoadmapStrip() {
           var sec = document.getElementById("roadmap")
           if (!sec) return
@@ -1209,6 +1224,7 @@
 
         function apply() {
           patchDownloadCtas()
+          hideOsButtons()
           injectRoadmapStrip()
           injectRoadmapNote()
         }
