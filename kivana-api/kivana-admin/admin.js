@@ -7,6 +7,8 @@ const els = {
   baseUrl: document.getElementById('baseUrl'),
   email: document.getElementById('email'),
   password: document.getElementById('password'),
+  captchaQuestion: document.getElementById('captchaQuestion'),
+  captchaAnswer: document.getElementById('captchaAnswer'),
   login: document.getElementById('login'),
   logout: document.getElementById('logout'),
   refresh: document.getElementById('refresh'),
@@ -29,9 +31,32 @@ const els = {
   btnCloseActionModal: document.getElementById('btnCloseActionModal'),
 }
 
+let captchaChallengeToken = ''
+
 function normalizeBaseUrl(v) {
   const s = String(v || '').trim().replace(/\/+$/, '')
   return s
+}
+
+async function refreshCaptchaChallenge() {
+  if (!els.captchaQuestion || !els.captchaAnswer) return
+  els.captchaQuestion.textContent = 'Loading…'
+  els.captchaAnswer.value = ''
+  captchaChallengeToken = ''
+  try {
+    const base = normalizeBaseUrl(els.baseUrl.value)
+    const res = await fetch(base + '/v1/captcha/challenge', { cache: 'no-store' })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const json = await res.json().catch(() => ({}))
+    const q = String(json.question || '').trim()
+    const t = String(json.token || '').trim()
+    if (!q || !t) throw new Error('captcha_invalid')
+    els.captchaQuestion.textContent = q
+    captchaChallengeToken = t
+  } catch {
+    els.captchaQuestion.textContent = 'Reload the page to try again.'
+    captchaChallengeToken = ''
+  }
 }
 
 function setStatus(el, msg) {
@@ -467,6 +492,7 @@ async function showLoggedOut() {
   els.me.textContent = ''
   els.panel.style.display = 'none'
   els.authCard.style.display = 'block'
+  await refreshCaptchaChallenge()
 }
 
 async function signIn() {
@@ -477,12 +503,25 @@ async function signIn() {
     setStatus(els.authStatus, 'Missing email or password.')
     return
   }
+  const captchaAnswer = String(els.captchaAnswer?.value || '').trim()
+  if (!captchaChallengeToken || !captchaAnswer) {
+    setStatus(els.authStatus, 'Please complete the human check.')
+    return
+  }
   localStorage.setItem(LS_EMAIL, email)
 
-  const res = await apiFetch('/v1/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
-  const json = await res.json()
-  setTokens(json.accessToken, json.refreshToken)
-  await showAuthed()
+  try {
+    const res = await apiFetch('/v1/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, captchaToken: captchaChallengeToken, captchaAnswer }),
+    })
+    const json = await res.json()
+    setTokens(json.accessToken, json.refreshToken)
+    await showAuthed()
+  } catch (e) {
+    setStatus(els.authStatus, `Failed: ${String(e?.message || e)}`)
+    await refreshCaptchaChallenge()
+  }
 }
 
 async function signOut() {
@@ -534,7 +573,10 @@ function loadDefaults() {
   els.bootstrapEmail.value = savedEmail
 }
 
-els.baseUrl.addEventListener('change', () => localStorage.setItem(LS_BASE, normalizeBaseUrl(els.baseUrl.value)))
+els.baseUrl.addEventListener('change', () => {
+  localStorage.setItem(LS_BASE, normalizeBaseUrl(els.baseUrl.value))
+  void refreshCaptchaChallenge()
+})
 els.login.addEventListener('click', () => void signIn())
 els.logout.addEventListener('click', () => void signOut())
 els.refresh.addEventListener('click', async () => {
