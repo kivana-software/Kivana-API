@@ -140,9 +140,10 @@ sha384_hex() {
 repair_sqlx_migration_checksums() {
   local api_dir="$1"
   local compose_cmd_str="$2"
+  local pg_password="${3:-}"
   local migrations_dir="${api_dir}/migrations"
   local -a compose_cmd
-  local f base ver_hex ver checksum sql_tmp
+  local f base ver_hex ver checksum sql_tmp psql_out
 
   compose_cmd=( ${compose_cmd_str} )
 
@@ -175,15 +176,26 @@ repair_sqlx_migration_checksums() {
     echo "COMMIT;"
   } >"$sql_tmp"
 
-  if (cd "$api_dir" && "${compose_cmd[@]}" exec -T db psql -U postgres -d kivana -v ON_ERROR_STOP=1 </dev/null >/dev/null 2>&1); then
-    :
+  psql_out="$( (cd "$api_dir" && "${compose_cmd[@]}" exec -T \
+    ${pg_password:+-e "PGPASSWORD=${pg_password}"} \
+    db psql -U kivana -d kivana -v ON_ERROR_STOP=1 <"$sql_tmp") 2>&1 )" || true
+
+  if echo "$psql_out" | grep -qiE "ERROR|FATAL"; then
+    warn "DB repair output:"
+    echo "$psql_out" | tail -n 40 || true
+    rm -f "$sql_tmp" || true
+    return 1
   fi
 
-  if (cd "$api_dir" && "${compose_cmd[@]}" exec -T db psql -U postgres -d kivana -v ON_ERROR_STOP=1 -f - <"$sql_tmp" >/dev/null 2>&1); then
+  if (cd "$api_dir" && "${compose_cmd[@]}" exec -T \
+    ${pg_password:+-e "PGPASSWORD=${pg_password}"} \
+    db psql -U kivana -d kivana -v ON_ERROR_STOP=1 -c "SELECT 1" >/dev/null 2>&1); then
     rm -f "$sql_tmp" || true
     return 0
   fi
 
+  warn "DB repair did not confirm connectivity. Output:"
+  echo "$psql_out" | tail -n 40 || true
   rm -f "$sql_tmp" || true
   return 1
 }
@@ -311,7 +323,7 @@ EOF
     if echo "$logs" | grep -qi "previously applied but has been modified"; then
       warn "Detected SQLx migration checksum mismatch (an already-applied migration file changed)."
       if [ "$INTERACTIVE" = "y" ] && confirm "Repair migration checksums in the database (no data wipe)?" y; then
-        if repair_sqlx_migration_checksums "$api_dir" "$compose_cmd"; then
+        if repair_sqlx_migration_checksums "$api_dir" "$compose_cmd" "$POSTGRES_PASSWORD"; then
           success "Migration checksums repaired."
           (cd "${api_dir}" && ${compose_cmd} restart api) >/dev/null 2>&1 || true
           info "Waiting for API health (retry): ${base_url}/healthz"
@@ -581,7 +593,7 @@ if [ "$ok" != "y" ]; then
   if echo "$logs" | grep -qi "previously applied but has been modified"; then
     warn "Detected SQLx migration checksum mismatch (an already-applied migration file changed)."
     if [ "$INTERACTIVE" = "y" ] && confirm "Fix by repairing migration checksums in the database (no data wipe)?" y; then
-      if repair_sqlx_migration_checksums "$API_DIR" "docker compose"; then
+      if repair_sqlx_migration_checksums "$API_DIR" "docker compose" "$POSTGRES_PASSWORD"; then
         success "Migration checksums repaired."
         docker compose restart api >/dev/null 2>&1 || true
         info "Waiting for health (retry)..."
