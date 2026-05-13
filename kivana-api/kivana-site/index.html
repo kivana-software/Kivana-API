@@ -1224,6 +1224,83 @@
           if (!sec) return
           if (!window.getComputedStyle || !Element.prototype.getBoundingClientRect) return
 
+          var green = "rgba(34, 197, 94, 0.95)"
+          var orange = "rgba(245, 158, 11, 0.95)"
+
+          try {
+            var svgs = Array.prototype.slice.call(sec.querySelectorAll("svg"))
+            for (var s = 0; s < svgs.length; s++) {
+              var svg = svgs[s]
+              if (!svg) continue
+
+              var circles = Array.prototype.slice.call(svg.querySelectorAll("circle"))
+              var dotsSvg = []
+              for (var c = 0; c < circles.length; c++) {
+                var cc = circles[c]
+                if (!cc) continue
+                var rAttr = parseFloat(cc.getAttribute("r") || "0")
+                if (isNaN(rAttr) || rAttr < 3 || rAttr > 12) continue
+                var cxAttr = parseFloat(cc.getAttribute("cx") || "0")
+                var x = isNaN(cxAttr) ? 0 : cxAttr
+                dotsSvg.push({ el: cc, x: x })
+              }
+              dotsSvg.sort(function (a, b) { return a.x - b.x })
+              if (dotsSvg.length >= 4) {
+                for (var i = 0; i < 4; i++) {
+                  var dot = dotsSvg[i].el
+                  if (!dot) continue
+                  var col = i < 3 ? green : orange
+                  dot.setAttribute("fill", col)
+                  dot.setAttribute("stroke", col)
+                }
+              }
+
+              var gradId = "kivanaRoadmapGrad"
+              var defs = svg.querySelector("defs")
+              if (!defs) {
+                defs = document.createElementNS("http://www.w3.org/2000/svg", "defs")
+                svg.insertBefore(defs, svg.firstChild)
+              }
+              if (!svg.querySelector("#" + gradId)) {
+                var lg = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient")
+                lg.setAttribute("id", gradId)
+                lg.setAttribute("x1", "0%")
+                lg.setAttribute("y1", "0%")
+                lg.setAttribute("x2", "100%")
+                lg.setAttribute("y2", "0%")
+                var st0 = document.createElementNS("http://www.w3.org/2000/svg", "stop")
+                st0.setAttribute("offset", "0%")
+                st0.setAttribute("stop-color", "rgba(34, 197, 94, 0.85)")
+                var st1 = document.createElementNS("http://www.w3.org/2000/svg", "stop")
+                st1.setAttribute("offset", "74%")
+                st1.setAttribute("stop-color", "rgba(34, 197, 94, 0.85)")
+                var st2 = document.createElementNS("http://www.w3.org/2000/svg", "stop")
+                st2.setAttribute("offset", "74%")
+                st2.setAttribute("stop-color", "rgba(245, 158, 11, 0.85)")
+                var st3 = document.createElementNS("http://www.w3.org/2000/svg", "stop")
+                st3.setAttribute("offset", "100%")
+                st3.setAttribute("stop-color", "rgba(245, 158, 11, 0.85)")
+                lg.appendChild(st0)
+                lg.appendChild(st1)
+                lg.appendChild(st2)
+                lg.appendChild(st3)
+                defs.appendChild(lg)
+              }
+
+              var candidates = Array.prototype.slice.call(svg.querySelectorAll("line,path,rect"))
+              for (var q = 0; q < candidates.length; q++) {
+                var el = candidates[q]
+                if (!el || typeof el.getBBox !== "function") continue
+                var bb
+                try { bb = el.getBBox() } catch (e) { bb = null }
+                if (!bb || bb.width < 180 || bb.height > 8) continue
+                var tag = (el.tagName || "").toLowerCase()
+                if (tag === "rect") el.setAttribute("fill", "url(#kivanaRoadmapGrad)")
+                else el.setAttribute("stroke", "url(#kivanaRoadmapGrad)")
+              }
+            }
+          } catch (e) {}
+
           var nodes = Array.prototype.slice.call(sec.querySelectorAll("*"))
           var dots = []
           var lines = []
@@ -1260,9 +1337,6 @@
             if (!uniq.length || Math.abs(item.left - uniq[uniq.length - 1].left) > 8) uniq.push(item)
             if (uniq.length >= 4) break
           }
-
-          var green = "rgba(34, 197, 94, 0.95)"
-          var orange = "rgba(245, 158, 11, 0.95)"
 
           for (var k = 0; k < uniq.length; k++) {
             var dotEl = uniq[k].el
