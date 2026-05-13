@@ -650,22 +650,10 @@ if [ "$INTERACTIVE" != "y" ] && [ -n "$ADMIN_EMAIL" ]; then
 
   echo
   info "Creating admin user (${ADMIN_EMAIL})..."
-  signup_code="$(curl -sS -o /dev/null -w "%{http_code}" -X POST \
-    -H "content-type: application/json" \
-    -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\"}" \
-    "http://localhost:${HTTP_PORT}/v1/auth/signup" || true)"
-
-  if [ "$signup_code" = "200" ] || [ "$signup_code" = "409" ]; then
-    success "User account exists."
-  else
-    error "Signup failed (HTTP ${signup_code})."
-    exit 1
-  fi
-
   if curl -fsS -X POST \
     -H "content-type: application/json" \
     -H "x-admin-token: ${ADMIN_TOKEN}" \
-    -d "{\"email\":\"${ADMIN_EMAIL}\"}" \
+    -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\"}" \
     "http://localhost:${HTTP_PORT}/v1/admin/bootstrap" > /dev/null; then
     success "Admin created successfully!"
     echo
@@ -683,50 +671,26 @@ echo -e "${C_GREEN}===============================================${C_RESET}\n"
 if [ "$INTERACTIVE" = "y" ] && confirm "Create first admin user now?" n; then
   ADMIN_EMAIL="$(prompt "Admin email" "")"
   if [ -n "$ADMIN_EMAIL" ]; then
-    info "Bootstrapping admin user..."
+    ADMIN_PASSWORD="$(prompt_secret "Admin password (min 8 chars, not shown)")"
+    if [ "${#ADMIN_PASSWORD}" -lt 8 ]; then
+      error "Password must be at least 8 characters."
+      exit 1
+    fi
+
+    info "Creating admin user..."
     if curl -fsS -X POST \
       -H "content-type: application/json" \
       -H "x-admin-token: ${ADMIN_TOKEN}" \
-      -d "{\"email\":\"${ADMIN_EMAIL}\"}" \
+      -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\"}" \
       "http://localhost:${HTTP_PORT}/v1/admin/bootstrap" > /dev/null; then
       success "Admin created successfully!"
+      echo
+      echo -e "${C_BOLD}Admin login:${C_RESET}"
+      echo -e "  Email:    ${C_YELLOW}${ADMIN_EMAIL}${C_RESET}"
+      echo -e "  Password: ${C_YELLOW}${ADMIN_PASSWORD}${C_RESET}"
     else
-      warn "Bootstrap failed (often because the user account doesn't exist yet)."
-      if [ -r /dev/tty ] && confirm "Create the user account now (signup) and retry?" y; then
-        ADMIN_PASSWORD="$(prompt_secret "Admin password (min 8 chars, not shown)")"
-        if [ "${#ADMIN_PASSWORD}" -lt 8 ]; then
-          error "Password must be at least 8 characters."
-          exit 1
-        fi
-
-        info "Creating user account..."
-        signup_code="$(curl -sS -o /dev/null -w "%{http_code}" -X POST \
-          -H "content-type: application/json" \
-          -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\"}" \
-          "http://localhost:${HTTP_PORT}/v1/auth/signup" || true)"
-
-        if [ "$signup_code" = "200" ] || [ "$signup_code" = "409" ]; then
-          success "User account exists."
-        else
-          error "Signup failed (HTTP ${signup_code})."
-          exit 1
-        fi
-
-        info "Retrying admin bootstrap..."
-        if curl -fsS -X POST \
-          -H "content-type: application/json" \
-          -H "x-admin-token: ${ADMIN_TOKEN}" \
-          -d "{\"email\":\"${ADMIN_EMAIL}\"}" \
-          "http://localhost:${HTTP_PORT}/v1/admin/bootstrap" > /dev/null; then
-          success "Admin created successfully!"
-        else
-          error "Failed to create admin."
-          exit 1
-        fi
-      else
-        error "Failed to create admin."
-        info "Fix: sign up that email in the Portal first, then rerun bootstrap."
-      fi
+      error "Failed to create admin."
+      exit 1
     fi
   fi
 fi

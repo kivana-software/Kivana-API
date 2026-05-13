@@ -403,6 +403,7 @@ struct AdminGrantRequest {
 #[serde(rename_all = "camelCase")]
 struct AdminBootstrapRequest {
     email: String,
+    password: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -5093,16 +5094,92 @@ async fn admin_bootstrap(
         return err(StatusCode::BAD_REQUEST, "invalid_email").into_response();
     }
 
-    let updated = sqlx::query("UPDATE users SET is_admin = TRUE WHERE email = $1")
-        .bind(&email)
-        .execute(&state.pool)
-        .await;
-    match updated {
-        Ok(r) if r.rows_affected() > 0 => {
-            (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+    let password = req.password.as_deref().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    if let Some(pw) = password.as_deref() {
+        if pw.len() < 8 {
+            return err(StatusCode::BAD_REQUEST, "weak_password").into_response();
         }
-        Ok(_) => err(StatusCode::NOT_FOUND, "user_not_found").into_response(),
-        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    }
+
+    let now = OffsetDateTime::now_utc();
+    let existing = sqlx::query("SELECT id FROM users WHERE email = $1")
+        .bind(&email)
+        .fetch_optional(&state.pool)
+        .await;
+
+    let existing_id: Option<Uuid> = match existing {
+        Ok(Some(r)) => Some(r.get("id")),
+        Ok(None) => None,
+        Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+    };
+
+    match existing_id {
+        Some(user_id) => {
+            let mut tx = match state.pool.begin().await {
+                Ok(v) => v,
+                Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+            };
+
+            let updated = sqlx::query("UPDATE users SET is_admin = TRUE WHERE id = $1")
+                .bind(user_id)
+                .execute(&mut *tx)
+                .await;
+            if updated.is_err() {
+                return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+            }
+
+            if let Some(pw) = password {
+                let password_hash = match hash_password(&pw) {
+                    Ok(v) => v,
+                    Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "hash_failed").into_response(),
+                };
+                let pw_updated = sqlx::query("UPDATE users SET password_hash = $1, password_changed_at = $2 WHERE id = $3")
+                    .bind(password_hash)
+                    .bind(now)
+                    .bind(user_id)
+                    .execute(&mut *tx)
+                    .await;
+                if pw_updated.is_err() {
+                    return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+                }
+                let _ = sqlx::query("UPDATE sessions SET revoked_at = $1 WHERE user_id = $2 AND revoked_at IS NULL")
+                    .bind(now)
+                    .bind(user_id)
+                    .execute(&mut *tx)
+                    .await;
+            }
+
+            if tx.commit().await.is_err() {
+                return err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response();
+            }
+
+            (StatusCode::OK, Json(serde_json::json!({ "ok": true, "created": false, "admin": true }))).into_response()
+        }
+        None => {
+            let pw = match password {
+                Some(v) => v,
+                None => return err(StatusCode::BAD_REQUEST, "password_required").into_response(),
+            };
+            let password_hash = match hash_password(&pw) {
+                Ok(v) => v,
+                Err(_) => return err(StatusCode::INTERNAL_SERVER_ERROR, "hash_failed").into_response(),
+            };
+            let user_id = Uuid::new_v4();
+            let inserted = sqlx::query(
+                "INSERT INTO users (id, email, password_hash, created_at, password_changed_at, is_admin) VALUES ($1,$2,$3,$4,$5,TRUE)",
+            )
+            .bind(user_id)
+            .bind(&email)
+            .bind(password_hash)
+            .bind(now)
+            .bind(now)
+            .execute(&state.pool)
+            .await;
+            match inserted {
+                Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "created": true, "admin": true }))).into_response(),
+                Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "db_error").into_response(),
+            }
+        }
     }
 }
 
