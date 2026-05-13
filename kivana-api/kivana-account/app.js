@@ -8,6 +8,22 @@
 // - React is imported from esm.sh (no bundler required).
 // - Access/refresh tokens are stored in localStorage and attached to API requests.
 // - The UI renders different sections based on query params and navigation state.
+//
+// Major sections in this file (rough order):
+// - Token + API client helpers (`apiFetch`, refresh-on-401 logic)
+// - Formatting + query parsing (`formatMoney`, `useQueryMode`, `section` router)
+// - Captcha + auth flows (signup/login, refresh, logout)
+// - Profile/billing/downloads/security/data UI sections
+// - Support chat (threads + messages), optionally end-to-end encrypted (E2EE)
+// - Admin panels (users, support inbox, portal settings, PayPal settings)
+//
+// Backend endpoint map (high level):
+// - Auth: `/v1/auth/*` (signup, login, refresh, logout, logout-all, change-password)
+// - Account: `/v1/me`, `/v1/profile`, `/v1/entitlements`, `/v1/sessions*`, `/v1/account/*`
+// - Portal: `/v1/public/config`, `/v1/portal/select-plan`, `/v1/portal/paypal/*`
+// - Captcha: `/v1/captcha/challenge`
+// - Support: `/v1/support/*` and `/v1/admin/support/*`
+// - Crypto keys: `/v1/crypto/public-key`, `/v1/support/admin-keys`
 
 import React, { useEffect, useMemo, useRef, useState } from 'https://esm.sh/react@18.3.1'
 import { createRoot } from 'https://esm.sh/react-dom@18.3.1/client'
@@ -50,6 +66,9 @@ function clearTokens() {
   }
 }
 
+// Computes the API base URL for all requests.
+// - Default: same origin as the current page.
+// - Override: `?api=https://example.com` for testing against a different backend.
 function computeApiBaseUrl() {
   const sp = new URLSearchParams(window.location.search)
   const override = String(sp.get('api') || '').trim()
@@ -60,6 +79,8 @@ function computeApiBaseUrl() {
 const apiBaseUrl = computeApiBaseUrl()
 const apiUrl = (path) => `${apiBaseUrl}${path}`
 
+// Suggests a sensible PayPal webhook URL for the current host.
+// - Left blank for localhost because PayPal cannot reach local addresses without tunneling.
 function computeDefaultPayPalWebhookUrl() {
   try {
     const u = new URL(window.location.href)
@@ -72,6 +93,7 @@ function computeDefaultPayPalWebhookUrl() {
   }
 }
 
+// Formats an RFC3339 timestamp into a short `YYYY-MM-DD` date for display.
 function formatRfc3339Short(value) {
   const s = String(value || '').trim()
   if (!s) return ''
@@ -83,6 +105,7 @@ function formatRfc3339Short(value) {
   return `${yyyy}-${mm}-${dd}`
 }
 
+// Normalizes internal plan codes into user-facing labels (UI copy).
 function normalizePlanLabel(planCode) {
   const c = String(planCode || '').trim().toLowerCase()
   if (c === 'lifetime_pro') return 'Lifetime'
@@ -103,6 +126,7 @@ async function apiFetch(path, init = {}, { allowRetry = true } = {}) {
   const res = await fetch(apiUrl(path), { ...init, headers })
   if (res.ok) return res
 
+  // Unauthorized: attempt a single refresh-token retry (transparent to callers).
   if (res.status === 401 && allowRetry && getRefreshToken()) {
     try {
       await refreshAccessToken()
@@ -112,6 +136,9 @@ async function apiFetch(path, init = {}, { allowRetry = true } = {}) {
     }
   }
 
+  // Error normalization:
+  // - Most endpoints respond with `{ error: "..." }` on failure.
+  // - A special `501` is used when the static portal is served without the API.
   let msg = `HTTP ${res.status}`
   if (res.status === 501) {
     msg =
@@ -127,6 +154,8 @@ async function apiFetch(path, init = {}, { allowRetry = true } = {}) {
   throw new Error(msg)
 }
 
+// Multipart upload helper (POST FormData).
+// Used by admin uploads where a file must be transferred to the server.
 async function apiFetchForm(path, formData, { allowRetry = true } = {}) {
   const access = getAccessToken()
   const headers = new Headers()
@@ -161,6 +190,9 @@ async function refreshAccessToken() {
   setTokens(json.accessToken, json.refreshToken)
 }
 
+// Pricing/currency helpers.
+// - Used only for display (formatting prices) and for sending a currency code to the PayPal start endpoint.
+// - Heuristics are based on browser language and timezone (best-effort; user can still pay in the configured currency).
 function detectPricingCurrency() {
   const langs = Array.isArray(navigator.languages) && navigator.languages.length ? navigator.languages : [navigator.language]
   const lang = String(langs[0] || '').toUpperCase()
@@ -193,6 +225,9 @@ function formatMoney(pricing, amount) {
   return `${pricing.symbol}${formatAmount(amount)}`
 }
 
+// Reads URL query parameters that influence initial portal behavior.
+// - `?portal=1` forces opening the auth screen first.
+// - `?mode=login|signup` selects the initial auth tab.
 function useQueryMode() {
   return useMemo(() => {
     const sp = new URLSearchParams(window.location.search)
@@ -217,6 +252,9 @@ function Pill({ kind, children }) {
 const te = new TextEncoder()
 const td = new TextDecoder()
 
+// Captcha helper.
+// - Fetches a simple “human check” challenge used by signup/login to slow down automated abuse.
+// - The backend returns `{ question, token }` and expects the answer to be posted back with the auth request.
 async function fetchCaptchaChallenge() {
   const res = await fetch(apiUrl('/v1/captcha/challenge'), { cache: 'no-store' })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -234,6 +272,7 @@ function bytesToB64(bytes) {
   return btoa(s)
 }
 
+// Base64 decode helper for byte arrays.
 function b64ToBytes(b64) {
   const raw = atob(String(b64 || ''))
   const out = new Uint8Array(raw.length)
@@ -241,25 +280,32 @@ function b64ToBytes(b64) {
   return out
 }
 
+// Cryptographically-secure random bytes (WebCrypto).
 function randomBytes(len) {
   const out = new Uint8Array(len)
   crypto.getRandomValues(out)
   return out
 }
 
+// localStorage key for the per-user encrypted RSA keypair (support chat E2EE).
 function chatKeyStorageKey(userId) {
   return `kivanaPortal/chatKey:${String(userId || '')}`
 }
 
+// localStorage key for the per-device secret used to wrap sensitive localStorage values.
 function deviceSecretKey() {
   return 'kivanaPortal/deviceSecret'
 }
 
+// Marker used to detect encrypted message bodies.
+// - Encrypted messages are stored as a string prefix + base64 payload.
 function isE2EEBody(v) {
   const s = String(v || '')
   return s.startsWith('e2ee:v1:') || s.startsWith('e2ee:v2:')
 }
 
+// Device-local secret used only to encrypt (“wrap”) other client-side secrets stored in localStorage.
+// This does not make the data safe against a fully-compromised device/browser profile; it is meant to avoid plain-text storage.
 async function getOrCreateDeviceSecret() {
   try {
     const existing = String(localStorage.getItem(deviceSecretKey()) || '')
@@ -288,6 +334,15 @@ async function decryptJsonWithDeviceSecret(payload, secretBytes) {
   return JSON.parse(td.decode(new Uint8Array(pt)))
 }
 
+// Generates or loads the RSA keypair used by support chat end-to-end encryption (E2EE).
+//
+// Storage model:
+// - A per-device AES secret (see `getOrCreateDeviceSecret`) wraps the RSA JWKs before placing them in localStorage.
+// - The public JWK is later uploaded to the server (`/v1/crypto/public-key`) so admins can encrypt replies to this user.
+//
+// Crypto details:
+// - RSA-OAEP (SHA-256) is used to encrypt a random AES session key.
+// - AES-GCM (256-bit) encrypts the actual message body.
 async function getOrCreateChatKeypair(userId) {
   const storageKey = chatKeyStorageKey(userId)
   const secret = await getOrCreateDeviceSecret()
@@ -328,6 +383,21 @@ async function getOrCreateChatKeypair(userId) {
 }
 
 async function e2eeEncryptMessage(plainText, recipients) {
+  // End-to-end encryption message format (client-side).
+  //
+  // High-level algorithm:
+  // 1) Generate a random AES-GCM key (session key) + IV.
+  // 2) Encrypt the plaintext message with AES-GCM.
+  // 3) For each recipient (user/admin) that has an RSA public JWK:
+  //    - Encrypt the raw AES key with RSA-OAEP(SHA-256).
+  //    - Store it in `keys[]` as base64.
+  //
+  // Payload:
+  // - v: version marker
+  // - alg: algorithm identifier string
+  // - iv: base64 IV used by AES-GCM
+  // - ct: base64 ciphertext
+  // - keys: [{ id, ek }] where `ek` is the RSA-encrypted AES key for that recipient
   const text = String(plainText || '')
   const aesKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt'])
   const iv = randomBytes(12)
@@ -355,6 +425,11 @@ async function e2eeEncryptMessage(plainText, recipients) {
 }
 
 async function e2eeDecryptMessage(body, myId, privateKey) {
+  // Decrypts an E2EE message body if it is in the expected `e2ee:v*:` format.
+  // Returns:
+  // - decrypted string on success
+  // - original string if it is not an E2EE payload
+  // - null when the payload is E2EE but there is no key for this user (cannot decrypt)
   const s = String(body || '')
   if (!isE2EEBody(s)) return String(body || '')
 
@@ -591,6 +666,8 @@ function App() {
   const [supportUnreadCount, setSupportUnreadCount] = useState(0)
   const [adminSupportUnreadCount, setAdminSupportUnreadCount] = useState(0)
   const [supportAdminKeys, setSupportAdminKeys] = useState([])
+  // “Router” state: selects which account section is visible.
+  // Driven by `?section=` query param and in-app navigation.
   const [section, setSection] = useState(() => {
     const sp = new URLSearchParams(window.location.search)
     const s = String(sp.get('section') || '').trim().toLowerCase()
@@ -620,7 +697,9 @@ function App() {
   const [adminMsgQuery, setAdminMsgQuery] = useState('')
   const [adminUserQuery, setAdminUserQuery] = useState('')
 
+  // Imperative refs (used where controlled inputs are not ideal).
   const displayNameInputRef = useRef(null)
+  // Memoized cache of the E2EE keypair in memory for the currently signed-in user.
   const chatKeyRef = useRef({ userId: '', publicJwk: null, privateKey: null })
 
   function closeAllPopups() {
@@ -635,10 +714,16 @@ function App() {
     if (mounted.current) return
     mounted.current = true
 
+    // Initial bootstrap:
+    // - Always attempt to load the public config for pricing/downloads.
+    // - Capture PayPal callback params (subscription_id) and stash them for later confirmation.
+    // - If an access token exists, try refreshing it (rotating via refresh token) then load the full session.
     ;(async () => {
       await loadPublicConfig().catch(() => null)
       try {
         const sp = new URLSearchParams(window.location.search)
+        // PayPal returns the subscription ID as `subscription_id` (sometimes `subscriptionId`).
+        // We stash it in localStorage so the confirmation effect can complete after auth is loaded.
         const subId = String(sp.get('subscription_id') || sp.get('subscriptionId') || '').trim()
         if (subId) {
           localStorage.setItem('kivana/paypalPendingSubId', subId)
@@ -664,6 +749,9 @@ function App() {
   useEffect(() => {
     if (!me?.id) return
     let cancelled = false
+    // PayPal confirm:
+    // - If a PayPal subscription ID was captured earlier, confirm it with the server.
+    // - On success, refresh entitlements to reflect the activated plan.
     ;(async () => {
       let subId = ''
       try {
@@ -757,6 +845,9 @@ function App() {
   const yearlyStd = pricing.code === 'NOK' ? monthlyStd * yearlyFactor : Number((monthlyStd * yearlyFactor).toFixed(2))
   const yearlyPro = pricing.code === 'NOK' ? monthlyPro * yearlyFactor : Number((monthlyPro * yearlyFactor).toFixed(2))
 
+  // Ensures that this device has an E2EE keypair for support chat and that the public key is registered on the server.
+  // - GET `/v1/crypto/public-key`
+  // - POST `/v1/crypto/public-key` (only if missing)
   async function ensureChatKeys() {
     if (!(window.crypto && window.crypto.subtle)) return null
     const userId = String(me?.id || '')
@@ -778,6 +869,7 @@ function App() {
     return chatKeyRef.current
   }
 
+  // Loads admin encryption keys used for support chat E2EE.
   async function loadSupportAdminKeys() {
     const res = await apiFetch('/v1/support/admin-keys', { method: 'GET' })
     const json = await res.json()
@@ -786,6 +878,7 @@ function App() {
     return list
   }
 
+  // Refreshes support unread counters for the navbar badges.
   async function refreshUnreadBadges() {
     try {
       const res = await apiFetch('/v1/support/unread-count', { method: 'GET' })
@@ -824,6 +917,8 @@ function App() {
     }
   }, [me?.id, me?.isAdmin])
 
+  // ===== Core account loaders =====
+  // Keep these “source of truth” calls centralized so sections can refresh state after mutations.
   async function loadMe() {
     const res = await apiFetch('/v1/me', { method: 'GET' })
     const json = await res.json()
@@ -839,6 +934,7 @@ function App() {
     return json
   }
 
+  // Loads all product entitlements then selects the Kivana product entry for display.
   async function loadEntitlements() {
     const res = await apiFetch('/v1/entitlements', { method: 'GET' })
     const json = await res.json()
@@ -848,6 +944,7 @@ function App() {
     return kivana
   }
 
+  // Loads active sessions for the Security section (device list + revoke).
   async function loadSessions() {
     const res = await apiFetch('/v1/sessions', { method: 'GET' })
     const json = await res.json()
@@ -855,6 +952,9 @@ function App() {
     return json
   }
 
+  // Loads the public portal configuration.
+  // - Used by billing (plan visibility/prices) and downloads (URLs).
+  // - Uses `fetch` directly because it is a public endpoint and should not include auth headers.
   async function loadPublicConfig() {
     const res = await fetch('/v1/public/config', { cache: 'no-store' })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -863,6 +963,7 @@ function App() {
     return json
   }
 
+  // Refreshes captcha UI state (question/token/answer).
   async function refreshCaptcha() {
     try {
       const c = await fetchCaptchaChallenge()
@@ -876,6 +977,7 @@ function App() {
     }
   }
 
+  // Loads everything required for the authenticated dashboard view and switches `view` accordingly.
   async function loadSession() {
     setBusy(true)
     try {
@@ -893,6 +995,16 @@ function App() {
     }
   }
 
+  // Signup/login submission handler.
+  //
+  // Endpoint mapping:
+  // - Signup: POST `/v1/auth/signup`
+  // - Login:  POST `/v1/auth/login`
+  //
+  // On success:
+  // - Stores tokens in localStorage.
+  // - Clears sensitive input state.
+  // - Calls `loadSession()` to populate dashboard data.
   async function submitAuth(e) {
     e.preventDefault()
     if (busy) return
@@ -935,6 +1047,10 @@ function App() {
     }
   }
 
+  // Signs out the current browser session:
+  // - Attempts to invalidate the refresh token on the server.
+  // - Always clears local tokens.
+  // - Redirects back to `/`.
   async function signOut() {
     if (busy) return
     setBusy(true)
@@ -952,6 +1068,8 @@ function App() {
     }
   }
 
+  // Invalidates every active session for this account.
+  // Useful if the user suspects token leakage or has many devices logged in.
   async function signOutAll() {
     if (busy) return
     setBusy(true)
@@ -967,6 +1085,7 @@ function App() {
     }
   }
 
+  // Revokes a single session by ID (Security section “Sign out device” behavior).
   async function revokeSession(sessionId) {
     if (busy) return
     setBusy(true)
@@ -981,6 +1100,8 @@ function App() {
     }
   }
 
+  // Changes the account password.
+  // - The backend returns new tokens on success, so this updates stored tokens as well.
   async function changeMyPassword(currentPassword, newPassword) {
     if (busy) return
     setBusy(true)
@@ -1003,6 +1124,7 @@ function App() {
     }
   }
 
+  // Downloads a JSON export of account metadata (not the desktop app’s finance data).
   async function exportAccount() {
     if (busy) return
     setBusy(true)
@@ -1027,6 +1149,8 @@ function App() {
     }
   }
 
+  // Permanently deletes the account from the server.
+  // - Uses `{ password, confirmText }` confirmation to reduce accidental deletion.
   async function deleteMyAccount(password, confirmText) {
     if (busy) return
     setBusy(true)
@@ -1043,6 +1167,14 @@ function App() {
     }
   }
 
+  // Plan selection entry point (Billing section).
+  //
+  // Paths:
+  // - For paid plans (standard/pro): attempts PayPal start flow first.
+  //   - POST `/v1/portal/paypal/start` -> redirect to approval URL.
+  //   - The return step is handled by the PayPal confirm effect during bootstrap.
+  // - For basic/lifetime/trial (or when PayPal is disabled): falls back to
+  //   POST `/v1/portal/select-plan`.
   async function selectPlan(planCode) {
     if (busy) return
     setBusy(true)
@@ -1101,11 +1233,14 @@ function App() {
     }
   }
 
+  // ===== Admin data loaders and mutations =====
+  // All admin endpoints require `me.isAdmin === true` on the server side.
   async function loadAdmin() {
     if (!me?.isAdmin) return
     setBusy(true)
     setStatus({ kind: 'muted', text: '' })
     try {
+      // Loads the minimal set of admin “panels” in parallel.
       const [uRes, mRes, cRes, pRes] = await Promise.all([
         apiFetch('/v1/admin/users', { method: 'GET' }),
         apiFetch('/v1/admin/support/threads', { method: 'GET' }),
@@ -1140,6 +1275,8 @@ function App() {
     }
   }
 
+  // Persists admin-managed portal configuration (JSON).
+  // Side-effect: reloads the public config so the UI reflects the latest settings immediately.
   async function saveAdminConfig(nextCfg) {
     if (busy) return
     setBusy(true)
@@ -1156,6 +1293,9 @@ function App() {
     }
   }
 
+  // Uploads downloadable binaries (installers) into the server’s `/downloads/` storage.
+  // - Uses multipart form data because it transfers a file.
+  // - The server returns a URL, which is written into the admin config (download links).
   async function adminUploadDownload(target, file) {
     if (busy) return
     const t = String(target || '').trim()
@@ -1186,6 +1326,8 @@ function App() {
     }
   }
 
+  // Saves PayPal integration configuration.
+  // - `secret` is sent only when typed into the UI (empty means “do not overwrite stored secret”).
   async function savePayPalConfig(nextCfg) {
     if (busy) return
     setBusy(true)
@@ -1202,6 +1344,7 @@ function App() {
     }
   }
 
+  // Triggers server-side PayPal plan synchronization (ensures provider plan IDs match current pricing/tier config).
   async function syncPayPalPlans() {
     if (busy) return
     setBusy(true)
@@ -1217,6 +1360,7 @@ function App() {
     }
   }
 
+  // Creates or updates a PayPal webhook on the provider side, pointing back to this API server.
   async function createPayPalWebhook(nextWebhookUrl) {
     if (busy) return
     setBusy(true)
@@ -1233,6 +1377,7 @@ function App() {
     }
   }
 
+  // Marks a support thread as archived/unarchived in the admin inbox.
   async function adminMark(id, read) {
     if (busy) return
     setBusy(true)
@@ -1250,6 +1395,7 @@ function App() {
     }
   }
 
+  // Marks a support thread as solved/reopened in the admin inbox.
   async function adminSolveThread(id, solve) {
     if (busy) return
     setBusy(true)
@@ -1267,6 +1413,7 @@ function App() {
     }
   }
 
+  // Permanently deletes a support thread and its messages (admin-only).
   async function adminDeleteSupportThread(id) {
     if (busy) return
     if (!window.confirm('Delete this support chat? This cannot be undone.')) return
@@ -1284,6 +1431,10 @@ function App() {
     }
   }
 
+  // ===== Support chat (user side) =====
+  // Thread model:
+  // - A “thread” groups multiple messages.
+  // - Messages may be plaintext or E2EE payload strings; when E2EE, the UI decrypts locally.
   async function loadSupportThreads() {
     const res = await apiFetch('/v1/support/threads', { method: 'GET' })
     const json = await res.json()
@@ -1292,6 +1443,8 @@ function App() {
     return list
   }
 
+  // Loads a single support thread + messages.
+  // If any message body looks encrypted (`e2ee:v*:`), the UI will attempt to decrypt using the local RSA private key.
   async function loadSupportThread(threadId) {
     const tid = String(threadId || '')
     if (!tid) return null
@@ -1310,6 +1463,8 @@ function App() {
     return json
   }
 
+  // Creates a new support thread with an initial message.
+  // - Requires E2EE-capable browser: a user keypair and at least one admin public key must exist.
   async function createSupportThread(subject, message) {
     if (!(window.crypto && window.crypto.subtle)) throw new Error('crypto_unavailable')
     const kp = await ensureChatKeys()
@@ -1327,6 +1482,7 @@ function App() {
     return json
   }
 
+  // Sends an additional message into an existing thread (user side).
   async function sendSupportThreadMessage(threadId, message) {
     const tid = String(threadId || '')
     if (!tid) throw new Error('Missing thread')
@@ -1340,6 +1496,7 @@ function App() {
     await apiFetch(`/v1/support/threads/${encodeURIComponent(tid)}/messages`, { method: 'POST', body: JSON.stringify({ message: enc }) })
   }
 
+  // Loads a support thread using admin endpoints (admin side) and attempts to decrypt messages if possible.
   async function adminLoadSupportThread(threadId) {
     const tid = String(threadId || '')
     if (!tid) return null
@@ -1350,6 +1507,7 @@ function App() {
     return json
   }
 
+  // Lists support threads for a given user ID (admin side).
   async function adminListSupportThreadsByUser(userId) {
     const uid = String(userId || '').trim()
     if (!uid) return []
@@ -1358,6 +1516,11 @@ function App() {
     return Array.isArray(json?.threads) ? json.threads : []
   }
 
+  // Sends a support message as an admin.
+  // Recipients include:
+  // - the target user (fetched public key)
+  // - the current admin user (this browser’s key)
+  // - other admins (admin key list)
   async function adminSendSupportThreadMessage(threadId, userId, message) {
     const tid = String(threadId || '')
     if (!tid) throw new Error('Missing thread')
@@ -1374,6 +1537,10 @@ function App() {
     await apiFetch(`/v1/admin/support/threads/${encodeURIComponent(tid)}/messages`, { method: 'POST', body: JSON.stringify({ message: enc }) })
   }
 
+  // High-level “Send” handler used by the Support section UI.
+  // Decides between:
+  // - creating a new thread (first message)
+  // - posting a message into the currently selected thread
   async function sendSupportMessage({ subject, message }) {
     if (busy) return
     setBusy(true)
@@ -1619,6 +1786,9 @@ function App() {
     }
   }
 
+  // Admin modal renderer.
+  // - Shows contextual admin actions for a selected user (roles, password reset, plan grant, discount, delete).
+  // - Also embeds quick access to that user’s support thread history.
   function AdminModal() {
     if (!adminModal) return null
     const kind = String(adminModal.kind || '')
@@ -2448,6 +2618,7 @@ function App() {
       return who ? who.slice(0, 1).toUpperCase() : 'K'
     })()
 
+    // Shared card shell used by multiple account sections (consistent spacing + header typography).
     const SectionCard = ({ title, subtitle, children }) =>
       React.createElement(
         'div',
@@ -2457,6 +2628,9 @@ function App() {
         React.createElement('div', { className: 'mt-6' }, children)
       )
 
+    // Profile UI.
+    // - Allows updating `displayName` (POST `/v1/profile`).
+    // - Email is read-only (identity).
     function ProfileSection() {
       return SectionCard({
         title: 'Profile',
@@ -3410,6 +3584,7 @@ function App() {
       return subject.includes(q) || email.includes(q) || name.includes(q)
     })
 
+    // Admin sidebar navigation item (selects which admin panel is visible).
     function AdminNavItem({ id, label, count }) {
       const active = adminPage === id
       return React.createElement(
@@ -3427,6 +3602,7 @@ function App() {
       )
     }
 
+    // Small metrics card used on the admin overview page.
     function StatCard({ label, value }) {
       return React.createElement(
         'div',
