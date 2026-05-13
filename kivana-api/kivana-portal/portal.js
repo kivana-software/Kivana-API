@@ -1893,10 +1893,12 @@ if (els.btnHeroStartFree) els.btnHeroStartFree.addEventListener('click', startFr
 if (els.btnHeroViewPlans) els.btnHeroViewPlans.addEventListener('click', () => void goToPublicSection('pricing'))
 if (els.btnAccountantService) els.btnAccountantService.addEventListener('click', startFree)
 if (els.btnCtaDownloadMac) els.btnCtaDownloadMac.addEventListener('click', () => {
-  void startPrebetaDownload('darwin-aarch64')
+  pendingPlanSelection = null
+  setAuthMode(true)
+  void showAuth()
 })
 if (els.btnCtaDownloadWin) els.btnCtaDownloadWin.addEventListener('click', () => {
-  void startPrebetaDownload('windows-x86_64')
+  startFree()
 })
 if (els.btnFooterDownloadMac) els.btnFooterDownloadMac.addEventListener('click', () => void startPrebetaDownload('darwin-aarch64'))
 if (els.btnFooterDownloadWin) els.btnFooterDownloadWin.addEventListener('click', () => void startPrebetaDownload('windows-x86_64'))
