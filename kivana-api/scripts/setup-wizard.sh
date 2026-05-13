@@ -120,6 +120,74 @@ confirm() {
   done
 }
 
+sha384_hex() {
+  local file="$1"
+  if command -v openssl >/dev/null 2>&1; then
+    openssl dgst -sha384 -r "$file" | awk '{print $1}'
+    return 0
+  fi
+  if command -v sha384sum >/dev/null 2>&1; then
+    sha384sum "$file" | awk '{print $1}'
+    return 0
+  fi
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 384 "$file" | awk '{print $1}'
+    return 0
+  fi
+  return 1
+}
+
+repair_sqlx_migration_checksums() {
+  local api_dir="$1"
+  local compose_cmd_str="$2"
+  local migrations_dir="${api_dir}/migrations"
+  local -a compose_cmd
+  local f base ver_hex ver checksum sql_tmp
+
+  compose_cmd=( ${compose_cmd_str} )
+
+  if [ ! -d "$migrations_dir" ]; then
+    error "Migrations folder not found: ${migrations_dir}"
+    return 1
+  fi
+
+  if ! command -v awk >/dev/null 2>&1; then
+    error "awk not found; cannot compute checksums."
+    return 1
+  fi
+
+  sql_tmp="$(mktemp -t kivana-sqlx-repair.XXXXXX.sql)"
+  {
+    echo "BEGIN;"
+    for f in "${migrations_dir}"/[0-9][0-9][0-9][0-9]_*.sql; do
+      [ -f "$f" ] || continue
+      base="$(basename "$f")"
+      ver_hex="${base%%_*}"
+      ver=$((10#${ver_hex}))
+      checksum="$(sha384_hex "$f" || true)"
+      if [ -z "$checksum" ]; then
+        error "Could not compute sha384 for: ${base}"
+        rm -f "$sql_tmp" || true
+        return 1
+      fi
+      echo "UPDATE _sqlx_migrations SET checksum = decode('${checksum}', 'hex') WHERE version = ${ver};"
+    done
+    echo "COMMIT;"
+  } >"$sql_tmp"
+
+  if (cd "$api_dir" && "${compose_cmd[@]}" exec -T db psql -U postgres -d kivana -v ON_ERROR_STOP=1 </dev/null >/dev/null 2>&1); then
+    :
+  fi
+
+  if (cd "$api_dir" && "${compose_cmd[@]}" exec -T db psql -U postgres -d kivana -v ON_ERROR_STOP=1 -f - <"$sql_tmp" >/dev/null 2>&1); then
+    rm -f "$sql_tmp" || true
+    return 0
+  fi
+
+  rm -f "$sql_tmp" || true
+  return 1
+}
+
 rand_hex() {
   local nbytes="${1:-32}"
   if command -v openssl >/dev/null 2>&1; then
@@ -239,6 +307,27 @@ EOF
 
   if ! curl -fsS "${base_url}/healthz" >/dev/null 2>&1; then
     warn "API did not become healthy yet. Check logs with: (cd ${api_dir} && ${compose_cmd} logs -f api)"
+    logs="$( (cd "${api_dir}" && ${compose_cmd} logs --tail=200 api) 2>/dev/null || true )"
+    if echo "$logs" | grep -qi "previously applied but has been modified"; then
+      warn "Detected SQLx migration checksum mismatch (an already-applied migration file changed)."
+      if [ "$INTERACTIVE" = "y" ] && confirm "Repair migration checksums in the database (no data wipe)?" y; then
+        if repair_sqlx_migration_checksums "$api_dir" "$compose_cmd"; then
+          success "Migration checksums repaired."
+          (cd "${api_dir}" && ${compose_cmd} restart api) >/dev/null 2>&1 || true
+          info "Waiting for API health (retry): ${base_url}/healthz"
+          for _ in $(seq 1 60); do
+            if curl -fsS "${base_url}/healthz" >/dev/null 2>&1; then
+              success "API is up: ${base_url}"
+              break
+            fi
+            sleep 2
+          done
+        else
+          error "Failed to repair migration checksums."
+          warn "Alternative (wipes DB): (cd ${api_dir} && ${compose_cmd} down -v && ${compose_cmd} up -d --build)"
+        fi
+      fi
+    fi
   fi
 
   if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
@@ -487,8 +576,40 @@ done
 
 if [ "$ok" != "y" ]; then
   error "Health check did not pass yet. Showing logs:"
-  docker compose logs --tail=200 api || true
-  if docker compose logs --tail=200 api 2>/dev/null | grep -qi "password authentication failed for user"; then
+  logs="$(docker compose logs --tail=200 api 2>/dev/null || true)"
+  echo "$logs" || true
+  if echo "$logs" | grep -qi "previously applied but has been modified"; then
+    warn "Detected SQLx migration checksum mismatch (an already-applied migration file changed)."
+    if [ "$INTERACTIVE" = "y" ] && confirm "Fix by repairing migration checksums in the database (no data wipe)?" y; then
+      if repair_sqlx_migration_checksums "$API_DIR" "docker compose"; then
+        success "Migration checksums repaired."
+        docker compose restart api >/dev/null 2>&1 || true
+        info "Waiting for health (retry)..."
+        for _ in $(seq 1 60); do
+          if curl -fsS "http://localhost:${HTTP_PORT}/healthz" >/dev/null 2>&1; then
+            ok="y"
+            break
+          fi
+          sleep 1
+        done
+        if [ "$ok" != "y" ]; then
+          error "Still not healthy after migration checksum repair. Showing logs:"
+          docker compose logs --tail=200 api || true
+          exit 1
+        fi
+      else
+        error "Could not repair migration checksums automatically."
+        info "Alternative fix (wipes DB): cd $API_DIR && docker compose down -v && docker compose up -d --build"
+        exit 1
+      fi
+    else
+      if [ "$INTERACTIVE" != "y" ]; then
+        error "Auto mode will not rewrite migration checksums."
+      fi
+      info "Fix option (wipes DB): cd $API_DIR && docker compose down -v && docker compose up -d --build"
+      exit 1
+    fi
+  elif echo "$logs" | grep -qi "password authentication failed for user"; then
     warn "Detected Postgres password mismatch between API and DB."
     if [ "$INTERACTIVE" = "y" ] && confirm "Fix by resetting DB password to match .env (recommended)?" y; then
       if docker compose exec -T db psql -U postgres -d postgres -c "ALTER USER kivana WITH PASSWORD '${POSTGRES_PASSWORD}';" >/dev/null 2>&1; then
