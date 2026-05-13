@@ -1,7 +1,7 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <!--
+  <head>
+    <!--
     Marketing + portal landing page.
 
     Purpose:
@@ -15,632 +15,1011 @@
     - Theme preference is read from localStorage (`kivanaPortal/theme`).
     - CSS is cache-busted via a `?v=` query parameter.
   -->
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <link rel="icon" type="image/png" href="/kivana-logo.png" />
-  <link rel="apple-touch-icon" href="/kivana-logo.png" />
-  <title>Kivana | Personal Finance & Accounting</title>
-  <meta name="description" content="Kivana is finance software that works without the cloud. Offline-first, with your data stored locally on your device. MIT-licensed core." />
-  <link rel="canonical" href="https://kivana.eu/" />
-  <meta name="robots" content="index,follow" />
-  <meta property="og:title" content="Kivana Personal Finance & Accounting" />
-  <meta property="og:description" content="Finance software that works without the cloud. Offline-first, with your data stored locally on your device. MIT-licensed core." />
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://kivana.eu/" />
-  <meta property="og:image" content="https://kivana.eu/kivana-logo.png" />
-  <meta name="twitter:card" content="summary" />
-  <script>
-    ;(() => {
-      try {
-        const t = localStorage.getItem('kivanaPortal/theme')
-        document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark')
-      } catch {
-        document.documentElement.setAttribute('data-theme', 'dark')
-      }
-    })()
-  </script>
-  <link rel="stylesheet" href="portal.css?v=0.4.21" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-</head>
-<body>
-  <div id="app">
-    <div id="navbar">
-      <div class="logo">
-        <img class="logoImg" src="/kivana-logo.png" alt="Kivana logo" />
-        <span class="logoText">Kivana</span>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/kivana-logo.png" />
+    <link rel="apple-touch-icon" href="/kivana-logo.png" />
+    <title>Kivana | Personal Finance & Accounting</title>
+    <meta
+      name="description"
+      content="Kivana is finance software that works without the cloud. Offline-first, with your data stored locally on your device. MIT-licensed core."
+    />
+    <link rel="canonical" href="https://kivana.eu/" />
+    <meta name="robots" content="index,follow" />
+    <meta property="og:title" content="Kivana Personal Finance & Accounting" />
+    <meta
+      property="og:description"
+      content="Finance software that works without the cloud. Offline-first, with your data stored locally on your device. MIT-licensed core."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://kivana.eu/" />
+    <meta property="og:image" content="https://kivana.eu/kivana-logo.png" />
+    <meta name="twitter:card" content="summary" />
+    <script>
+      (() => {
+        try {
+          const t = localStorage.getItem("kivanaPortal/theme");
+          document.documentElement.setAttribute(
+            "data-theme",
+            t === "light" ? "light" : "dark",
+          );
+        } catch {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="portal.css?v=0.4.21" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="app">
+      <div id="navbar">
+        <div class="logo">
+          <img class="logoImg" src="/kivana-logo.png" alt="Kivana logo" />
+          <span class="logoText">Kivana</span>
+        </div>
+        <div class="nav-links">
+          <div class="nav-main hidden" id="navFullLanding">
+            <button class="nav-anchor" id="navFeatures">How it works</button>
+            <button class="nav-anchor" id="navResources">Preview</button>
+          </div>
+          <div class="nav-actions">
+            <button
+              id="btnThemeToggle"
+              class="btn btn-secondary themeToggle"
+              type="button"
+            >
+              Theme
+            </button>
+            <button id="btnSignIn" class="btn btn-secondary">Sign in</button>
+            <button id="btnSignUp" class="btn btn-primary">
+              Create account
+            </button>
+          </div>
+          <button
+            class="nav-menu-btn"
+            id="btnMenu"
+            type="button"
+            aria-label="Open menu"
+            aria-expanded="false"
+          >
+            ☰
+          </button>
+          <button id="btnNavPlans" class="btn btn-secondary hidden">
+            Plans
+          </button>
+          <button id="btnNavAccount" class="btn btn-secondary hidden">
+            Account
+          </button>
+          <button id="btnNavAdmin" class="btn btn-secondary hidden">
+            Admin
+          </button>
+          <div id="navUser" class="nav-user hidden" aria-label="Signed in user">
+            <img
+              id="navUserAvatar"
+              class="nav-user-avatar hidden"
+              alt="User avatar"
+            />
+            <div class="nav-user-meta">
+              <div id="navUserName" class="nav-user-name"></div>
+              <div id="navUserPlan" class="nav-user-plan"></div>
+            </div>
+          </div>
+          <button id="btnSignOut" class="btn btn-secondary hidden">
+            Sign out
+          </button>
+        </div>
       </div>
-      <div class="nav-links">
-        <div class="nav-main hidden" id="navFullLanding">
-          <button class="nav-anchor" id="navFeatures">How it works</button>
-          <button class="nav-anchor" id="navResources">Preview</button>
-        </div>
-        <div class="nav-actions">
-          <button id="btnThemeToggle" class="btn btn-secondary themeToggle" type="button">Theme</button>
-          <button id="btnSignIn" class="btn btn-secondary">Sign in</button>
-          <button id="btnSignUp" class="btn btn-primary">Create account</button>
-        </div>
-        <button class="nav-menu-btn" id="btnMenu" type="button" aria-label="Open menu" aria-expanded="false">☰</button>
-        <button id="btnNavPlans" class="btn btn-secondary hidden">Plans</button>
-        <button id="btnNavAccount" class="btn btn-secondary hidden">Account</button>
-        <button id="btnNavAdmin" class="btn btn-secondary hidden">Admin</button>
-        <div id="navUser" class="nav-user hidden" aria-label="Signed in user">
-          <img id="navUserAvatar" class="nav-user-avatar hidden" alt="User avatar" />
-          <div class="nav-user-meta">
-            <div id="navUserName" class="nav-user-name"></div>
-            <div id="navUserPlan" class="nav-user-plan"></div>
+
+      <div class="wipBanner" id="wipBanner" role="status" aria-live="polite">
+        Under production • Test Basic for free (Windows & macOS)
+      </div>
+
+      <div
+        class="mobile-menu hidden"
+        id="mobileMenu"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menu"
+      >
+        <div class="mobile-menu-panel">
+          <div class="mobile-menu-top">
+            <div class="mobile-menu-title">Menu</div>
+            <button
+              class="mobile-menu-close"
+              id="btnCloseMenu"
+              type="button"
+              aria-label="Close menu"
+            >
+              ✕
+            </button>
+          </div>
+          <div class="mobile-menu-links" id="mobileMenuPublic">
+            <button class="mobile-menu-link" id="mNavFeatures">
+              How it works
+            </button>
+            <button class="mobile-menu-link" id="mNavResources">Preview</button>
+          </div>
+          <div class="mobile-menu-links hidden" id="mobileMenuAuthed">
+            <button class="mobile-menu-link" id="mPlans">Plans</button>
+            <button class="mobile-menu-link" id="mAccount">Account</button>
+            <button class="mobile-menu-link hidden" id="mAdmin">Admin</button>
+          </div>
+          <div class="mobile-menu-actions" id="mobileMenuPublicActions">
+            <button
+              class="btn btn-secondary w-full themeToggle"
+              id="mThemeToggle"
+              type="button"
+            >
+              Theme
+            </button>
+            <button class="btn btn-secondary w-full" id="mSignIn">
+              Sign in
+            </button>
+            <button class="btn btn-primary w-full" id="mGetKivana">
+              Create account
+            </button>
+          </div>
+          <div class="mobile-menu-actions hidden" id="mobileMenuAuthedActions">
+            <button
+              class="btn btn-secondary w-full themeToggle"
+              id="mThemeToggleAuthed"
+              type="button"
+            >
+              Theme
+            </button>
+            <button class="btn btn-secondary w-full" id="mSignOut">
+              Sign out
+            </button>
           </div>
         </div>
-        <button id="btnSignOut" class="btn btn-secondary hidden">Sign out</button>
+        <div class="mobile-menu-backdrop" id="menuBackdrop"></div>
       </div>
-    </div>
 
-    <div class="wipBanner" id="wipBanner" role="status" aria-live="polite">
-      Under production • Test Basic for free (Windows & macOS)
-    </div>
-
-    <div class="mobile-menu hidden" id="mobileMenu" role="dialog" aria-modal="true" aria-label="Menu">
-      <div class="mobile-menu-panel">
-        <div class="mobile-menu-top">
-          <div class="mobile-menu-title">Menu</div>
-          <button class="mobile-menu-close" id="btnCloseMenu" type="button" aria-label="Close menu">✕</button>
-        </div>
-        <div class="mobile-menu-links" id="mobileMenuPublic">
-          <button class="mobile-menu-link" id="mNavFeatures">How it works</button>
-          <button class="mobile-menu-link" id="mNavResources">Preview</button>
-        </div>
-        <div class="mobile-menu-links hidden" id="mobileMenuAuthed">
-          <button class="mobile-menu-link" id="mPlans">Plans</button>
-          <button class="mobile-menu-link" id="mAccount">Account</button>
-          <button class="mobile-menu-link hidden" id="mAdmin">Admin</button>
-        </div>
-        <div class="mobile-menu-actions" id="mobileMenuPublicActions">
-          <button class="btn btn-secondary w-full themeToggle" id="mThemeToggle" type="button">Theme</button>
-          <button class="btn btn-secondary w-full" id="mSignIn">Sign in</button>
-          <button class="btn btn-primary w-full" id="mGetKivana">Create account</button>
-        </div>
-        <div class="mobile-menu-actions hidden" id="mobileMenuAuthedActions">
-          <button class="btn btn-secondary w-full themeToggle" id="mThemeToggleAuthed" type="button">Theme</button>
-          <button class="btn btn-secondary w-full" id="mSignOut">Sign out</button>
-        </div>
-      </div>
-      <div class="mobile-menu-backdrop" id="menuBackdrop"></div>
-    </div>
-
-    <!-- Auth View (Login / Signup) -->
-    <div id="viewAuth" class="view hidden">
-      <div class="authShell">
-        <div class="authGrid">
-          <div class="authAside">
-            <button class="auth-back" id="btnBackToWebsite" type="button">← Back to website</button>
-            <div class="authAsideTop">
-              <div class="authBrand">
-                <div class="authMark" aria-hidden="true">
-                  <img class="authMarkImg" src="/kivana-logo.png" alt="" />
+      <!-- Auth View (Login / Signup) -->
+      <div id="viewAuth" class="view hidden">
+        <div class="authShell">
+          <div class="authGrid">
+            <div class="authAside">
+              <button class="auth-back" id="btnBackToWebsite" type="button">
+                ← Back to website
+              </button>
+              <div class="authAsideTop">
+                <div class="authBrand">
+                  <div class="authMark" aria-hidden="true">
+                    <img class="authMarkImg" src="/kivana-logo.png" alt="" />
+                  </div>
+                  <div class="authBrandText">
+                    <div class="authBrandName">Kivana</div>
+                    <div class="authBrandCaption">Account portal</div>
+                  </div>
                 </div>
-                <div class="authBrandText">
-                  <div class="authBrandName">Kivana</div>
-                  <div class="authBrandCaption">Account portal</div>
+                <div class="portalNotice" id="portalNotice">
+                  Basic/Ordinary/Pro are available now • Accountant under
+                  production.
+                </div>
+                <div class="authAsideMeta">
+                  Manage your plan, profile, and access in one place.
+                </div>
+                <div class="authAsideList" role="list">
+                  <div class="authAsideItem" role="listitem">
+                    Secure sign in
+                  </div>
+                  <div class="authAsideItem" role="listitem">
+                    Plan selection
+                  </div>
+                  <div class="authAsideItem" role="listitem">
+                    Profile settings
+                  </div>
                 </div>
               </div>
-              <div class="portalNotice" id="portalNotice">
-                Basic/Ordinary/Pro are available now • Accountant under production.
-              </div>
-              <div class="authAsideMeta">
-                Manage your plan, profile, and access in one place.
-              </div>
-              <div class="authAsideList" role="list">
-                <div class="authAsideItem" role="listitem">Secure sign in</div>
-                <div class="authAsideItem" role="listitem">Plan selection</div>
-                <div class="authAsideItem" role="listitem">Profile settings</div>
+            </div>
+            <div class="authMain">
+              <div class="authPanel">
+                <h2 id="authTitle">Sign in to Kivana</h2>
+                <p id="authSubtitle" class="text-muted">
+                  Sign in to manage your account and subscription.
+                </p>
+
+                <form id="authForm">
+                  <div class="input-group">
+                    <label for="email">Email address</label>
+                    <input type="email" id="email" required />
+                  </div>
+                  <div class="input-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required />
+                  </div>
+                  <div class="input-group" id="captchaGroup">
+                    <label for="captchaAnswer">Human check</label>
+                    <div class="captchaQuestion" id="captchaQuestion">
+                      Loading…
+                    </div>
+                    <input
+                      type="text"
+                      id="captchaAnswer"
+                      inputmode="numeric"
+                      autocomplete="off"
+                      placeholder="Answer"
+                      required
+                    />
+                  </div>
+
+                  <div id="authError" class="error-msg"></div>
+
+                  <button
+                    type="submit"
+                    class="btn btn-primary w-full"
+                    id="btnSubmitAuth"
+                  >
+                    Sign in
+                  </button>
+                </form>
+
+                <div class="auth-toggle">
+                  <span id="authToggleText">Don't have an account?</span>
+                  <a href="#" id="linkToggleAuth">Create one</a>
+                </div>
               </div>
             </div>
           </div>
-          <div class="authMain">
-            <div class="authPanel">
-              <h2 id="authTitle">Sign in to Kivana</h2>
-              <p id="authSubtitle" class="text-muted">Sign in to manage your account and subscription.</p>
-
-              <form id="authForm">
-                <div class="input-group">
-                  <label for="email">Email address</label>
-                  <input type="email" id="email" required />
-                </div>
-                <div class="input-group">
-                  <label for="password">Password</label>
-                  <input type="password" id="password" required />
-                </div>
-                <div class="input-group" id="captchaGroup">
-                  <label for="captchaAnswer">Human check</label>
-                  <div class="captchaQuestion" id="captchaQuestion">Loading…</div>
-                  <input type="text" id="captchaAnswer" inputmode="numeric" autocomplete="off" placeholder="Answer" required />
-                </div>
-
-                <div id="authError" class="error-msg"></div>
-
-                <button type="submit" class="btn btn-primary w-full" id="btnSubmitAuth">Sign in</button>
-              </form>
-
-              <div class="auth-toggle">
-                <span id="authToggleText">Don't have an account?</span>
-                <a href="#" id="linkToggleAuth">Create one</a>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Dashboard View (Plan Selection) -->
-    <div id="viewDashboard" class="view active">
-      <div class="dashboard-header">
-        <div id="prebetaLanding" class="prebetaLanding">
-          <div class="prebetaHero">
-            <div class="prebetaHeroTop">
-              <div class="prebetaTag">Basic (free)</div>
-              <div class="prebetaTag prebetaTagMuted">Desktop app</div>
+      <!-- Dashboard View (Plan Selection) -->
+      <div id="viewDashboard" class="view active">
+        <div class="dashboard-header">
+          <div id="prebetaLanding" class="prebetaLanding">
+            <div class="prebetaHero">
+              <div class="prebetaHeroTop">
+                <div class="prebetaTag">Basic (free)</div>
+                <div class="prebetaTag prebetaTagMuted">Desktop app</div>
+              </div>
+              <div class="prebetaTitle">Kivana</div>
+              <div class="prebetaSubtitle">
+                Under production. Test Basic for free.
+              </div>
             </div>
-            <div class="prebetaTitle">Kivana</div>
-            <div class="prebetaSubtitle">
-              Under production. Test Basic for free.
-            </div>
-          </div>
 
             <div class="prebetaPanels" aria-label="Pre-beta info">
-            <div class="prebetaPanel">
-              <div class="prebetaPanelTitle">Download (Basic)</div>
-              <div class="prebetaPanelText">Free version: Basic.</div>
-              <div class="prebetaDownloads">
-                <button class="btn btn-secondary" id="btnPrebetaDownloadMac">
-                  <span class="btnIcon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="">
-                      <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7A2.5 2.5 0 0 1 17.5 16h-11A2.5 2.5 0 0 1 4 13.5v-7Zm2.5-.5a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5h-11ZM9 18a1 1 0 0 0-1 1v1h8v-1a1 1 0 0 0-1-1H9Z"/>
-                    </svg>
-                  </span>
-                  <span>Download macOS (Apple Silicon)</span>
-                </button>
-                <button class="btn btn-secondary" id="btnPrebetaDownloadWin">
-                  <span class="btnIcon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="">
-                      <path d="M2 5.2 11 4v8H2V5.2Zm0 9.8h9v8L2 21.8V15Zm11-11 9-1v10h-9V4Zm0 11h9v10l-9-1v-9Z"/>
-                    </svg>
-                  </span>
-                  <span>Download Windows</span>
-                </button>
-                <button class="btn btn-secondary" id="btnMacGuide">macOS setup guide</button>
-                <button class="btn btn-secondary" id="btnPrebetaContact">Contact now</button>
-                <a class="prebetaLink" href="https://github.com/kivana-software/Kivana/releases" target="_blank" rel="noopener">All releases</a>
+              <div class="prebetaPanel">
+                <div class="prebetaPanelTitle">Download (Basic)</div>
+                <div class="prebetaPanelText">Free version: Basic.</div>
+                <div class="prebetaDownloads">
+                  <button class="btn btn-secondary" id="btnPrebetaDownloadMac">
+                    <span class="btnIcon" aria-hidden="true">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        role="img"
+                        aria-label=""
+                      >
+                        <path
+                          d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7A2.5 2.5 0 0 1 17.5 16h-11A2.5 2.5 0 0 1 4 13.5v-7Zm2.5-.5a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5h-11ZM9 18a1 1 0 0 0-1 1v1h8v-1a1 1 0 0 0-1-1H9Z"
+                        />
+                      </svg>
+                    </span>
+                    <span>Download macOS (Apple Silicon)</span>
+                  </button>
+                  <button class="btn btn-secondary" id="btnPrebetaDownloadWin">
+                    <span class="btnIcon" aria-hidden="true">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        role="img"
+                        aria-label=""
+                      >
+                        <path
+                          d="M2 5.2 11 4v8H2V5.2Zm0 9.8h9v8L2 21.8V15Zm11-11 9-1v10h-9V4Zm0 11h9v10l-9-1v-9Z"
+                        />
+                      </svg>
+                    </span>
+                    <span>Download Windows</span>
+                  </button>
+                  <button class="btn btn-secondary" id="btnMacGuide">
+                    macOS setup guide
+                  </button>
+                  <button class="btn btn-secondary" id="btnPrebetaContact">
+                    Contact now
+                  </button>
+                  <a
+                    class="prebetaLink"
+                    href="https://github.com/kivana-software/Kivana/releases"
+                    target="_blank"
+                    rel="noopener"
+                    >All releases</a
+                  >
+                </div>
+                <div id="downloadStatus" class="status-msg"></div>
               </div>
-              <div id="downloadStatus" class="status-msg"></div>
-            </div>
 
-            <div class="prebetaPanel">
-              <div class="prebetaPanelTitle">How it works</div>
-              <ol class="prebetaSteps">
-                <li>Download and install.</li>
-                <li>Use it offline, on your device.</li>
-                <li>Optional account for updates and future plans.</li>
-              </ol>
-              <div class="prebetaNote">Ordinary and Pro are available now. Accountant edition is under production.</div>
-            </div>
-          </div>
-        </div>
-
-        <div id="marketingSections" class="hidden">
-          <div class="hero hero-solo">
-            <div>
-              <h2 class="hero-title">Finance software that works without the cloud.</h2>
-              <p class="hero-subtitle">Offline-first. Your data is stored locally on your device. MIT-licensed core.</p>
-              <div class="hero-ctas">
-                <button class="btn btn-primary btn-hero" id="btnCtaDownloadWin">
-                  <span class="btnIcon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="">
-                      <path d="M2 5.2 11 4v8H2V5.2Zm0 9.8h9v8L2 21.8V15Zm11-11 9-1v10h-9V4Zm0 11h9v10l-9-1v-9Z"/>
-                    </svg>
-                  </span>
-                  <span>Download Windows</span>
-                </button>
-                <button class="btn btn-secondary btn-hero" id="btnCtaDownloadMac">
-                  <span class="btnIcon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="">
-                      <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7A2.5 2.5 0 0 1 17.5 16h-11A2.5 2.5 0 0 1 4 13.5v-7Zm2.5-.5a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5h-11ZM9 18a1 1 0 0 0-1 1v1h8v-1a1 1 0 0 0-1-1H9Z"/>
-                    </svg>
-                  </span>
-                  <span>Download macOS</span>
-                </button>
-              </div>
-              <div class="hero-badges" aria-label="Trust signals">
-                <span class="badge-chip">No cloud required</span>
-                <span class="badge-chip">Offline-first</span>
-                <span class="badge-chip">MIT-licensed core</span>
-              </div>
-              <div class="hero-meta">
-                <span class="text-muted hidden" id="macUnsignedNote">macOS build is unsigned. If blocked: right-click the app → Open.</span>
-                <div class="heroLinks">
-                  <a class="heroLink" href="https://github.com/kivana-software/Kivana" target="_blank" rel="noopener">View on GitHub</a>
-                  <a class="heroLink" href="/learn.html#trust">Trust & data</a>
+              <div class="prebetaPanel">
+                <div class="prebetaPanelTitle">How it works</div>
+                <ol class="prebetaSteps">
+                  <li>Download and install.</li>
+                  <li>Use it offline, on your device.</li>
+                  <li>Optional account for updates and future plans.</li>
+                </ol>
+                <div class="prebetaNote">
+                  Ordinary and Pro are available now. Accountant edition is
+                  under production.
                 </div>
               </div>
             </div>
           </div>
 
-          <div class="clarity-strip" aria-label="Key guarantees">
-            <div class="clarity-item">Your data stays on your device</div>
-            <div class="clarity-item">Works offline</div>
-            <div class="clarity-item">Desktop-first productivity</div>
-          </div>
-
-          <div class="trust-strip" aria-label="Trust">
-            Built as an alternative to bloated cloud tools • No enterprise complexity
-          </div>
-
-          <section class="section" id="intro">
-            <div class="section-title">Why Kivana</div>
-            <div class="section-subtitle">Understand it in a few seconds. Dive deeper only if you want.</div>
-            <div class="benefits-grid">
-              <div class="benefit-card">
-                <div class="benefit-title">No cloud required</div>
-                <div class="benefit-desc">Offline-first and local by design. Your data stays on your device.</div>
-              </div>
-              <div class="benefit-card">
-                <div class="benefit-title">Fast workflow</div>
-                <div class="benefit-desc">Desktop-first productivity with a clean UI.</div>
-              </div>
-              <div class="benefit-card">
-                <div class="benefit-title">Transparent core</div>
-                <div class="benefit-desc">MIT-licensed core with public releases on GitHub.</div>
+          <div id="marketingSections" class="hidden">
+            <div class="hero hero-solo">
+              <div>
+                <h2 class="hero-title">
+                  Finance software that works without the cloud.
+                </h2>
+                <p class="hero-subtitle">
+                  Offline-first. Your data is stored locally on your device.
+                  MIT-licensed core.
+                </p>
+                <div class="hero-ctas">
+                  <button
+                    class="btn btn-primary btn-hero"
+                    id="btnCtaDownloadWin"
+                  >
+                    <span class="btnIcon" aria-hidden="true">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        role="img"
+                        aria-label=""
+                      >
+                        <path
+                          d="M2 5.2 11 4v8H2V5.2Zm0 9.8h9v8L2 21.8V15Zm11-11 9-1v10h-9V4Zm0 11h9v10l-9-1v-9Z"
+                        />
+                      </svg>
+                    </span>
+                    <span>Download Windows</span>
+                  </button>
+                  <button
+                    class="btn btn-secondary btn-hero"
+                    id="btnCtaDownloadMac"
+                  >
+                    <span class="btnIcon" aria-hidden="true">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        role="img"
+                        aria-label=""
+                      >
+                        <path
+                          d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7A2.5 2.5 0 0 1 17.5 16h-11A2.5 2.5 0 0 1 4 13.5v-7Zm2.5-.5a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5h-11ZM9 18a1 1 0 0 0-1 1v1h8v-1a1 1 0 0 0-1-1H9Z"
+                        />
+                      </svg>
+                    </span>
+                    <span>Download macOS</span>
+                  </button>
+                </div>
+                <div class="hero-badges" aria-label="Trust signals">
+                  <span class="badge-chip">No cloud required</span>
+                  <span class="badge-chip">Offline-first</span>
+                  <span class="badge-chip">MIT-licensed core</span>
+                </div>
+                <div class="hero-meta">
+                  <span class="text-muted hidden" id="macUnsignedNote"
+                    >macOS build is unsigned. If blocked: right-click the app →
+                    Open.</span
+                  >
+                  <div class="heroLinks">
+                    <a
+                      class="heroLink"
+                      href="https://github.com/kivana-software/Kivana"
+                      target="_blank"
+                      rel="noopener"
+                      >View on GitHub</a
+                    >
+                    <a class="heroLink" href="/learn.html#trust"
+                      >Trust & data</a
+                    >
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="heroLinks">
-              <a class="heroLink" href="/learn.html">Learn more →</a>
-              <a class="heroLink" href="/learn.html#preview">See screenshots →</a>
+
+            <div class="clarity-strip" aria-label="Key guarantees">
+              <div class="clarity-item">Your data stays on your device</div>
+              <div class="clarity-item">Works offline</div>
+              <div class="clarity-item">Desktop-first productivity</div>
+            </div>
+
+            <div class="trust-strip" aria-label="Trust">
+              Built as an alternative to bloated cloud tools • No enterprise
+              complexity
+            </div>
+
+            <section class="section" id="intro">
+              <div class="section-title">Why Kivana</div>
+              <div class="section-subtitle">
+                Understand it in a few seconds. Dive deeper only if you want.
+              </div>
+              <div class="benefits-grid">
+                <div class="benefit-card">
+                  <div class="benefit-title">No cloud required</div>
+                  <div class="benefit-desc">
+                    Offline-first and local by design. Your data stays on your
+                    device.
+                  </div>
+                </div>
+                <div class="benefit-card">
+                  <div class="benefit-title">Fast workflow</div>
+                  <div class="benefit-desc">
+                    Desktop-first productivity with a clean UI.
+                  </div>
+                </div>
+                <div class="benefit-card">
+                  <div class="benefit-title">Transparent core</div>
+                  <div class="benefit-desc">
+                    MIT-licensed core with public releases on GitHub.
+                  </div>
+                </div>
+              </div>
+              <div class="heroLinks">
+                <a class="heroLink" href="/learn.html">Learn more →</a>
+                <a class="heroLink" href="/learn.html#preview"
+                  >See screenshots →</a
+                >
+              </div>
+            </section>
+          </div>
+
+          <section
+            class="plansShell section"
+            id="pricing"
+            aria-label="Plans and pricing"
+            data-authed-only="1"
+          >
+            <div class="plansHeader">
+              <div>
+                <div class="section-title">Plans</div>
+                <div class="section-subtitle">
+                  Start with a 14-day free trial. Upgrade only when you need
+                  more.
+                </div>
+              </div>
+              <div
+                class="billingToggle"
+                role="group"
+                aria-label="Billing cycle"
+              >
+                <button
+                  type="button"
+                  class="billingToggleBtn active"
+                  id="btnBillingYearly"
+                  data-cycle="yearly"
+                >
+                  Yearly
+                </button>
+                <button
+                  type="button"
+                  class="billingToggleBtn"
+                  id="btnBillingMonthly"
+                  data-cycle="monthly"
+                >
+                  Monthly
+                </button>
+              </div>
+            </div>
+
+            <div class="current-plan-banner hidden" id="currentPlanBanner">
+              Your current plan: <strong id="lblCurrentPlan">...</strong>
+            </div>
+
+            <div class="planTable" role="list">
+              <div class="planRow" role="listitem">
+                <div class="planRowMain">
+                  <div class="planName">Trial</div>
+                  <div class="planMeta">14 days • Free</div>
+                  <div class="planDesc">
+                    Try personal finance and simple accounting. Upgrade after
+                    your trial ends.
+                  </div>
+                  <div class="planIncludes">
+                    Track income and expenses • Store invoices and statements •
+                    Export an accountant-ready pack
+                  </div>
+                </div>
+                <div class="planRowAction">
+                  <button
+                    class="btn btn-secondary w-full"
+                    data-plan="basic"
+                    id="btnPlanBasic"
+                  >
+                    Start 14-day trial
+                  </button>
+                </div>
+              </div>
+
+              <div class="planRow" role="listitem">
+                <div class="planRowMain">
+                  <div class="planName">Ordinary</div>
+                  <div class="planMeta">
+                    <span class="priceMain" id="stdMainPrice">€109.89</span
+                    ><span class="priceUnit" id="stdMainUnit">/yr</span>
+                    <span class="planMetaSep">•</span>
+                    <span id="stdSubPrice">€9.99/mo</span>
+                  </div>
+                  <div class="planDesc">
+                    More control when your workflow grows.
+                  </div>
+                  <div class="planNote" id="stdNote">
+                    Save 1 month with annual billing. €109.89 / year (1 month
+                    free).
+                  </div>
+                  <div class="planIncludes">
+                    Everything in Trial • Better reports and backup tools •
+                    Upgrade any time
+                  </div>
+                </div>
+                <div class="planRowAction">
+                  <button
+                    class="btn btn-primary w-full"
+                    data-plan="standard"
+                    id="btnPlanStandard"
+                  >
+                    Get Ordinary (Yearly)
+                  </button>
+                </div>
+              </div>
+
+              <div class="planRow planRowFeatured" role="listitem">
+                <div class="planRowMain">
+                  <div class="planName">Pro</div>
+                  <div class="planMeta">
+                    <span class="priceMain" id="proMainPrice">€328.9</span
+                    ><span class="priceUnit" id="proMainUnit">/yr</span>
+                    <span class="planMetaSep">•</span>
+                    <span id="proSubPrice">€29.9/mo</span>
+                  </div>
+                  <div class="planDesc">
+                    Best for power users and advanced workflows.
+                  </div>
+                  <div class="planNote" id="proNote">
+                    Save 1 month with annual billing. €328.9 / year (1 month
+                    free).
+                  </div>
+                  <div class="planIncludes">
+                    Everything in Ordinary • Advanced workflows and exports •
+                    Priority support
+                  </div>
+                </div>
+                <div class="planRowAction">
+                  <button
+                    class="btn btn-primary w-full"
+                    data-plan="pro"
+                    id="btnPlanPro"
+                  >
+                    Get Pro (Yearly)
+                  </button>
+                </div>
+              </div>
+
+              <div class="planRow planRowService" role="listitem">
+                <div class="planRowMain">
+                  <div class="planName">Accountant</div>
+                  <div class="planMeta">On demand</div>
+                  <div class="planDesc">
+                    Professional help when you need it.
+                  </div>
+                  <div class="planIncludes">
+                    Export pack + review • Fast support when needed • No
+                    subscription required
+                  </div>
+                </div>
+                <div class="planRowAction">
+                  <button
+                    class="btn btn-secondary w-full"
+                    id="btnAccountantService"
+                  >
+                    Create account
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div id="dashboardStatus" class="status-msg"></div>
+          </section>
+        </div>
+
+        <div id="marketingFooter" class="hidden">
+          <section class="section">
+            <div class="cta">
+              <div class="cta-title">Download Basic - Free</div>
+              <div class="cta-subtitle">
+                Under production. Test it for free.
+              </div>
+              <div class="cta-urgency">Local-first</div>
+              <div class="cta-urgency">No forced cloud</div>
+              <div class="cta-urgency">Your data stays on your device</div>
+              <div class="cta-actions">
+                <button
+                  class="btn btn-primary btn-hero"
+                  id="btnFooterDownloadWin"
+                >
+                  Download Windows
+                </button>
+                <button
+                  class="btn btn-secondary btn-hero"
+                  id="btnFooterDownloadMac"
+                >
+                  Download macOS
+                </button>
+                <button
+                  class="btn btn-secondary btn-hero"
+                  id="btnFooterContact"
+                >
+                  Contact now
+                </button>
+              </div>
             </div>
           </section>
 
-        </div>
-
-        <section class="plansShell section" id="pricing" aria-label="Plans and pricing" data-authed-only="1">
-          <div class="plansHeader">
+          <div class="footer">
+            <div>© <span id="footerYear"></span> Kivana</div>
             <div>
-              <div class="section-title">Plans</div>
-              <div class="section-subtitle">Start with a 14-day free trial. Upgrade only when you need more.</div>
+              <a href="/privacy.html" id="footerPrivacy">Privacy</a>
+              <span class="footerSep">•</span>
+              <a href="/terms.html" id="footerTerms">Terms</a>
             </div>
-            <div class="billingToggle" role="group" aria-label="Billing cycle">
-              <button type="button" class="billingToggleBtn active" id="btnBillingYearly" data-cycle="yearly">Yearly</button>
-              <button type="button" class="billingToggleBtn" id="btnBillingMonthly" data-cycle="monthly">Monthly</button>
-            </div>
-          </div>
-
-          <div class="current-plan-banner hidden" id="currentPlanBanner">
-            Your current plan: <strong id="lblCurrentPlan">...</strong>
-          </div>
-
-          <div class="planTable" role="list">
-            <div class="planRow" role="listitem">
-              <div class="planRowMain">
-                <div class="planName">Trial</div>
-                <div class="planMeta">14 days • Free</div>
-                <div class="planDesc">Try personal finance and simple accounting. Upgrade after your trial ends.</div>
-                <div class="planIncludes">Track income and expenses • Store invoices and statements • Export an accountant-ready pack</div>
-              </div>
-              <div class="planRowAction">
-                <button class="btn btn-secondary w-full" data-plan="basic" id="btnPlanBasic">Start 14-day trial</button>
-              </div>
-            </div>
-
-            <div class="planRow" role="listitem">
-              <div class="planRowMain">
-                <div class="planName">Ordinary</div>
-                <div class="planMeta">
-                  <span class="priceMain" id="stdMainPrice">€109.89</span><span class="priceUnit" id="stdMainUnit">/yr</span>
-                  <span class="planMetaSep">•</span>
-                  <span id="stdSubPrice">€9.99/mo</span>
-                </div>
-                <div class="planDesc">More control when your workflow grows.</div>
-                <div class="planNote" id="stdNote">Save 1 month with annual billing. €109.89 / year (1 month free).</div>
-                <div class="planIncludes">Everything in Trial • Better reports and backup tools • Upgrade any time</div>
-              </div>
-              <div class="planRowAction">
-                <button class="btn btn-primary w-full" data-plan="standard" id="btnPlanStandard">Get Ordinary (Yearly)</button>
-              </div>
-            </div>
-
-            <div class="planRow planRowFeatured" role="listitem">
-              <div class="planRowMain">
-                <div class="planName">Pro</div>
-                <div class="planMeta">
-                  <span class="priceMain" id="proMainPrice">€328.9</span><span class="priceUnit" id="proMainUnit">/yr</span>
-                  <span class="planMetaSep">•</span>
-                  <span id="proSubPrice">€29.9/mo</span>
-                </div>
-                <div class="planDesc">Best for power users and advanced workflows.</div>
-                <div class="planNote" id="proNote">Save 1 month with annual billing. €328.9 / year (1 month free).</div>
-                <div class="planIncludes">Everything in Ordinary • Advanced workflows and exports • Priority support</div>
-              </div>
-              <div class="planRowAction">
-                <button class="btn btn-primary w-full" data-plan="pro" id="btnPlanPro">Get Pro (Yearly)</button>
-              </div>
-            </div>
-
-            <div class="planRow planRowService" role="listitem">
-              <div class="planRowMain">
-                <div class="planName">Accountant</div>
-                <div class="planMeta">On demand</div>
-                <div class="planDesc">Professional help when you need it.</div>
-                <div class="planIncludes">Export pack + review • Fast support when needed • No subscription required</div>
-              </div>
-              <div class="planRowAction">
-                <button class="btn btn-secondary w-full" id="btnAccountantService">Create account</button>
-              </div>
-            </div>
-          </div>
-
-          <div id="dashboardStatus" class="status-msg"></div>
-        </section>
-      </div>
-
-      <div id="marketingFooter" class="hidden">
-        <section class="section">
-          <div class="cta">
-          <div class="cta-title">Download Basic - Free</div>
-          <div class="cta-subtitle">Under production. Test it for free.</div>
-          <div class="cta-urgency">Local-first</div>
-          <div class="cta-urgency">No forced cloud</div>
-          <div class="cta-urgency">Your data stays on your device</div>
-            <div class="cta-actions">
-            <button class="btn btn-primary btn-hero" id="btnFooterDownloadWin">Download Windows</button>
-            <button class="btn btn-secondary btn-hero" id="btnFooterDownloadMac">Download macOS</button>
-            <button class="btn btn-secondary btn-hero" id="btnFooterContact">Contact now</button>
-            </div>
-          </div>
-        </section>
-
-        <div class="footer">
-          <div>© <span id="footerYear"></span> Kivana</div>
-          <div>
-            <a href="/privacy.html" id="footerPrivacy">Privacy</a>
-            <span class="footerSep">•</span>
-            <a href="/terms.html" id="footerTerms">Terms</a>
           </div>
         </div>
       </div>
-    </div>
 
-    <div id="viewAccount" class="view hidden">
-      <div class="dashboard-header">
-        <h2>Account</h2>
-        <p class="text-muted">Update your profile and manage your subscription.</p>
+      <div id="viewAccount" class="view hidden">
+        <div class="dashboard-header">
+          <h2>Account</h2>
+          <p class="text-muted">
+            Update your profile and manage your subscription.
+          </p>
+        </div>
+
+        <div class="account-grid">
+          <div class="panel">
+            <h3 class="panel-title">Profile</h3>
+            <div class="profile-row">
+              <div class="avatar-wrap">
+                <img id="avatarPreview" class="avatar" alt="Avatar" />
+              </div>
+              <div class="profile-fields">
+                <div class="input-group">
+                  <label for="displayName">Display name</label>
+                  <input id="displayName" type="text" placeholder="Your name" />
+                </div>
+                <div class="input-group">
+                  <label for="avatarFile">Avatar image</label>
+                  <input id="avatarFile" type="file" accept="image/*" />
+                </div>
+                <button id="btnSaveProfile" class="btn btn-primary">
+                  Save profile
+                </button>
+              </div>
+            </div>
+            <div id="profileStatus" class="status-msg"></div>
+          </div>
+
+          <div class="panel">
+            <h3 class="panel-title">Subscription</h3>
+            <div class="sub-details">
+              <div class="sub-line">
+                Plan: <strong id="subPlanName">...</strong>
+              </div>
+              <div class="sub-line text-muted" id="subPlanMeta"></div>
+            </div>
+            <div class="sub-actions">
+              <button id="btnManagePlans" class="btn btn-secondary">
+                Manage plans
+              </button>
+              <button id="btnCancelSub" class="btn btn-secondary">
+                Cancel subscription
+              </button>
+            </div>
+            <div id="accountStatus" class="status-msg"></div>
+          </div>
+        </div>
       </div>
 
-      <div class="account-grid">
-        <div class="panel">
-          <h3 class="panel-title">Profile</h3>
-          <div class="profile-row">
-            <div class="avatar-wrap">
-              <img id="avatarPreview" class="avatar" alt="Avatar" />
+      <div id="viewAdmin" class="view hidden">
+        <div class="dashboard-header">
+          <h2>Admin Control Panel</h2>
+          <p class="text-muted">
+            User management, access control, and future admin tools.
+          </p>
+        </div>
+
+        <div class="adminShell">
+          <aside class="adminSidebar" aria-label="Admin navigation">
+            <div class="adminSidebarTitle">Control panel</div>
+            <button
+              class="adminNavItem active"
+              id="adminTabUsers"
+              type="button"
+            >
+              Users
+            </button>
+            <button class="adminNavItem" id="adminTabAccess" type="button">
+              Messages
+            </button>
+            <button class="adminNavItem" id="adminTabSettings" type="button">
+              Settings
+            </button>
+          </aside>
+
+          <div class="adminMain">
+            <div class="adminTopbar">
+              <div class="adminTopbarLeft">
+                <div class="adminTopbarTitle" id="adminSectionTitle">Users</div>
+                <div class="adminTopbarSub" id="adminSectionSub">
+                  Manage accounts and plans.
+                </div>
+              </div>
+              <div class="adminTopbarRight">
+                <button id="btnAdminReload" class="btn btn-secondary">
+                  Reload
+                </button>
+              </div>
             </div>
-            <div class="profile-fields">
+
+            <div class="adminStats" aria-label="Admin stats">
+              <div class="adminStat">
+                <div class="adminStatLabel">Users</div>
+                <div class="adminStatValue" id="adminStatUsers">0</div>
+              </div>
+              <div class="adminStat">
+                <div class="adminStatLabel">Admins</div>
+                <div class="adminStatValue" id="adminStatAdmins">0</div>
+              </div>
+              <div class="adminStat">
+                <div class="adminStatLabel">Active plans</div>
+                <div class="adminStatValue" id="adminStatActivePlans">0</div>
+              </div>
+            </div>
+
+            <div class="adminPanel">
+              <div class="adminPanelHead">
+                <div class="adminPanelActions">
+                  <input
+                    id="adminSearch"
+                    class="adminSearch"
+                    type="search"
+                    placeholder="Search users by email…"
+                  />
+                </div>
+                <div id="adminStatus" class="adminStatus"></div>
+              </div>
+
+              <div id="adminTabUsersView">
+                <div class="tableWrap" aria-label="Users table">
+                  <table class="adminTable">
+                    <thead>
+                      <tr>
+                        <th>Email</th>
+                        <th>Created</th>
+                        <th>Last IP</th>
+                        <th>Role</th>
+                        <th>Plan</th>
+                        <th>Ends</th>
+                        <th>Set plan</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="adminUsersBody"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div id="adminTabAccessView" class="hidden">
+                <div class="tableWrap" aria-label="Contact messages table">
+                  <table class="adminTable">
+                    <thead>
+                      <tr>
+                        <th>Created</th>
+                        <th>Status</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Subject</th>
+                        <th>Message</th>
+                        <th>IP</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="adminContactBody"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div id="adminTabSettingsView" class="hidden">
+                <div class="adminPlaceholder">
+                  <div class="adminPlaceholderTitle">Settings</div>
+                  <div class="adminPlaceholderText">Coming soon.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        class="modal hidden"
+        id="macGuideModal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="macOS setup guide"
+      >
+        <div class="modalPanel">
+          <div class="modalTop">
+            <div class="modalTitle">macOS (pre-beta) setup guide</div>
+            <button
+              class="modalClose"
+              id="btnCloseMacGuide"
+              type="button"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+          <div class="modalBody">
+            <div class="modalMeta">
+              <a
+                class="prebetaLink"
+                href="https://github.com/kivana-software/Kivana/blob/main/readmemac.md"
+                target="_blank"
+                rel="noopener"
+                >Open on GitHub</a
+              >
+            </div>
+            <pre class="mdPre" id="macGuideContent">Loading…</pre>
+          </div>
+        </div>
+        <div class="modalBackdrop" id="macGuideBackdrop"></div>
+      </div>
+
+      <div
+        class="modal hidden"
+        id="previewModal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Screenshot preview"
+      >
+        <div class="modalPanel">
+          <div class="modalTop">
+            <div class="modalTitle" id="previewModalTitle">Preview</div>
+            <button
+              class="modalClose"
+              id="btnClosePreviewModal"
+              type="button"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+          <div class="modalBody">
+            <img id="previewModalImg" class="previewModalImg" alt="" />
+          </div>
+        </div>
+        <div class="modalBackdrop" id="previewModalBackdrop"></div>
+      </div>
+
+      <div
+        class="modal hidden"
+        id="actionModal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Action"
+      >
+        <div class="modalPanel">
+          <div class="modalTop">
+            <div class="modalTitle" id="actionModalTitle">Action</div>
+            <button
+              class="modalClose"
+              id="btnCloseActionModal"
+              type="button"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+          <div class="modalBody">
+            <div id="actionModalBody"></div>
+            <div class="modalActions">
+              <button
+                class="btn btn-secondary"
+                id="actionModalCancel"
+                type="button"
+              >
+                Cancel
+              </button>
+              <button class="btn btn-primary" id="actionModalOk" type="button">
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="modalBackdrop" id="actionModalBackdrop"></div>
+      </div>
+
+      <div
+        class="modal hidden"
+        id="contactModal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Contact"
+      >
+        <div class="modalPanel" id="contactModalPanel">
+          <div class="modalTop">
+            <div class="modalTitle">Contact</div>
+            <button
+              class="modalClose"
+              id="btnCloseContactModal"
+              type="button"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+          <div class="modalBody">
+            <form id="contactForm">
               <div class="input-group">
-                <label for="displayName">Display name</label>
-                <input id="displayName" type="text" placeholder="Your name" />
+                <label for="contactName">Name</label>
+                <input
+                  type="text"
+                  id="contactName"
+                  autocomplete="name"
+                  required
+                />
               </div>
               <div class="input-group">
-                <label for="avatarFile">Avatar image</label>
-                <input id="avatarFile" type="file" accept="image/*" />
+                <label for="contactEmail">Email</label>
+                <input
+                  type="email"
+                  id="contactEmail"
+                  autocomplete="email"
+                  required
+                />
               </div>
-              <button id="btnSaveProfile" class="btn btn-primary">Save profile</button>
-            </div>
-          </div>
-          <div id="profileStatus" class="status-msg"></div>
-        </div>
-
-        <div class="panel">
-          <h3 class="panel-title">Subscription</h3>
-          <div class="sub-details">
-            <div class="sub-line">Plan: <strong id="subPlanName">...</strong></div>
-            <div class="sub-line text-muted" id="subPlanMeta"></div>
-          </div>
-          <div class="sub-actions">
-            <button id="btnManagePlans" class="btn btn-secondary">Manage plans</button>
-            <button id="btnCancelSub" class="btn btn-secondary">Cancel subscription</button>
-          </div>
-          <div id="accountStatus" class="status-msg"></div>
-        </div>
-      </div>
-    </div>
-
-    <div id="viewAdmin" class="view hidden">
-      <div class="dashboard-header">
-        <h2>Admin Control Panel</h2>
-        <p class="text-muted">User management, access control, and future admin tools.</p>
-      </div>
-
-      <div class="adminShell">
-        <aside class="adminSidebar" aria-label="Admin navigation">
-          <div class="adminSidebarTitle">Control panel</div>
-          <button class="adminNavItem active" id="adminTabUsers" type="button">Users</button>
-          <button class="adminNavItem" id="adminTabAccess" type="button">Messages</button>
-          <button class="adminNavItem" id="adminTabSettings" type="button">Settings</button>
-        </aside>
-
-        <div class="adminMain">
-          <div class="adminTopbar">
-            <div class="adminTopbarLeft">
-              <div class="adminTopbarTitle" id="adminSectionTitle">Users</div>
-              <div class="adminTopbarSub" id="adminSectionSub">Manage accounts and plans.</div>
-            </div>
-            <div class="adminTopbarRight">
-              <button id="btnAdminReload" class="btn btn-secondary">Reload</button>
-            </div>
-          </div>
-
-          <div class="adminStats" aria-label="Admin stats">
-            <div class="adminStat">
-              <div class="adminStatLabel">Users</div>
-              <div class="adminStatValue" id="adminStatUsers">0</div>
-            </div>
-            <div class="adminStat">
-              <div class="adminStatLabel">Admins</div>
-              <div class="adminStatValue" id="adminStatAdmins">0</div>
-            </div>
-            <div class="adminStat">
-              <div class="adminStatLabel">Active plans</div>
-              <div class="adminStatValue" id="adminStatActivePlans">0</div>
-            </div>
-          </div>
-
-          <div class="adminPanel">
-            <div class="adminPanelHead">
-              <div class="adminPanelActions">
-                <input id="adminSearch" class="adminSearch" type="search" placeholder="Search users by email…" />
+              <div class="input-group">
+                <label for="contactSubject">Subject</label>
+                <input type="text" id="contactSubject" placeholder="Optional" />
               </div>
-              <div id="adminStatus" class="adminStatus"></div>
-            </div>
-
-            <div id="adminTabUsersView">
-              <div class="tableWrap" aria-label="Users table">
-                <table class="adminTable">
-                  <thead>
-                    <tr>
-                      <th>Email</th>
-                      <th>Created</th>
-                      <th>Last IP</th>
-                      <th>Role</th>
-                      <th>Plan</th>
-                      <th>Ends</th>
-                      <th>Set plan</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody id="adminUsersBody"></tbody>
-                </table>
+              <div class="input-group">
+                <label for="contactMessage">Message</label>
+                <textarea id="contactMessage" rows="6" required></textarea>
               </div>
-            </div>
-
-            <div id="adminTabAccessView" class="hidden">
-              <div class="tableWrap" aria-label="Contact messages table">
-                <table class="adminTable">
-                  <thead>
-                    <tr>
-                      <th>Created</th>
-                      <th>Status</th>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Subject</th>
-                      <th>Message</th>
-                      <th>IP</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody id="adminContactBody"></tbody>
-                </table>
-              </div>
-            </div>
-
-            <div id="adminTabSettingsView" class="hidden">
-              <div class="adminPlaceholder">
-                <div class="adminPlaceholderTitle">Settings</div>
-                <div class="adminPlaceholderText">
-                  Coming soon.
-                </div>
-              </div>
-            </div>
+              <div id="contactStatus" class="status-msg"></div>
+              <button
+                type="submit"
+                class="btn btn-primary w-full"
+                id="btnSendContact"
+              >
+                Send message
+              </button>
+            </form>
           </div>
         </div>
+        <div class="modalBackdrop" id="contactModalBackdrop"></div>
+      </div>
+
+      <div class="portalBottomFooter">
+        <div class="portalBottomFooterLinks">
+          <a href="/privacy.html">Privacy</a>
+          <span class="footerSep">•</span>
+          <a href="/terms.html">Terms</a>
+          <span class="footerSep">•</span>
+          <a href="/refunds.html">Refunds</a>
+        </div>
+        <div>kivana.eu • All rights reserved © 2026</div>
       </div>
     </div>
 
-    <div class="modal hidden" id="macGuideModal" role="dialog" aria-modal="true" aria-label="macOS setup guide">
-      <div class="modalPanel">
-        <div class="modalTop">
-          <div class="modalTitle">macOS (pre-beta) setup guide</div>
-          <button class="modalClose" id="btnCloseMacGuide" type="button" aria-label="Close">✕</button>
-        </div>
-        <div class="modalBody">
-          <div class="modalMeta">
-            <a class="prebetaLink" href="https://github.com/kivana-software/Kivana/blob/main/readmemac.md" target="_blank" rel="noopener">Open on GitHub</a>
-          </div>
-          <pre class="mdPre" id="macGuideContent">Loading…</pre>
-        </div>
-      </div>
-      <div class="modalBackdrop" id="macGuideBackdrop"></div>
-    </div>
-
-    <div class="modal hidden" id="previewModal" role="dialog" aria-modal="true" aria-label="Screenshot preview">
-      <div class="modalPanel">
-        <div class="modalTop">
-          <div class="modalTitle" id="previewModalTitle">Preview</div>
-          <button class="modalClose" id="btnClosePreviewModal" type="button" aria-label="Close">✕</button>
-        </div>
-        <div class="modalBody">
-          <img id="previewModalImg" class="previewModalImg" alt="" />
-        </div>
-      </div>
-      <div class="modalBackdrop" id="previewModalBackdrop"></div>
-    </div>
-
-    <div class="modal hidden" id="actionModal" role="dialog" aria-modal="true" aria-label="Action">
-      <div class="modalPanel">
-        <div class="modalTop">
-          <div class="modalTitle" id="actionModalTitle">Action</div>
-          <button class="modalClose" id="btnCloseActionModal" type="button" aria-label="Close">✕</button>
-        </div>
-        <div class="modalBody">
-          <div id="actionModalBody"></div>
-          <div class="modalActions">
-            <button class="btn btn-secondary" id="actionModalCancel" type="button">Cancel</button>
-            <button class="btn btn-primary" id="actionModalOk" type="button">OK</button>
-          </div>
-        </div>
-      </div>
-      <div class="modalBackdrop" id="actionModalBackdrop"></div>
-    </div>
-
-    <div class="modal hidden" id="contactModal" role="dialog" aria-modal="true" aria-label="Contact">
-      <div class="modalPanel" id="contactModalPanel">
-        <div class="modalTop">
-          <div class="modalTitle">Contact</div>
-          <button class="modalClose" id="btnCloseContactModal" type="button" aria-label="Close">✕</button>
-        </div>
-        <div class="modalBody">
-          <form id="contactForm">
-            <div class="input-group">
-              <label for="contactName">Name</label>
-              <input type="text" id="contactName" autocomplete="name" required />
-            </div>
-            <div class="input-group">
-              <label for="contactEmail">Email</label>
-              <input type="email" id="contactEmail" autocomplete="email" required />
-            </div>
-            <div class="input-group">
-              <label for="contactSubject">Subject</label>
-              <input type="text" id="contactSubject" placeholder="Optional" />
-            </div>
-            <div class="input-group">
-              <label for="contactMessage">Message</label>
-              <textarea id="contactMessage" rows="6" required></textarea>
-            </div>
-            <div id="contactStatus" class="status-msg"></div>
-            <button type="submit" class="btn btn-primary w-full" id="btnSendContact">Send message</button>
-          </form>
-        </div>
-      </div>
-      <div class="modalBackdrop" id="contactModalBackdrop"></div>
-    </div>
-
-    <div class="portalBottomFooter">
-      <div class="portalBottomFooterLinks">
-        <a href="/privacy.html">Privacy</a>
-        <span class="footerSep">•</span>
-        <a href="/terms.html">Terms</a>
-        <span class="footerSep">•</span>
-        <a href="/refunds.html">Refunds</a>
-      </div>
-      <div>kivana.eu • All rights reserved © 2026</div>
-    </div>
-  </div>
-
-  <script src="portal.js?v=0.4.23"></script>
-</body>
+    <script src="portal.js?v=0.4.23"></script>
+  </body>
 </html>
