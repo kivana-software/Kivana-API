@@ -211,6 +211,46 @@
         gap: 10px;
         flex-wrap: wrap;
       }
+      .roadmapStrip {
+        margin-top: 14px;
+        max-width: 560px;
+      }
+      .roadmapLine {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 0 4px;
+        height: 16px;
+      }
+      .roadmapLine:before {
+        content: "";
+        position: absolute;
+        left: 6px;
+        right: 6px;
+        top: 50%;
+        height: 2px;
+        transform: translateY(-50%);
+        background: linear-gradient(90deg, rgba(34, 197, 94, 0.85) 0%, rgba(34, 197, 94, 0.85) 66%, rgba(245, 158, 11, 0.85) 66%, rgba(245, 158, 11, 0.85) 100%);
+        border-radius: 999px;
+        opacity: 0.65;
+      }
+      .roadmapDot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        position: relative;
+        z-index: 1;
+      }
+      .roadmapDotGreen {
+        background: rgba(34, 197, 94, 0.95);
+        box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.72);
+      }
+      .roadmapDotOrange {
+        background: rgba(245, 158, 11, 0.95);
+        box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.10);
+      }
       #authSubmit {
         flex: 1;
         min-width: 200px;
@@ -537,9 +577,16 @@
         <p style="margin-top: 12px; color: rgba(27, 23, 72, 0.72); font-size: 16px; line-height: 1.6; max-width: 740px;">
           Offline-first. Your data stays on your device. Basic is open source and totally free.
         </p>
+        <div class="roadmapStrip" aria-hidden="true">
+          <div class="roadmapLine">
+            <span class="roadmapDot roadmapDotGreen"></span>
+            <span class="roadmapDot roadmapDotGreen"></span>
+            <span class="roadmapDot roadmapDotOrange"></span>
+          </div>
+        </div>
         <div style="margin-top: 18px; display:flex; gap: 10px; flex-wrap: wrap;">
           <a href="/account/?portal=1&mode=signup" style="appearance:none;border:2px solid #4f3ddd;background:#4f3ddd;color:#fff;border-radius:999px;padding:12px 16px;font-weight:800;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;">
-            Try now
+            Try now — 14-day risk-free
           </a>
           <a href="/account/?portal=1&mode=login" style="appearance:none;border:2px solid rgba(27,23,72,0.18);background:#fff;color:#1b1748;border-radius:999px;padding:12px 16px;font-weight:800;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;">
             Sign in
@@ -601,7 +648,7 @@
         <div id="kivanaFooterCtas">
           <div id="kivanaFooterCtaText">Try Kivana with an account (14-day trial available).</div>
           <div id="kivanaFooterCtaButtons">
-            <a class="kivanaFooterCtaBtn" href="/account/?portal=1&mode=signup">Try now</a>
+            <a class="kivanaFooterCtaBtn" href="/account/?portal=1&mode=signup">Try now — 14-day risk-free</a>
             <a class="kivanaFooterCtaBtn kivanaFooterCtaBtnGhost" href="/account/?portal=1&mode=login">Sign in</a>
             <a class="kivanaFooterCtaBtn kivanaFooterCtaBtnGhost" href="https://github.com/kivana-software/Kivana/releases" target="_blank" rel="noopener">Download Basic (Free &amp; Open Source)</a>
           </div>
@@ -1066,6 +1113,115 @@
 
         if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init)
         else init()
+      })()
+    </script>
+    <script>
+      ;(function () {
+        var signupUrl = "/account/?portal=1&mode=signup"
+        var loginUrl = "/account/?portal=1&mode=login"
+        var STR_TRY = "Try now — 14-day risk-free"
+        var STR_LOGIN = "Sign in"
+
+        function norm(s) {
+          return String(s || "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .toLowerCase()
+        }
+
+        function patchDownloadCtas() {
+          var nodes = Array.prototype.slice.call(document.querySelectorAll("a,button"))
+          var matches = []
+          for (var i = 0; i < nodes.length; i++) {
+            var el = nodes[i]
+            if (!el || el.getAttribute("data-kivana-cta-patched") === "1") continue
+            var t = norm(el.textContent || "")
+            if (!t) continue
+            if (t.indexOf("download") === -1) continue
+            if (t.indexOf("windows") === -1 && t.indexOf("mac") === -1) continue
+            matches.push(el)
+          }
+
+          for (var j = 0; j < matches.length; j++) {
+            var m = matches[j]
+            m.setAttribute("data-kivana-cta-patched", "1")
+            var isFirst = j === 0
+            var label = isFirst ? STR_TRY : STR_LOGIN
+            var url = isFirst ? signupUrl : loginUrl
+            m.textContent = label
+            if (m.tagName && m.tagName.toLowerCase() === "a") {
+              m.setAttribute("href", url)
+              m.removeAttribute("target")
+              m.removeAttribute("rel")
+            } else {
+              ;(function (dest) {
+                m.addEventListener(
+                  "click",
+                  function (ev) {
+                    try {
+                      ev.preventDefault()
+                      ev.stopPropagation()
+                      ev.stopImmediatePropagation()
+                    } catch (e) {}
+                  },
+                  true
+                )
+                m.addEventListener(
+                  "click",
+                  function () {
+                    window.location.assign(dest)
+                  },
+                  true
+                )
+              })(url)
+            }
+          }
+        }
+
+        function injectRoadmapStrip() {
+          var sec = document.getElementById("roadmap")
+          if (!sec) return
+          if (document.getElementById("kivanaRoadmapStrip")) return
+          var wrap = document.createElement("div")
+          wrap.id = "kivanaRoadmapStrip"
+          wrap.className = "roadmapStrip"
+          wrap.setAttribute("aria-hidden", "true")
+          wrap.innerHTML =
+            '<div class="roadmapLine"><span class="roadmapDot roadmapDotGreen"></span><span class="roadmapDot roadmapDotGreen"></span><span class="roadmapDot roadmapDotOrange"></span></div>'
+          sec.insertBefore(wrap, sec.firstChild)
+        }
+
+        function injectRoadmapNote() {
+          var sec = document.getElementById("roadmap")
+          if (!sec) return
+          if (document.getElementById("kivanaRoadmapNote")) return
+          var t = norm(sec.textContent || "")
+          if (t.indexOf("accountant") !== -1) return
+          var note = document.createElement("div")
+          note.id = "kivanaRoadmapNote"
+          note.textContent = "Ordinary and Pro are available now. Accountant is under construction."
+          note.setAttribute(
+            "style",
+            "margin-top:10px;color:rgba(27,23,72,0.72);font-weight:800;font-size:14px;line-height:1.5;"
+          )
+          sec.insertBefore(note, sec.firstChild ? sec.firstChild.nextSibling : null)
+        }
+
+        function apply() {
+          patchDownloadCtas()
+          injectRoadmapStrip()
+          injectRoadmapNote()
+        }
+
+        var tries = 0
+        var timer = setInterval(function () {
+          tries++
+          apply()
+          if (tries > 40) clearInterval(timer)
+        }, 250)
+
+        if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply)
+        else apply()
       })()
     </script>
   </body>
