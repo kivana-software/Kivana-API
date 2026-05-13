@@ -17,6 +17,122 @@
 - `kivana-site/static/**/*.map` and `kivana-site/asset-manifest.json` are JSON build outputs (sourcemaps/manifests) and must remain valid JSON (no inline comments).
 - `*.png` files are binary image assets (logos/screenshots) and cannot safely carry embedded “comments”; their purpose is described by filename and usage locations.
 
+## Architecture overview
+
+Kivana is deployed as a single HTTP server + a Postgres database:
+
+- **API server (this repo, Rust/Axum)**:
+  - Serves JSON APIs under `/v1/*`.
+  - Serves static UIs:
+    - Website build at `/` (from `kivana-site/`)
+    - Portal landing at `/portal/` (from `kivana-portal/`)
+    - Account portal at `/account/` (from `kivana-account/`)
+    - Admin UI at `/admin/` (from `kivana-admin/`)
+  - Serves admin-uploaded binaries under `/downloads/` (volume-mounted in docker-compose).
+  - Runs SQL migrations automatically on startup (from `migrations/`).
+
+- **Database (Postgres)**:
+  - Stores users, sessions (refresh tokens), plans/subscriptions, and support/contact messages.
+
+The canonical “entrypoint” for understanding request routing and behavior is:
+- `src/main.rs` (router wiring + handler implementations)
+
+## API overview (high level)
+
+This is a practical map of what the frontends call. Exact route list is in `src/main.rs`.
+
+- **Health**
+  - `GET /healthz` basic liveness check.
+
+- **Captcha**
+  - `GET /v1/captcha/challenge` returns `{ question, token }` used on login/signup.
+
+- **Authentication**
+  - `POST /v1/auth/signup` creates user and returns `{ accessToken, refreshToken }`.
+  - `POST /v1/auth/login` verifies password and returns `{ accessToken, refreshToken }`.
+  - `POST /v1/auth/refresh` rotates refresh token and returns new `{ accessToken, refreshToken }`.
+  - `POST /v1/auth/logout` invalidates a single refresh token.
+  - `POST /v1/auth/logout-all` invalidates all refresh tokens (all sessions).
+  - `POST /v1/auth/change-password` changes password and returns new tokens.
+
+- **Account / profile / sessions**
+  - `GET /v1/me` returns the current user profile.
+  - `POST /v1/profile` updates profile metadata (display name, etc.).
+  - `GET /v1/sessions` lists active sessions with IP/user-agent metadata.
+  - `POST /v1/sessions/:id/revoke` revokes one session.
+  - `GET /v1/account/export` exports server-side account metadata as JSON.
+  - `POST /v1/account/delete` deletes the account (server-side identity/subscription/support data).
+
+- **Entitlements / billing**
+  - `GET /v1/entitlements` returns product entitlements for the signed-in user.
+  - `GET /v1/public/config` public portal config (pricing, downloads, feature flags).
+  - `POST /v1/portal/select-plan` sets a plan directly (used for non-PayPal flows).
+
+- **PayPal subscriptions**
+  - `POST /v1/portal/paypal/start` creates a provider subscription and returns an approval URL.
+  - `POST /v1/portal/paypal/confirm` confirms/links a provider subscription to local entitlements.
+  - `POST /v1/paypal/webhook` receives provider events and updates subscription state.
+
+- **Support**
+  - `GET /v1/support/threads` lists the current user’s support threads.
+  - `GET /v1/support/threads/:id` loads one thread + its messages.
+  - `POST /v1/support/threads` creates a thread (first message).
+  - `POST /v1/support/threads/:id/messages` posts a new message into an existing thread.
+  - `GET /v1/support/unread-count` unread badge for the account portal UI.
+
+- **Admin (requires `users.is_admin = true`)**
+  - `POST /v1/admin/bootstrap` sets the first admin via `x-admin-token: ADMIN_TOKEN`.
+  - `GET /v1/admin/users` lists users; additional `/v1/admin/users/:id/*` mutate roles, plan, password, discounts.
+  - `GET /v1/admin/support/threads` admin support inbox; thread mutation endpoints archive/solve/delete.
+  - `GET/POST /v1/admin/config` portal settings (JSON).
+  - `GET/POST /v1/admin/paypal/config` PayPal credentials/config.
+  - `POST /v1/admin/paypal/sync-plans` pushes/refreshes PayPal plan IDs.
+  - `POST /v1/admin/paypal/webhook/create` registers a webhook at PayPal.
+  - `POST /v1/admin/downloads/upload` uploads binaries into `/downloads/`.
+
+## Data model overview
+
+This is a “what lives where” summary. The authoritative schema is in `migrations/*.sql`.
+
+- **users**
+  - Identity: `id`, `email`, `password_hash`
+  - Roles: `is_admin`, `is_moderator`, `is_founder`
+  - Security: `last_ip`, `password_changed_at`, `admin_lock_ip`, `admin_lock_at`
+  - Profile: `display_name`, `avatar_data_url`
+  - Discounts: `discount_percent`, `discount_label`, `discount_expires_at`, `founder_discount_at`
+  - Support encryption: `chat_public_jwk` (public key for E2EE)
+
+- **sessions**
+  - Refresh token sessions: `id`, `user_id`, `refresh_token_hash`, `expires_at`
+  - Client metadata: `client_ip`, `user_agent`
+
+- **products / plans / features / plan_features**
+  - Catalog used by entitlements + portal display.
+
+- **subscriptions**
+  - Local subscription state per user + provider linkage (PayPal IDs/status).
+
+- **contact_messages**
+  - Legacy “contact us” messages; later migrated into support threads/messages.
+
+- **support_threads / support_messages**
+  - Threaded support system; messages can be plaintext or encrypted payload strings.
+
+- **app_settings**
+  - Admin-managed JSON key/value store for portal settings.
+
+## Support chat encryption (E2EE)
+
+The account portal can encrypt support messages end-to-end:
+
+- Client generates an RSA keypair (RSA-OAEP SHA-256).
+- The private key is stored only on the client device (wrapped with a device-local AES secret in localStorage).
+- The public key (JWK) is uploaded to the server so admins can encrypt replies to that user.
+- Each message uses a random AES-GCM key to encrypt content; the AES key is encrypted per recipient using RSA-OAEP.
+
+Implementation details are documented inline in:
+- `kivana-account/app.js` (search for “E2EE” and “Support chat”)
+
 ## Quick Deploy (fresh Ubuntu)
 
 ## Guided Setup (Recommended)
