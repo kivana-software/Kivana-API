@@ -740,7 +740,7 @@ async fn main() -> anyhow::Result<()> {
         .route_service("/portal.css", ServeFile::new("kivana-portal/portal.css"))
         .nest_service(
             "/",
-            ServeDir::new("kivana-portal").append_index_html_on_directories(true),
+            ServeDir::new("kivana-site").append_index_html_on_directories(true),
         )
         .layer(cors)
         .layer(RequestBodyLimitLayer::new(80_000_000))
