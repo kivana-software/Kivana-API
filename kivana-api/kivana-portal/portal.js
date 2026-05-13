@@ -175,6 +175,9 @@ const els = {
   accountStatus: document.getElementById('accountStatus'),
 }
 
+// UI runtime state for the portal page.
+// - Tracks which view is active (auth vs dashboard vs account/admin panels).
+// - Holds cached API responses (me/entitlement/users/messages) to minimize reloads.
 let isLoginMode = true
 let billingCycle = 'yearly'
 let currentMe = null
@@ -193,6 +196,7 @@ const BASIC_WIN_URL = 'https://github.com/kivana-software/Kivana/releases/downlo
 const MAC_GUIDE_MD_URL = 'https://raw.githubusercontent.com/kivana-software/Kivana/main/readmemac.md'
 const LS_THEME = 'kivanaPortal/theme'
 
+// Platform + pricing helpers (pure client-side).
 function isMacOs() {
   const ua = String(navigator.userAgent || '')
   const plat = String(navigator.platform || '')
@@ -232,6 +236,7 @@ function formatMoney(amount) {
   return `${PRICING.symbol}${formatAmount(amount)}`
 }
 
+// Theme persistence and UI wiring (stored in localStorage).
 function getTheme() {
   try {
     const t = String(localStorage.getItem(LS_THEME) || '').trim().toLowerCase()

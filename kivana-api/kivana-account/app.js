@@ -391,6 +391,10 @@ async function decryptE2EEMessagesIfPossible(messages, kp) {
   return out
 }
 
+// Support chat UI.
+// - Shows the user's support threads and messages.
+// - Sends new messages via the backend support endpoints.
+// - When end-to-end encryption is enabled, messages are decrypted client-side when possible.
 function SupportChatSection({
   busy,
   supportThreads,
@@ -548,6 +552,9 @@ function SupportChatSection({
   )
 }
 
+// Root React component for the account portal.
+// - Owns global state: auth status, current user, entitlements, admin state, and active section.
+// - Coordinates data loading from `/v1/*` and routes between sub-sections (profile/billing/downloads/security/support/admin).
 function App() {
   const pricing = useMemo(() => detectPricingCurrency(), [])
   const query = useQueryMode()
@@ -2509,6 +2516,9 @@ function App() {
       })
     }
 
+    // Billing/plan UI.
+    // - Displays the current plan and renewal date from entitlements.
+    // - Allows selecting plans/billing cycle (calls `/v1/portal/select-plan`).
     function BillingSection() {
       const ActiveBadge = () =>
         React.createElement(
@@ -2692,6 +2702,9 @@ function App() {
       return React.createElement(React.Fragment, null, headerCard, cycleToggle, planGrid)
     }
 
+    // Downloads UI.
+    // - Shows platform download links (Basic vs paid) from the public portal config.
+    // - Links usually point to admin-uploaded files served under `/downloads/`.
     function DownloadsSection() {
       const dl = cfg?.downloads || {}
       const showMac = dl?.showMac !== false
@@ -2755,6 +2768,9 @@ function App() {
       })
     }
 
+    // Security UI.
+    // - Password change workflow.
+    // - Session listing and revocation (shows IP/user-agent metadata).
     function SecuritySection() {
       const changedAt = me?.passwordChangedAt ? new Date(String(me.passwordChangedAt)) : null
       const daysAgo = (() => {
@@ -2865,6 +2881,9 @@ function App() {
       )
     }
 
+    // Data management UI.
+    // - Export: downloads a JSON snapshot of the account metadata (profile/subscription/sessions).
+    // - Delete: permanently deletes the account from the server (finance data remains local in the desktop app).
     function DataSection() {
       return React.createElement(
         React.Fragment,
@@ -3340,6 +3359,12 @@ function App() {
     )
   }
 
+  // Admin section UI (gated by `me.isAdmin`).
+  // - Exposes admin-only panels used to operate the service:
+  //   - Users (roles, passwords, discounts, plan grants)
+  //   - Messages (contact/support inbox)
+  //   - PayPal (credentials, webhook, plan sync)
+  //   - Settings (portal configuration JSON)
   function Admin() {
     const isAdmin = !!me?.isAdmin
     if (!isAdmin) {

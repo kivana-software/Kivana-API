@@ -1504,6 +1504,11 @@ async fn paypal_create_webhook(
     Ok(json.id)
 }
 
+// ===== PayPal integration =====
+// Admin endpoints:
+// - Configure credentials and plan IDs.
+// - Sync plans between Kivana and PayPal.
+// - Create/record a webhook so PayPal can notify the server of subscription events.
 async fn admin_paypal_create_webhook(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
@@ -2990,6 +2995,12 @@ async fn admin_support_delete_thread(
     }
 }
 
+// ===== Authentication endpoints (`/v1/auth/*`) =====
+// These handlers implement:
+// - Signup/login with Argon2 password hashing
+// - Refresh-token rotation (access token renewal)
+// - Logout (single session) and logout-all (revoke every session)
+// - Password change and session security metadata updates
 async fn signup(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
@@ -4568,6 +4579,9 @@ async fn paypal_get_subscription_details(
     Ok(res.json::<PayPalSubscriptionDetails>().await?)
 }
 
+// Portal PayPal purchase flow.
+// - `portal_paypal_start` creates a PayPal subscription and returns an approval URL.
+// - `portal_paypal_confirm` verifies the subscription after approval and updates local entitlements.
 async fn portal_paypal_start(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
@@ -4853,6 +4867,10 @@ async fn paypal_verify_webhook(
     Ok(json.verification_status.trim().to_uppercase() == "SUCCESS")
 }
 
+// PayPal webhook receiver.
+// - Verifies the webhook signature with PayPal.
+// - Updates local subscription/provider status based on PayPal events.
+// - Returns 204 for many failure modes to avoid excessive retries when misconfigured.
 async fn paypal_webhook(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
