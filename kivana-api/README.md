@@ -7,10 +7,12 @@
 After a fresh server install, run:
 
 ```bash
-sudo bash -c 'export KIVANA_ADMIN_EMAIL="kojankus@gmail.com"; curl -fsSLO https://raw.githubusercontent.com/kivana-software/Kivana-API/main/kivana-api/scripts/setup-wizard.sh; bash setup-wizard.sh --domain=kivana.eu'
+export KIVANA_ADMIN_EMAIL="kojankus@gmail.com"
+curl -fsSL -o setup-wizard.sh "https://raw.githubusercontent.com/kivana-software/Kivana-API/main/kivana-api/scripts/setup-wizard.sh"
+bash setup-wizard.sh --domain=kivana.eu
 ```
 
-This writes `.env`, starts Docker, waits for health, then prints the Portal/Admin URLs and can create the first admin user.
+This writes `.env`, starts Docker, waits for health, then prints the Portal/Admin URLs. It also prompts you to set the first admin password and bootstraps admin access (no captcha required).
 
 1) Install Docker + Compose:
 
@@ -78,9 +80,11 @@ If `ADMIN_TOKEN` is set, you can bootstrap an admin user:
 curl -fsS -X POST \
   -H "content-type: application/json" \
   -H "x-admin-token: YOUR_ADMIN_TOKEN" \
-  -d '{"email":"you@example.com"}' \
+  -d '{"email":"you@example.com","password":"YOUR_STRONG_PASSWORD"}' \
   http://SERVER_IP:8080/v1/admin/bootstrap
 ```
+
+If the user already exists and you only want to grant admin, you can omit `password`.
 
 ## Update (pull + rebuild)
 
@@ -128,4 +132,4 @@ Then hard-refresh the portal page (or open in an incognito/private window):
 
 - The portal is served from the API container at `/portal/`.
 - After updating, make sure you rebuilt the container (`docker compose up -d --build`), otherwise the old portal files may still be inside the running image.
-- Marketing/landing mode (if you ever want it) is available at: `/portal/?marketing=1`
+- Minimal portal (hide marketing sections) is available at: `/portal/?full=0`

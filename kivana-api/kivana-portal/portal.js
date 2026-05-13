@@ -1770,8 +1770,12 @@ if (els.btnPrebetaSignIn) els.btnPrebetaSignIn.addEventListener('click', () => {
   setAuthMode(true)
   void showAuth()
 })
-if (els.btnPrebetaDownloadMac) els.btnPrebetaDownloadMac.addEventListener('click', () => void startPrebetaDownload('darwin-aarch64'))
-if (els.btnPrebetaDownloadWin) els.btnPrebetaDownloadWin.addEventListener('click', () => void startPrebetaDownload('windows-x86_64'))
+if (els.btnPrebetaDownloadMac) els.btnPrebetaDownloadMac.addEventListener('click', startFree)
+if (els.btnPrebetaDownloadWin) els.btnPrebetaDownloadWin.addEventListener('click', () => {
+  pendingPlanSelection = null
+  setAuthMode(true)
+  void showAuth()
+})
 if (els.btnMacGuide) els.btnMacGuide.addEventListener('click', openMacGuide)
 if (els.btnPrebetaContact) els.btnPrebetaContact.addEventListener('click', openContactModal)
 if (els.btnCloseMacGuide) els.btnCloseMacGuide.addEventListener('click', closeMacGuide)
@@ -1900,8 +1904,12 @@ if (els.btnCtaDownloadMac) els.btnCtaDownloadMac.addEventListener('click', () =>
 if (els.btnCtaDownloadWin) els.btnCtaDownloadWin.addEventListener('click', () => {
   startFree()
 })
-if (els.btnFooterDownloadMac) els.btnFooterDownloadMac.addEventListener('click', () => void startPrebetaDownload('darwin-aarch64'))
-if (els.btnFooterDownloadWin) els.btnFooterDownloadWin.addEventListener('click', () => void startPrebetaDownload('windows-x86_64'))
+if (els.btnFooterDownloadMac) els.btnFooterDownloadMac.addEventListener('click', () => {
+  pendingPlanSelection = null
+  setAuthMode(true)
+  void showAuth()
+})
+if (els.btnFooterDownloadWin) els.btnFooterDownloadWin.addEventListener('click', startFree)
 if (els.btnFooterContact) els.btnFooterContact.addEventListener('click', openContactModal)
 
 let selectedOs = 'mac'
@@ -1911,8 +1919,8 @@ function setSelectedOs(os) {
   if (els.osWin) els.osWin.classList.toggle('active', selectedOs === 'win')
   if (els.mOsMac) els.mOsMac.classList.toggle('active', selectedOs === 'mac')
   if (els.mOsWin) els.mOsWin.classList.toggle('active', selectedOs === 'win')
-  if (els.btnDownloadPrimary) els.btnDownloadPrimary.textContent = selectedOs === 'mac' ? 'Download for macOS' : 'Download for Windows'
-  if (els.btnDownloadSecondary) els.btnDownloadSecondary.textContent = selectedOs === 'mac' ? 'Download for Windows' : 'Download for macOS'
+  if (els.btnDownloadPrimary) els.btnDownloadPrimary.textContent = 'Try now — 14-day risk-free'
+  if (els.btnDownloadSecondary) els.btnDownloadSecondary.textContent = 'Sign in'
 }
 
 function showMarketingStatus(message) {
@@ -1924,8 +1932,10 @@ function showMarketingStatus(message) {
 
 async function handleDownloadClick() {
   if (isAuthed()) return
-  await goToPublicSection('how')
-  showMarketingStatus('Downloads are available below.')
+  pendingPlanSelection = null
+  setAuthMode(false)
+  closeMenu()
+  void showAuth()
 }
 
 if (els.osMac) els.osMac.addEventListener('click', () => setSelectedOs('mac'))
@@ -1941,8 +1951,12 @@ if (els.mThemeToggleAuthed) els.mThemeToggleAuthed.addEventListener('click', () 
   toggleTheme()
   closeMenu()
 })
-if (els.btnDownloadPrimary) els.btnDownloadPrimary.addEventListener('click', () => void handleDownloadClick())
-if (els.btnDownloadSecondary) els.btnDownloadSecondary.addEventListener('click', () => void handleDownloadClick())
+if (els.btnDownloadPrimary) els.btnDownloadPrimary.addEventListener('click', startFree)
+if (els.btnDownloadSecondary) els.btnDownloadSecondary.addEventListener('click', () => {
+  pendingPlanSelection = null
+  setAuthMode(true)
+  void showAuth()
+})
 
 async function applyHashNav() {
   if (isAuthed() || !fullLanding) return
