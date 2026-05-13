@@ -1,3 +1,14 @@
+// Marketing/portal script.
+//
+// Purpose:
+// - Drives the interactive behavior of the `/portal/` landing experience:
+//   - Theme toggling (light/dark)
+//   - Navigation (mobile menu + section scrolling)
+//   - Auth (sign in / sign up) and showing account/admin links when authenticated
+// - Talks to the backend API under `/v1/*` for auth, entitlements, and admin checks.
+//
+// This file is intentionally dependency-free to keep deployment simple.
+
 const els = {
   viewAuth: document.getElementById('viewAuth'),
   viewDashboard: document.getElementById('viewDashboard'),

@@ -1,3 +1,12 @@
+// Admin portal script.
+//
+// Purpose:
+// - Provides a small, dependency-free admin UI for the Kivana API.
+// - Handles authentication (JWT access/refresh), user listing, and admin actions (plan changes, bootstrap admin).
+//
+// Storage:
+// - Persists admin base URL and tokens in localStorage so admins can reconnect quickly.
+
 const LS_BASE = 'kivanaAdmin/baseUrl'
 const LS_ACCESS = 'kivanaAdmin/accessToken'
 const LS_REFRESH = 'kivanaAdmin/refreshToken'

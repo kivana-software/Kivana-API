@@ -1,3 +1,12 @@
+-- Migration 0001: initial schema.
+--
+-- Purpose:
+-- - Enable UUID generation support.
+-- - Create core authentication tables:
+--   - `users`: account identity + password hash.
+--   - `sessions`: refresh-token sessions (supports logout, revoke, expiry).
+-- - Add indexes used by common lookups (by user_id and expires_at).
+
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE IF NOT EXISTS users (
@@ -19,4 +28,3 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions(expires_at);
-

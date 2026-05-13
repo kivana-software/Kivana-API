@@ -1,5 +1,22 @@
 # Kivana Server (kivana-api)
 
+## Codebase map
+
+- `src/main.rs`: Rust/Axum HTTP server that exposes `/v1/*` APIs and serves the static UIs.
+- `migrations/*.sql`: Database schema migrations applied on startup (SQLx).
+- `kivana-account/`: Account portal UI served under `/account/` (plain HTML/CSS + React via esm.sh).
+- `kivana-admin/`: Lightweight admin UI served under `/admin/` (plain HTML/CSS/JS).
+- `kivana-portal/`: Marketing/portal UI served under `/portal/` (plain HTML/CSS/JS).
+- `kivana-site/`: Production website build served at `/` (includes `static/` build artifacts).
+- `downloads/`: Runtime storage for uploaded installers/binaries (mounted as a volume in docker-compose).
+- `scripts/*.sh`: Deployment/bootstrap helper scripts.
+
+## Generated assets (build artifacts)
+
+- `kivana-site/static/**/*.js` and `kivana-site/static/**/*.css` are minified build outputs referenced by the website HTML.
+- `kivana-site/static/**/*.map` and `kivana-site/asset-manifest.json` are JSON build outputs (sourcemaps/manifests) and must remain valid JSON (no inline comments).
+- `*.png` files are binary image assets (logos/screenshots) and cannot safely carry embedded “comments”; their purpose is described by filename and usage locations.
+
 ## Quick Deploy (fresh Ubuntu)
 
 ## Guided Setup (Recommended)

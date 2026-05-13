@@ -1,6 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!--
+    Marketing + portal landing page.
+
+    Purpose:
+    - Public landing content (“How it works”, preview, legal links).
+    - Entry point for account actions (sign in / sign up) and navigation to:
+      - `/account/` (account portal)
+      - `/admin/` (admin portal)
+    - Uses `portal.js` for UI behavior and API interactions.
+
+    Notes:
+    - Theme preference is read from localStorage (`kivanaPortal/theme`).
+    - CSS is cache-busted via a `?v=` query parameter.
+  -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <link rel="icon" type="image/png" href="/kivana-logo.png" />

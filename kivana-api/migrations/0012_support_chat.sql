@@ -1,3 +1,12 @@
+-- Migration 0012: support chat (threads + messages).
+--
+-- Purpose:
+-- - Introduce a threaded support inbox:
+--   - `support_threads`: per-user (or guest) conversation state + unread tracking.
+--   - `support_messages`: append-only messages within a thread.
+-- - Add indexes for listing threads by recency and filtering by user/guest/status.
+-- - Migrate historical `contact_messages` into the new thread/message model.
+
 CREATE TABLE IF NOT EXISTS support_threads (
   id UUID PRIMARY KEY,
   user_id UUID REFERENCES users(id) ON DELETE SET NULL,

@@ -1,3 +1,11 @@
+-- Migration 0002: products, plans, features, and subscriptions.
+--
+-- Purpose:
+-- - Define a product catalog (`products`) and its purchasable tiers (`plans`).
+-- - Define entitlement flags (`features`) and attach them to plans (`plan_features`).
+-- - Track per-user subscription state (`subscriptions`) with support for trial and cancellation.
+-- - Seed initial Kivana product + example plans/features (using stable UUIDs for deterministic references).
+
 CREATE TABLE IF NOT EXISTS products (
   id UUID PRIMARY KEY,
   code TEXT NOT NULL UNIQUE,
@@ -77,4 +85,3 @@ VALUES
   ('00000000-0000-0000-0000-000000000013', '00000000-0000-0000-0000-000000000102'),
   ('00000000-0000-0000-0000-000000000013', '00000000-0000-0000-0000-000000000103')
 ON CONFLICT DO NOTHING;
-

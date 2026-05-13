@@ -4,22 +4,35 @@ version = "0.2.2"
 edition = "2021"
 
 [dependencies]
+# Error handling
 anyhow = "1.0"
+# Password hashing / verification
 argon2 = "0.5"
+# HTTP API framework (handlers, routing, extraction, multipart uploads)
 axum = { version = "0.7", features = ["macros", "multipart"] }
+# Local env loading for dev (.env)
 dotenvy = "0.15"
 hex = "0.4"
+# JWT signing/verification for access tokens
 jsonwebtoken = "9.3"
 rand = "0.8"
+# JSON serialization for request/response models
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
+# Postgres access + migrations via SQLx
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "time", "macros"] }
+# Time/date helpers used for TTLs and timestamps
 time = { version = "0.3", features = ["serde", "parsing"] }
+# Async runtime
 tokio = { version = "1.46", features = ["macros", "rt-multi-thread", "signal"] }
 tower = "0.5"
+# CORS, tracing middleware, static file serving, request body limits, and response headers
 tower-http = { version = "0.6", features = ["cors", "trace", "fs", "limit", "set-header"] }
+# Logging/tracing
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# IDs for users/sessions/etc.
 uuid = { version = "1.18", features = ["v4", "serde"] }
+# Outbound HTTP (PayPal API integrations)
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

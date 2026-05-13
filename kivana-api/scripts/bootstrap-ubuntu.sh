@@ -1,4 +1,18 @@
 #!/usr/bin/env bash
+# Bootstraps a fresh Ubuntu host to run Kivana via Docker.
+#
+# What this script does:
+# - Installs Docker + compose plugin (official Docker APT repo).
+# - Clones (or updates) the Kivana-API repository into BASE_DIR.
+# - Creates `.env` from `.env.example` if missing.
+# - Builds and starts the stack via `docker compose up -d --build`.
+# - Performs a basic health check against `/healthz`.
+#
+# Environment variables:
+# - REPO_URL: Git repo to clone (defaults to official GitHub URL).
+# - BASE_DIR: install directory (default: /opt/kivana).
+# - REPO_DIR: override repository directory (optional).
+
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/kivana-software/Kivana-API.git}"

@@ -1,3 +1,11 @@
+/*
+  Admin portal stylesheet.
+
+  Purpose:
+  - Styles the lightweight admin UI under `/admin/` (tables, buttons, modal, layout).
+  - Intentionally simple: no build step and minimal dependencies.
+*/
+
 * {
   box-sizing: border-box;
 }

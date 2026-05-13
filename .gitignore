@@ -1,3 +1,8 @@
+# Git ignore rules for local builds and secrets.
+# - `.env` contains local secrets/config and must not be committed.
+# - `target/` is Rust build output.
+# - `downloads/` is runtime storage for uploaded installers/binaries.
+
 kivana-api/.env
 kivana-api/target/
 **/target/

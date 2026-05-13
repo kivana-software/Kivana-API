@@ -1,4 +1,19 @@
 #!/usr/bin/env bash
+# Interactive (or non-interactive) setup wizard for deploying the Kivana API server.
+#
+# What this script does:
+# - Local mode (`--local`): generates `.env`, starts docker-compose, and optionally bootstraps an admin account.
+# - Server mode (default): installs Docker and configures a production deployment (optionally with HTTPS).
+#
+# Inputs:
+# - CLI flags (see the `for arg in "$@"` parsing section).
+# - Environment variables `KIVANA_ADMIN_EMAIL` and `KIVANA_ADMIN_PASSWORD` can seed admin bootstrap in local mode.
+#
+# Outputs:
+# - Writes/updates the repository checkout under BASE_DIR.
+# - Writes `.env` with generated secrets if not provided.
+# - Starts containers and prints final URLs for website/portal/admin.
+
 set -euo pipefail
 
 C_BLUE='\033[1;34m'

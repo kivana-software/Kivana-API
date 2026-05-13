@@ -1,3 +1,9 @@
+# Docker build context ignore rules (keeps images smaller and builds faster).
+# - `target/`: Rust build output (rebuilt inside the container).
+# - `.git/`: VCS metadata not needed in images.
+# - `.env`: local secrets should never be baked into images.
+# - macOS metadata files: `._*` and `.DS_Store`.
+
 target
 .git
 .env

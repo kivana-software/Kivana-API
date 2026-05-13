@@ -1,3 +1,10 @@
+-- Migration 0009: contact messages inbox.
+--
+-- Purpose:
+-- - Persist "Contact us" submissions from the public website/portal.
+-- - Supports admin inbox behavior via `is_read` + `read_at`.
+-- - Adds indexes for newest-first listing and unread filtering.
+
 CREATE TABLE IF NOT EXISTS contact_messages (
   id UUID PRIMARY KEY,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

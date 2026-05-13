@@ -1,3 +1,11 @@
+/*
+  Account portal stylesheet.
+
+  Purpose:
+  - Provides base layout and component styles for the account portal UI under `/account/`.
+  - Keeps the portal visually consistent with the Kivana brand while remaining lightweight.
+*/
+
 html,
 body {
   height: 100%;

@@ -1,3 +1,13 @@
+# Local docker-compose stack for Kivana.
+#
+# Services:
+# - db: Postgres database used by the API.
+# - api: Rust/Axum API server that also serves the static web UIs.
+#
+# Volumes:
+# - db_data: persistent Postgres data directory.
+# - downloads_data: persistent `/downloads` storage for admin-uploaded installers.
+
 services:
   db:
     image: postgres:16

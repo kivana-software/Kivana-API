@@ -1,3 +1,4 @@
+<!-- Project license and CLA terms. Kept as a human-readable document; do not edit the legal text unless intentionally updating licensing. -->
 # Open Source License & Ownership
 
 Kivana is licensed under the **GNU Lesser General Public License v3.0 (LGPL-3.0)**. 

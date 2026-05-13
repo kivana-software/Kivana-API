@@ -1,3 +1,5 @@
+/* Site shared stylesheet.
+   Purpose: provides shared theme variables and layout styles used by site pages served from `kivana-site/`. */
 :root{
   --bg:#f6f7fb;
   --surface:#ffffff;

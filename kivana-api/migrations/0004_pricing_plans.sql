@@ -1,3 +1,9 @@
+-- Migration 0004: plan naming + lifetime tier.
+--
+-- Purpose:
+-- - Rename seeded plan codes/names to match the portal terminology (basic/standard/pro).
+-- - Add a non-recurring lifetime plan (`lifetime_pro`) and grant it the paid features.
+
 UPDATE plans
 SET code = 'basic', name = 'Basic', sort_order = 10
 WHERE id = '00000000-0000-0000-0000-000000000011';
@@ -21,4 +27,3 @@ VALUES
   ('00000000-0000-0000-0000-000000000014', '00000000-0000-0000-0000-000000000102'),
   ('00000000-0000-0000-0000-000000000014', '00000000-0000-0000-0000-000000000103')
 ON CONFLICT DO NOTHING;
-

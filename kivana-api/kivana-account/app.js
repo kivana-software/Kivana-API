@@ -1,6 +1,18 @@
+// Account portal single-page app (SPA).
+//
+// Purpose:
+// - Implements the `/account/` UI (login/signup, dashboard/profile, billing, downloads, security, support chat, admin panels).
+// - Talks to the backend JSON API hosted by the same server under `/v1/*`.
+//
+// Architecture:
+// - React is imported from esm.sh (no bundler required).
+// - Access/refresh tokens are stored in localStorage and attached to API requests.
+// - The UI renders different sections based on query params and navigation state.
+
 import React, { useEffect, useMemo, useRef, useState } from 'https://esm.sh/react@18.3.1'
 import { createRoot } from 'https://esm.sh/react-dom@18.3.1/client'
 
+// localStorage keys for persisted authentication state.
 const LS_ACCESS = 'kivanaPortal/accessToken'
 const LS_REFRESH = 'kivanaPortal/refreshToken'
 
@@ -80,6 +92,9 @@ function normalizePlanLabel(planCode) {
   return c || ''
 }
 
+// API client helpers.
+// - Adds `Authorization: Bearer <access>` when available.
+// - Automatically attempts a single refresh-token retry on 401 responses.
 async function apiFetch(path, init = {}, { allowRetry = true } = {}) {
   const access = getAccessToken()
   const headers = new Headers(init.headers || {})

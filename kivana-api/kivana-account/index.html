@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <!--
+      Account portal entry page.
+
+      Purpose:
+      - Hosts the “Account” single-page UI under `/account/` (profile, billing, security, support).
+      - Loads the account JS/CSS bundle served by the backend (see `src/main.rs` routes).
+
+      Caching:
+      - `no-store` meta headers are used to avoid stale bundles during deployment.
+      - An additional CSS bundle may be loaded via `/asset-manifest.json` when the marketing site build is present.
+    -->
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />

@@ -1,3 +1,13 @@
+# Multi-stage Docker build for the Kivana API server.
+#
+# Stage 1 (build):
+# - Uses the Rust toolchain to compile a static release binary.
+# - Performs a dependency-only build first to maximize Docker layer caching.
+#
+# Stage 2 (runtime):
+# - Minimal Debian image with CA certificates.
+# - Copies the compiled binary and the static frontend directories served by the API.
+
 FROM rust:1.88-slim-bookworm AS build
 
 WORKDIR /app

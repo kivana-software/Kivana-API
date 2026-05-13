@@ -1,6 +1,17 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <!--
+      Website build entry page (static marketing site bundle).
+
+      Purpose:
+      - Serves the production “website” UI (React build under `static/`) at `/`.
+      - Includes a lightweight auth modal on top of the website for “Sign in / Sign up” convenience.
+
+      Notes:
+      - The built JS/CSS bundles live in `kivana-site/static/` and are referenced from this HTML.
+      - The API server also serves a separate portal UI under `/portal/` and an account UI under `/account/`.
+    -->
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#000000" />

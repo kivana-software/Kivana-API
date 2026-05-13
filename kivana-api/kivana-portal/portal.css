@@ -1,3 +1,11 @@
+/*
+  Marketing/portal stylesheet.
+
+  Purpose:
+  - Styles the public landing page and “portal” experience under `/portal/`.
+  - Includes theme variables for light/dark mode (toggled by `portal.js`).
+*/
+
 :root {
   --primary: #A3E635;
   --primary-hover: #84CC16;

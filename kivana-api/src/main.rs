@@ -1,3 +1,15 @@
+//! Kivana API server.
+//!
+//! This binary hosts:
+//! - REST endpoints under `/v1/*` for auth, profiles, entitlements, admin tools, support chat, and PayPal flows.
+//! - Static frontends for the website (`/`), portal (`/portal/`), account pages (`/account/`), and admin (`/admin/`).
+//! - Database migrations on startup (SQLx) and a Postgres connection pool shared by handlers.
+//!
+//! Design notes:
+//! - Authentication uses JWT access tokens + refresh tokens.
+//! - Several endpoints use a simple in-memory rate limiter keyed by client IP and/or identifier.
+//! - Static assets are served with `Cache-Control: no-store` to avoid stale portal bundles.
+
 use anyhow::Context;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::Argon2;
@@ -29,6 +41,7 @@ use tower_http::trace::TraceLayer;
 use tracing::Level;
 use uuid::Uuid;
 
+// Runtime configuration loaded from environment variables (see `.env.example`).
 #[derive(Clone)]
 struct AppConfig {
     database_url: String,
@@ -38,6 +51,7 @@ struct AppConfig {
     bind_addr: SocketAddr,
 }
 
+// Simple sliding-window limiter used to throttle sensitive endpoints.
 #[derive(Clone)]
 struct RateLimiter {
     inner: std::sync::Arc<Mutex<HashMap<String, VecDeque<Instant>>>>,
@@ -69,6 +83,7 @@ impl RateLimiter {
     }
 }
 
+// Shared application state injected into request handlers via Axum `State`.
 #[derive(Clone)]
 struct AppState {
     pool: PgPool,
@@ -78,6 +93,7 @@ struct AppState {
     rate_limiter: RateLimiter,
 }
 
+// Broadcast events used by the long-polling `/v1/events/poll` endpoint.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct UserEvent {
@@ -85,6 +101,7 @@ struct UserEvent {
     event_type: String,
 }
 
+// JWT signing (encode) and verification (decode) keys derived from the configured secret.
 #[derive(Clone)]
 struct JwtKeys {
     enc: EncodingKey,
@@ -97,6 +114,7 @@ impl FromRef<AppState> for PgPool {
     }
 }
 
+// JWT access-token claims (short-lived).
 #[derive(Serialize, Deserialize)]
 struct AccessClaims {
     sub: String,
@@ -105,6 +123,7 @@ struct AccessClaims {
     iat: usize,
 }
 
+// Request payloads for authentication flows.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SignupRequest {
@@ -123,16 +142,19 @@ struct LoginRequest {
     captcha_answer: Option<String>,
 }
 
+// Request payload for exchanging a refresh token for a new access token.
 #[derive(Deserialize)]
 struct RefreshRequest {
     refresh_token: String,
 }
 
+// Request payload for invalidating a single refresh token.
 #[derive(Deserialize)]
 struct LogoutRequest {
     refresh_token: String,
 }
 
+// Public “contact us” message payload.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ContactRequest {
@@ -553,6 +575,10 @@ struct ErrorResponse {
     error: String,
 }
 
+// Application entry point.
+// - Loads configuration from environment.
+// - Connects to Postgres and runs SQL migrations.
+// - Builds the Axum router for API endpoints and static frontends.
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
@@ -562,12 +588,14 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cfg = load_config().context("load config")?;
+    // Shared Postgres connection pool for all request handlers.
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(10)
         .connect(&cfg.database_url)
         .await
         .context("connect postgres")?;
 
+    // Applies schema changes from `./migrations` (idempotent across restarts).
     sqlx::migrate!("./migrations")
         .run(&pool)
         .await
@@ -594,6 +622,7 @@ async fn main() -> anyhow::Result<()> {
         .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
         .allow_credentials(false);
 
+    // Static frontend: account portal (`/account/`) with cache disabled.
     let account_static = ServiceBuilder::new()
         .layer(SetResponseHeaderLayer::overriding(
             axum::http::header::CACHE_CONTROL,
@@ -601,6 +630,7 @@ async fn main() -> anyhow::Result<()> {
         ))
         .service(ServeDir::new("kivana-account").append_index_html_on_directories(true));
 
+    // Static frontend: portal landing (`/portal/`) with cache disabled.
     let portal_static = ServiceBuilder::new()
         .layer(SetResponseHeaderLayer::overriding(
             axum::http::header::CACHE_CONTROL,
@@ -608,6 +638,7 @@ async fn main() -> anyhow::Result<()> {
         ))
         .service(ServeDir::new("kivana-account").append_index_html_on_directories(true));
 
+    // HTTP router: JSON API under `/v1/*` plus redirects/static assets for the UIs.
     let app = Router::new()
         .route("/healthz", get(healthz))
         .route("/favicon.ico", get(|| async { Redirect::permanent("/kivana-logo.png") }))
