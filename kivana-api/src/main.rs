@@ -636,7 +636,7 @@ async fn main() -> anyhow::Result<()> {
             axum::http::header::CACHE_CONTROL,
             HeaderValue::from_static("no-store"),
         ))
-        .service(ServeDir::new("kivana-account").append_index_html_on_directories(true));
+        .service(ServeDir::new("kivana-portal").append_index_html_on_directories(true));
 
     // HTTP router: JSON API under `/v1/*` plus redirects/static assets for the UIs.
     let app = Router::new()
@@ -770,7 +770,7 @@ async fn main() -> anyhow::Result<()> {
         .route_service("/portal.css", ServeFile::new("kivana-portal/portal.css"))
         .nest_service(
             "/",
-            ServeDir::new("kivana-site").append_index_html_on_directories(true),
+            ServeDir::new("kivana-portal").append_index_html_on_directories(true),
         )
         .layer(cors)
         .layer(RequestBodyLimitLayer::new(80_000_000))
