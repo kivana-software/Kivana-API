@@ -82,22 +82,26 @@ select {
   user-select: none;
 }
 
+/* Brand logo image (small square icon). */
 .brandLogo {
   width: 30px;
   height: 30px;
 }
 
+/* Brand text stack (name + subtitle). */
 .brandText {
   display: flex;
   flex-direction: column;
   line-height: 1.1;
 }
 
+/* Product name (top line). */
 .brandName {
   font-weight: 700;
   letter-spacing: 0.2px;
 }
 
+/* Small subtitle line (e.g. “Account portal”). */
 .brandSub {
   font-size: 12px;
   color: var(--muted2);
@@ -261,6 +265,7 @@ select {
   font-size: 13px;
 }
 
+/* Selected tab style (high-contrast highlight). */
 .tabActive {
   color: #eef1ff;
   border-color: rgba(124, 58, 237, 0.55);
@@ -273,6 +278,7 @@ select {
   gap: 12px;
 }
 
+/* Individual plan card: used for Basic/Standard/Pro/Lifetime rows. */
 .plan {
   padding: 14px;
   border-radius: 14px;
@@ -282,6 +288,7 @@ select {
   gap: 10px;
 }
 
+/* Plan header row: left label + right price. */
 .planTop {
   display: flex;
   align-items: center;
@@ -289,10 +296,12 @@ select {
   gap: 12px;
 }
 
+/* Plan name typography. */
 .planName {
   font-weight: 800;
 }
 
+/* Price line: currency/amount + per-month/per-year hint. */
 .priceLine {
   display: flex;
   align-items: baseline;
@@ -300,11 +309,13 @@ select {
   flex-wrap: wrap;
 }
 
+/* Main numeric price. */
 .priceMain {
   font-weight: 900;
   font-size: 22px;
 }
 
+/* Secondary metadata (billing period, trial copy, etc.). */
 .priceMeta {
   font-size: 13px;
   color: var(--muted);
@@ -408,10 +419,12 @@ select {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+/* Modal header title text. */
 .modalTitle {
   font-weight: 800;
 }
 
+/* Modal close button (top-right “X”). */
 .modalClose {
   appearance: none;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -428,6 +441,7 @@ select {
   padding: 16px;
 }
 
+/* Modal footer row (buttons). */
 .modalActions {
   padding: 14px 16px 16px;
   display: flex;
