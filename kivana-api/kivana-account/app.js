@@ -2539,143 +2539,142 @@ function App() {
         )
       }
 
-      return React.createElement(
-        React.Fragment,
-        null,
+      const headerCard = React.createElement(
+        'div',
+        { className: 'rounded-3xl border border-gray-100 bg-[#F6F3FF] p-7' },
         React.createElement(
           'div',
-          { className: 'rounded-3xl border border-gray-100 bg-[#F6F3FF] p-7' },
+          { className: 'flex items-start justify-between gap-4 flex-wrap' },
           React.createElement(
             'div',
-            { className: 'flex items-start justify-between gap-4 flex-wrap' },
+            null,
+            React.createElement(ActiveBadge, null),
             React.createElement(
               'div',
-              null,
-              React.createElement(ActiveBadge, null),
-              React.createElement(
-                'div',
-                { className: 'mt-3 flex items-baseline gap-2 flex-wrap' },
-                React.createElement('div', { className: 'text-2xl font-extrabold text-[#1B1748]' }, planLabel),
-                isTrial ? React.createElement('div', { className: 'text-sm text-gray-600' }, 'trial') : null
-              ),
-              React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, `Renews ${renews}`)
+              { className: 'mt-3 flex items-baseline gap-2 flex-wrap' },
+              React.createElement('div', { className: 'text-2xl font-extrabold text-[#1B1748]' }, planLabel),
+              isTrial ? React.createElement('div', { className: 'text-sm text-gray-600' }, 'trial') : null
             ),
-            React.createElement(
-              'div',
-              { className: 'flex items-center gap-3 flex-wrap' },
-              React.createElement(
-                'button',
-                {
-                  type: 'button',
-                  onClick: loadEntitlements,
-                  disabled: busy,
-                  className:
-                    'px-5 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
-                },
-                'Refresh entitlements'
-              ),
-              React.createElement(
-                'button',
-                {
-                  type: 'button',
-                  disabled: true,
-                  className:
-                    'px-5 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 opacity-60 cursor-not-allowed',
-                },
-                'Manage billing'
-              ),
-              canCancel
-                ? React.createElement(
-                    'button',
-                    {
-                      type: 'button',
-                      onClick: () => {
-                        if (busy) return
-                        if (!window.confirm('Cancel your subscription and switch to Basic?')) return
-                        selectPlan('basic')
-                      },
-                      disabled: busy,
-                      className:
-                        'px-5 py-2.5 rounded-full text-[14px] font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none',
-                    },
-                    'Cancel subscription'
-                  )
-                : null
-              )
-            )
-          )
-        ),
-        React.createElement(
-          'div',
-          { className: 'mt-6 flex items-center gap-3 flex-wrap' },
-          React.createElement(
-            'button',
-            {
-              className: `px-4 py-2 rounded-full border-2 text-[13px] font-semibold transition-colors ${
-                billingCycle === 'yearly' ? 'border-[#4F3DDD] bg-[#F0EEFC] text-[#4F3DDD]' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
-              } disabled:opacity-60 disabled:pointer-events-none`,
-              type: 'button',
-              onClick: () => setBillingCycle('yearly'),
-              disabled: busy,
-            },
-            'Yearly'
+            React.createElement('div', { className: 'mt-1 text-sm text-gray-600' }, `Renews ${renews}`)
           ),
           React.createElement(
-            'button',
-            {
-              className: `px-4 py-2 rounded-full border-2 text-[13px] font-semibold transition-colors ${
-                billingCycle === 'monthly' ? 'border-[#4F3DDD] bg-[#F0EEFC] text-[#4F3DDD]' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
-              } disabled:opacity-60 disabled:pointer-events-none`,
-              type: 'button',
-              onClick: () => setBillingCycle('monthly'),
-              disabled: busy,
-            },
-            'Monthly'
+            'div',
+            { className: 'flex items-center gap-3 flex-wrap' },
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                onClick: loadEntitlements,
+                disabled: busy,
+                className:
+                  'px-5 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 disabled:pointer-events-none',
+              },
+              'Refresh entitlements'
+            ),
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                disabled: true,
+                className:
+                  'px-5 py-2.5 rounded-full text-[14px] font-semibold text-[#1B1748] bg-white border border-gray-200 opacity-60 cursor-not-allowed',
+              },
+              'Manage billing'
+            ),
+            canCancel
+              ? React.createElement(
+                  'button',
+                  {
+                    type: 'button',
+                    onClick: () => {
+                      if (busy) return
+                      if (!window.confirm('Cancel your subscription and switch to Basic?')) return
+                      selectPlan('basic')
+                    },
+                    disabled: busy,
+                    className:
+                      'px-5 py-2.5 rounded-full text-[14px] font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:pointer-events-none',
+                  },
+                  'Cancel subscription'
+                )
+              : null
           )
-        ),
-        React.createElement(
-          'div',
-          { className: 'mt-6 kp-grid kp-plan-grid' },
-          cfgPricing?.showBasic !== false
-            ? React.createElement(PlanCard, { id: 'basic', title: 'Basic', price: 'Free', meta: 'Local-only, no account features', actionLabel: 'Choose', disabled: false })
-            : null,
-          cfgPricing?.showTrial !== false
-            ? React.createElement(PlanCard, {
-                id: 'trial',
-                title: 'Trial',
-                price: `${trialDays} days free`,
-                meta: 'Try Ordinary',
-                actionLabel: trialEligible ? 'Choose' : isTrial ? 'Current' : 'Not available',
-                disabled: !trialEligible && !isTrial,
-              })
-            : null,
-          cfgPricing?.showStandard !== false
-            ? React.createElement(PlanCard, {
-                id: 'standard',
-                title: 'Ordinary',
-                price: `${formatMoney(pricing, billingCycle === 'yearly' ? yearlyStd : monthlyStd)}${billingCycle === 'yearly' ? '/yr' : '/mo'}`,
-                meta: billingCycle === 'yearly' ? `Yearly • ${formatMoney(pricing, monthlyStd)}/mo` : `Monthly • ${formatMoney(pricing, yearlyStd)}/yr`,
-                actionLabel: 'Choose',
-                disabled: false,
-                tone: currentKey === 'standard' ? 'dark' : undefined,
-              })
-            : null,
-          cfgPricing?.showPro !== false
-            ? React.createElement(PlanCard, {
-                id: 'pro',
-                title: 'Pro',
-                price: `${formatMoney(pricing, billingCycle === 'yearly' ? yearlyPro : monthlyPro)}${billingCycle === 'yearly' ? '/yr' : '/mo'}`,
-                meta: billingCycle === 'yearly' ? `Yearly • ${formatMoney(pricing, monthlyPro)}/mo` : `Monthly • ${formatMoney(pricing, yearlyPro)}/yr`,
-                actionLabel: 'Choose',
-                disabled: false,
-                tone: currentKey === 'pro' ? 'dark' : undefined,
-              })
-            : null,
-          cfgPricing?.showAccountant !== false
-            ? React.createElement(PlanCard, { id: 'lifetime_pro', title: 'Accountant', price: 'On demand', meta: 'No subscription required', actionLabel: 'Choose', disabled: false })
-            : null
         )
       )
+
+      const cycleToggle = React.createElement(
+        'div',
+        { className: 'mt-6 flex items-center gap-3 flex-wrap' },
+        React.createElement(
+          'button',
+          {
+            className: `px-4 py-2 rounded-full border-2 text-[13px] font-semibold transition-colors ${
+              billingCycle === 'yearly' ? 'border-[#4F3DDD] bg-[#F0EEFC] text-[#4F3DDD]' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+            } disabled:opacity-60 disabled:pointer-events-none`,
+            type: 'button',
+            onClick: () => setBillingCycle('yearly'),
+            disabled: busy,
+          },
+          'Yearly'
+        ),
+        React.createElement(
+          'button',
+          {
+            className: `px-4 py-2 rounded-full border-2 text-[13px] font-semibold transition-colors ${
+              billingCycle === 'monthly' ? 'border-[#4F3DDD] bg-[#F0EEFC] text-[#4F3DDD]' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+            } disabled:opacity-60 disabled:pointer-events-none`,
+            type: 'button',
+            onClick: () => setBillingCycle('monthly'),
+            disabled: busy,
+          },
+          'Monthly'
+        )
+      )
+
+      const planGrid = React.createElement(
+        'div',
+        { className: 'mt-6 kp-grid kp-plan-grid' },
+        cfgPricing?.showBasic !== false
+          ? React.createElement(PlanCard, { id: 'basic', title: 'Basic', price: 'Free', meta: 'Local-only, no account features', actionLabel: 'Choose', disabled: false })
+          : null,
+        cfgPricing?.showTrial !== false
+          ? React.createElement(PlanCard, {
+              id: 'trial',
+              title: 'Trial',
+              price: `${trialDays} days free`,
+              meta: 'Try Ordinary',
+              actionLabel: trialEligible ? 'Choose' : isTrial ? 'Current' : 'Not available',
+              disabled: !trialEligible && !isTrial,
+            })
+          : null,
+        cfgPricing?.showStandard !== false
+          ? React.createElement(PlanCard, {
+              id: 'standard',
+              title: 'Ordinary',
+              price: `${formatMoney(pricing, billingCycle === 'yearly' ? yearlyStd : monthlyStd)}${billingCycle === 'yearly' ? '/yr' : '/mo'}`,
+              meta: billingCycle === 'yearly' ? `Yearly • ${formatMoney(pricing, monthlyStd)}/mo` : `Monthly • ${formatMoney(pricing, yearlyStd)}/yr`,
+              actionLabel: 'Choose',
+              disabled: false,
+              tone: currentKey === 'standard' ? 'dark' : undefined,
+            })
+          : null,
+        cfgPricing?.showPro !== false
+          ? React.createElement(PlanCard, {
+              id: 'pro',
+              title: 'Pro',
+              price: `${formatMoney(pricing, billingCycle === 'yearly' ? yearlyPro : monthlyPro)}${billingCycle === 'yearly' ? '/yr' : '/mo'}`,
+              meta: billingCycle === 'yearly' ? `Yearly • ${formatMoney(pricing, monthlyPro)}/mo` : `Monthly • ${formatMoney(pricing, yearlyPro)}/yr`,
+              actionLabel: 'Choose',
+              disabled: false,
+              tone: currentKey === 'pro' ? 'dark' : undefined,
+            })
+          : null,
+        cfgPricing?.showAccountant !== false
+          ? React.createElement(PlanCard, { id: 'lifetime_pro', title: 'Accountant', price: 'On demand', meta: 'No subscription required', actionLabel: 'Choose', disabled: false })
+          : null
+      )
+
+      return React.createElement(React.Fragment, null, headerCard, cycleToggle, planGrid)
     }
 
     function DownloadsSection() {
