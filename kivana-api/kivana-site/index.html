@@ -1229,6 +1229,9 @@
 
           try {
             var svgs = Array.prototype.slice.call(sec.querySelectorAll("svg"))
+            var best = null
+            var bestScore = 0
+
             for (var s = 0; s < svgs.length; s++) {
               var svg = svgs[s]
               if (!svg) continue
@@ -1242,17 +1245,47 @@
                 if (isNaN(rAttr) || rAttr < 3 || rAttr > 12) continue
                 var cxAttr = parseFloat(cc.getAttribute("cx") || "0")
                 var x = isNaN(cxAttr) ? 0 : cxAttr
-                dotsSvg.push({ el: cc, x: x })
+                dotsSvg.push({ el: cc, x: x, r: rAttr })
               }
-              dotsSvg.sort(function (a, b) { return a.x - b.x })
-              if (dotsSvg.length >= 4) {
-                for (var i = 0; i < 4; i++) {
-                  var dot = dotsSvg[i].el
-                  if (!dot) continue
-                  var col = i < 3 ? green : orange
-                  dot.setAttribute("fill", col)
-                  dot.setAttribute("stroke", col)
-                }
+              if (dotsSvg.length < 4) continue
+
+              var candidates = Array.prototype.slice.call(svg.querySelectorAll("line,path,rect"))
+              var hasTrack = false
+              var trackWidth = 0
+              for (var q = 0; q < candidates.length; q++) {
+                var ln = candidates[q]
+                if (!ln || typeof ln.getBBox !== "function") continue
+                var bb
+                try { bb = ln.getBBox() } catch (e) { bb = null }
+                if (!bb || bb.width < 180 || bb.height > 8) continue
+                hasTrack = true
+                if (bb.width > trackWidth) trackWidth = bb.width
+              }
+              if (!hasTrack) continue
+
+              var score = 100 + Math.min(50, dotsSvg.length) + Math.min(50, trackWidth / 10)
+              if (score > bestScore) {
+                bestScore = score
+                best = { svg: svg, dots: dotsSvg, track: candidates }
+              }
+            }
+
+            if (best && best.svg) {
+              var svg = best.svg
+              var dotsSvg = best.dots.slice().sort(function (a, b) { return a.x - b.x })
+              var uniqDots = []
+              for (var u = 0; u < dotsSvg.length; u++) {
+                var it = dotsSvg[u]
+                if (!it || !it.el) continue
+                if (!uniqDots.length || Math.abs(it.x - uniqDots[uniqDots.length - 1].x) > 1) uniqDots.push(it)
+                if (uniqDots.length >= 4) break
+              }
+              for (var i = 0; i < uniqDots.length; i++) {
+                var dot = uniqDots[i].el
+                if (!dot) continue
+                var col = i < 3 ? green : orange
+                dot.setAttribute("fill", col)
+                dot.setAttribute("stroke", col)
               }
 
               var gradId = "kivanaRoadmapGrad"
@@ -1295,8 +1328,8 @@
                 try { bb = el.getBBox() } catch (e) { bb = null }
                 if (!bb || bb.width < 180 || bb.height > 8) continue
                 var tag = (el.tagName || "").toLowerCase()
-                if (tag === "rect") el.setAttribute("fill", "url(#kivanaRoadmapGrad)")
-                else el.setAttribute("stroke", "url(#kivanaRoadmapGrad)")
+                if (tag === "rect") el.setAttribute("fill", "url(#" + gradId + ")")
+                else el.setAttribute("stroke", "url(#" + gradId + ")")
               }
             }
           } catch (e) {}
@@ -1329,19 +1362,53 @@
             }
           }
 
-          dots.sort(function (a, b) { return a.left - b.left })
-          var uniq = []
-          for (var d = 0; d < dots.length; d++) {
-            var item = dots[d]
-            if (!item || !item.el) continue
-            if (!uniq.length || Math.abs(item.left - uniq[uniq.length - 1].left) > 8) uniq.push(item)
-            if (uniq.length >= 4) break
+          function pickTimelineDots() {
+            var bestParent = null
+            var best = null
+
+            var byParent = new Map()
+            for (var i = 0; i < dots.length; i++) {
+              var d = dots[i]
+              if (!d || !d.el || !d.el.parentElement) continue
+              var p = d.el.parentElement
+              if (!byParent.has(p)) byParent.set(p, [])
+              byParent.get(p).push(d)
+            }
+
+            byParent.forEach(function (arr, p) {
+              if (!arr || arr.length < 4) return
+              var sorted = arr.slice().sort(function (a, b) { return a.left - b.left })
+              var uniq = []
+              for (var j = 0; j < sorted.length; j++) {
+                var it = sorted[j]
+                if (!uniq.length || Math.abs(it.left - uniq[uniq.length - 1].left) > 10) uniq.push(it)
+                if (uniq.length >= 4) break
+              }
+              if (uniq.length < 4) return
+
+              var topAvg = 0
+              for (var k = 0; k < 4; k++) topAvg += uniq[k].top
+              topAvg = topAvg / 4
+              var spread = uniq[3].left - uniq[0].left
+
+              var score = spread - (topAvg - sec.getBoundingClientRect().top) * 0.5
+              if (!best || score > best.score) {
+                bestParent = p
+                best = { dots: uniq, score: score }
+              }
+            })
+
+            if (best && best.dots && best.dots.length >= 4) return best.dots
+            return null
           }
 
-          for (var k = 0; k < uniq.length; k++) {
-            var dotEl = uniq[k].el
-            if (!dotEl || !dotEl.style) continue
-            dotEl.style.backgroundColor = k < 3 ? green : orange
+          var pickedDots = pickTimelineDots()
+          if (pickedDots) {
+            for (var k = 0; k < 4; k++) {
+              var dotEl = pickedDots[k].el
+              if (!dotEl || !dotEl.style) continue
+              dotEl.style.backgroundColor = k < 3 ? green : orange
+            }
           }
 
           if (lines.length) {
@@ -1367,8 +1434,16 @@
         var timer = setInterval(function () {
           tries++
           apply()
-          if (tries > 40) clearInterval(timer)
+          if (tries > 160) clearInterval(timer)
         }, 250)
+
+        try {
+          var sec = document.getElementById("roadmap")
+          if (sec && window.MutationObserver) {
+            var obs = new MutationObserver(function () { apply() })
+            obs.observe(sec, { childList: true, subtree: true })
+          }
+        } catch (e) {}
 
         if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply)
         else apply()
