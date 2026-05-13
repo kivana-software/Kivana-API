@@ -1,4 +1,3 @@
-/* Third-party license excerpts referenced by `main.e964d4c9.js` (generated during the website build). */
 /**
  * @license React
  * react-dom-client.production.js
