@@ -1104,10 +1104,7 @@ async function showAccount() {
 }
 
 async function showAuth() {
-  showOnly('auth')
-  currentMe = null
-  currentEntitlement = null
-  await refreshCaptchaChallenge()
+  window.location.href = '/account/';
 }
 
 function fmtDateTime(v) {
@@ -1775,11 +1772,11 @@ if (els.adminSearch) els.adminSearch.addEventListener('input', () => {
   else if (adminActiveTab === 'access') void renderAdminContactMessages()
 })
 if (els.btnSignIn) els.btnSignIn.addEventListener('click', () => {
-  pendingPlanSelection = null
-  setAuthMode(true)
-  void showAuth()
+  window.location.href = '/account/';
 })
-if (els.btnSignUp) els.btnSignUp.addEventListener('click', startFree)
+if (els.btnSignUp) els.btnSignUp.addEventListener('click', () => {
+  window.location.href = '/account/';
+})
 if (els.btnPrebetaCreate) els.btnPrebetaCreate.addEventListener('click', startFree)
 if (els.btnPrebetaSignIn) els.btnPrebetaSignIn.addEventListener('click', () => {
   pendingPlanSelection = null
@@ -1844,10 +1841,7 @@ async function goToPublicSection(id) {
 
 function startFree() {
   if (isAuthed()) return
-  pendingPlanSelection = null
-  setAuthMode(false)
-  closeMenu()
-  void showAuth()
+  window.location.href = '/account/';
 }
 
 if (els.navFeatures) els.navFeatures.addEventListener('click', () => void goToPublicSection('how'))
