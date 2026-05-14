@@ -1253,6 +1253,17 @@
             } catch (e) {}
           }
 
+          function findLeafByText(root, exact) {
+            if (!root) return null
+            var all = Array.prototype.slice.call(root.querySelectorAll("*"))
+            for (var i = 0; i < all.length; i++) {
+              var el = all[i]
+              if (!el || el.children.length) continue
+              if (String(el.textContent || "").trim() === exact) return el
+            }
+            return null
+          }
+
           try {
             var svgs = Array.prototype.slice.call(sec.querySelectorAll("svg"))
             var best = null
@@ -1546,6 +1557,148 @@
               } catch (e) {}
             }
           }
+
+          try {
+            if (document.getElementById("kivanaTimelineOverride")) return
+
+            var basicTitle = findLeafByText(sec, "Basic")
+            if (!basicTitle) return
+            var basicRect = basicTitle.getBoundingClientRect()
+            if (!basicRect) return
+            var cardsTop = basicRect.top
+
+            var secRect = sec.getBoundingClientRect()
+            var bandTop = cardsTop - 140
+            var bandBottom = cardsTop - 6
+
+            var bestLine = null
+            for (var i = 0; i < lines.length; i++) {
+              var ln = lines[i]
+              if (!ln) continue
+              if (ln.y < bandTop || ln.y > bandBottom) continue
+              if (!bestLine || ln.width > bestLine.width) bestLine = ln
+            }
+            if (!bestLine) return
+
+            var lineR = bestLine.el.getBoundingClientRect()
+            if (!lineR || lineR.width < 240) return
+            var lineY = lineR.top + lineR.height / 2
+            var pad = 28
+
+            var dotCandidates = []
+            for (var i = 0; i < dots.length; i++) {
+              var d = dots[i]
+              if (!d || !d.el) continue
+              if (d.y < lineY - 22 || d.y > lineY + 22) continue
+              if (d.x < lineR.left - pad || d.x > lineR.right + pad) continue
+              dotCandidates.push({ kind: "html", el: d.el, x: d.x, y: d.y })
+            }
+
+            try {
+              var shapes = Array.prototype.slice.call(sec.querySelectorAll("circle,rect,path"))
+              for (var s = 0; s < shapes.length; s++) {
+                var sh = shapes[s]
+                if (!sh || typeof sh.getBoundingClientRect !== "function") continue
+                var r = sh.getBoundingClientRect()
+                if (!r || r.width <= 0 || r.height <= 0) continue
+                if (r.width < 6 || r.width > 18 || r.height < 6 || r.height > 18) continue
+                var cx = r.left + r.width / 2
+                var cy = r.top + r.height / 2
+                if (cy < lineY - 22 || cy > lineY + 22) continue
+                if (cx < lineR.left - pad || cx > lineR.right + pad) continue
+                dotCandidates.push({ kind: "svg", el: sh, x: cx, y: cy })
+              }
+            } catch (e) {}
+
+            dotCandidates.sort(function (a, b) { return a.x - b.x })
+            var uniqDots = []
+            for (var i = 0; i < dotCandidates.length; i++) {
+              var it = dotCandidates[i]
+              if (!it || !it.el) continue
+              if (!uniqDots.length || Math.abs(it.x - uniqDots[uniqDots.length - 1].x) > 18) uniqDots.push(it)
+            }
+            if (uniqDots.length < 4) return
+
+            var best4 = null
+            var bestSpread = 0
+            for (var i = 0; i <= uniqDots.length - 4; i++) {
+              var slice = [uniqDots[i], uniqDots[i + 1], uniqDots[i + 2], uniqDots[i + 3]]
+              var spread = slice[3].x - slice[0].x
+              if (spread > bestSpread) {
+                bestSpread = spread
+                best4 = slice
+              }
+            }
+            if (!best4) return
+
+            function findHideContainer(seedEl) {
+              if (!seedEl) return null
+              var cur = seedEl.parentElement
+              var best = null
+              while (cur && cur !== sec && cur !== document.body) {
+                var ok = cur.contains(bestLine.el)
+                for (var i = 0; i < best4.length && ok; i++) ok = ok && cur.contains(best4[i].el)
+                if (ok) {
+                  var rr = cur.getBoundingClientRect()
+                  if (rr && rr.height > 0 && rr.height < 220) {
+                    if (!best || rr.height < best.getBoundingClientRect().height) best = cur
+                  }
+                }
+                cur = cur.parentElement
+              }
+              return best
+            }
+
+            var hide = findHideContainer(best4[0].el)
+            if (hide) hide.style.display = "none"
+
+            var grid = (basicTitle.closest("article,section,div") || basicTitle.parentElement)
+            if (grid && grid.parentElement) grid = grid.parentElement
+
+            var wrap = document.createElement("div")
+            wrap.id = "kivanaTimelineOverride"
+            wrap.setAttribute("aria-hidden", "true")
+            wrap.style.maxWidth = "100%"
+            wrap.style.margin = "18px auto 14px auto"
+            wrap.style.position = "relative"
+            wrap.style.height = "16px"
+            wrap.style.display = "flex"
+            wrap.style.alignItems = "center"
+            wrap.style.justifyContent = "space-between"
+            wrap.style.gap = "18px"
+
+            var line = document.createElement("div")
+            line.style.position = "absolute"
+            line.style.left = "6px"
+            line.style.right = "6px"
+            line.style.top = "50%"
+            line.style.height = "2px"
+            line.style.transform = "translateY(-50%)"
+            line.style.borderRadius = "999px"
+            line.style.opacity = "0.75"
+            line.style.backgroundImage =
+              "linear-gradient(90deg, rgba(34, 197, 94, 0.85) 0%, rgba(34, 197, 94, 0.85) 74%, rgba(245, 158, 11, 0.85) 74%, rgba(245, 158, 11, 0.85) 100%)"
+            wrap.appendChild(line)
+
+            function dot(color) {
+              var d = document.createElement("span")
+              d.style.width = "10px"
+              d.style.height = "10px"
+              d.style.borderRadius = "999px"
+              d.style.position = "relative"
+              d.style.zIndex = "1"
+              d.style.backgroundColor = color
+              d.style.boxShadow = "0 0 0 6px rgba(255,255,255,0.85)"
+              return d
+            }
+            wrap.appendChild(dot(green))
+            wrap.appendChild(dot(green))
+            wrap.appendChild(dot(green))
+            wrap.appendChild(dot(orange))
+
+            if (grid && grid.parentElement) grid.parentElement.insertBefore(wrap, grid)
+            else sec.insertBefore(wrap, sec.firstChild)
+          } catch (e) {}
         }
 
         function apply() {
