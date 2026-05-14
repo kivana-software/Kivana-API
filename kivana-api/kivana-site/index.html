@@ -1227,6 +1227,32 @@
           var green = "rgba(34, 197, 94, 0.95)"
           var orange = "rgba(245, 158, 11, 0.95)"
 
+          function setBgImportant(el, color) {
+            if (!el) return
+            try {
+              if (el.style && typeof el.style.setProperty === "function") {
+                el.style.setProperty("background-color", color, "important")
+                el.style.setProperty("background", color, "important")
+              }
+            } catch (e) {}
+          }
+
+          function setStrokeImportant(el, color) {
+            if (!el) return
+            try {
+              if (el.style && typeof el.style.setProperty === "function") {
+                el.style.setProperty("stroke", color, "important")
+                el.style.setProperty("fill", color, "important")
+              }
+            } catch (e) {}
+            try {
+              if (typeof el.setAttribute === "function") {
+                el.setAttribute("fill", color)
+                el.setAttribute("stroke", color)
+              }
+            } catch (e) {}
+          }
+
           try {
             var svgs = Array.prototype.slice.call(sec.querySelectorAll("svg"))
             var best = null
@@ -1390,8 +1416,8 @@
           if (plans.length >= 3) {
             var minTop = plans[0].top
             for (var i = 1; i < plans.length; i++) if (plans[i].top < minTop) minTop = plans[i].top
-            var bandTop = minTop - 140
-            var bandBottom = minTop + 30
+            var bandTop = minTop - 180
+            var bandBottom = minTop - 10
 
             var candidates = []
             for (var i = 0; i < dots.length; i++) {
@@ -1414,43 +1440,74 @@
               }
             } catch (e) {}
 
-            candidates.sort(function (a, b) { return a.x - b.x })
-            var used = new Set()
-
-            function pickNearest(targetX) {
-              var best = null
-              var bestDx = 1e9
+            function forceTimelineDotsFromCandidates() {
+              if (!candidates || candidates.length < 4) return null
+              var buckets = new Map()
               for (var i = 0; i < candidates.length; i++) {
-                var cand = candidates[i]
-                if (!cand || !cand.el) continue
-                if (used.has(cand.el)) continue
-                var dx = Math.abs(cand.x - targetX)
-                if (dx < bestDx) {
-                  bestDx = dx
-                  best = cand
+                var c = candidates[i]
+                if (!c) continue
+                var key = Math.round(c.y / 8) * 8
+                if (!buckets.has(key)) buckets.set(key, [])
+                buckets.get(key).push(c)
+              }
+
+              var best = null
+              buckets.forEach(function (arr) {
+                if (!arr || arr.length < 4) return
+                var sorted = arr.slice().sort(function (a, b) { return a.x - b.x })
+                var uniq = []
+                for (var i = 0; i < sorted.length; i++) {
+                  var it = sorted[i]
+                  if (!it || !it.el) continue
+                  if (!uniq.length || Math.abs(it.x - uniq[uniq.length - 1].x) > 10) uniq.push(it)
                 }
-              }
-              if (best && bestDx <= 140) {
-                used.add(best.el)
-                return best
-              }
-              return null
+                if (uniq.length < 4) return
+                if (uniq.length > 6) uniq = uniq.slice(0, 6)
+                var spread = uniq[uniq.length - 1].x - uniq[0].x
+                if (!best || spread > best.spread) best = { dots: uniq, spread: spread }
+              })
+
+              if (!best || !best.dots || best.dots.length < 4) return null
+              var sorted = best.dots.slice().sort(function (a, b) { return a.x - b.x }).slice(0, 4)
+              return sorted
             }
 
-            for (var p = 0; p < plans.length; p++) {
-              var plan = plans[p]
-              var cand = pickNearest(plan.x)
-              if (!cand) continue
-              var col = plan.name === "Accountant" ? orange : green
-              if (cand.kind === "svg") {
-                try {
-                  cand.el.setAttribute("fill", col)
-                  cand.el.setAttribute("stroke", col)
-                } catch (e) {}
-              } else {
-                try {
-                  cand.el.style.backgroundColor = col
-                } catch (e) {}
+            var picked = forceTimelineDotsFromCandidates()
+            if (picked && picked.length >= 4) {
+              for (var i = 0; i < 4; i++) {
+                var col = i < 3 ? green : orange
+                if (picked[i].kind === "svg") setStrokeImportant(picked[i].el, col)
+                else setBgImportant(picked[i].el, col)
+              }
+            } else {
+              var used = new Set()
+              candidates.sort(function (a, b) { return a.x - b.x })
+              function pickNearest(targetX) {
+                var best = null
+                var bestDx = 1e9
+                for (var i = 0; i < candidates.length; i++) {
+                  var cand = candidates[i]
+                  if (!cand || !cand.el) continue
+                  if (used.has(cand.el)) continue
+                  var dx = Math.abs(cand.x - targetX)
+                  if (dx < bestDx) {
+                    bestDx = dx
+                    best = cand
+                  }
+                }
+                if (best && bestDx <= 220) {
+                  used.add(best.el)
+                  return best
+                }
+                return null
+              }
+              for (var p = 0; p < plans.length; p++) {
+                var plan = plans[p]
+                var cand = pickNearest(plan.x)
+                if (!cand) continue
+                var col = plan.name === "Accountant" ? orange : green
+                if (cand.kind === "svg") setStrokeImportant(cand.el, col)
+                else setBgImportant(cand.el, col)
               }
             }
 
@@ -1462,10 +1519,15 @@
               if (!bestLine || ln.width > bestLine.width) bestLine = ln
             }
             if (bestLine && bestLine.el && bestLine.el.style) {
-              bestLine.el.style.backgroundImage =
-                "linear-gradient(90deg, rgba(34, 197, 94, 0.85) 0%, rgba(34, 197, 94, 0.85) 74%, rgba(245, 158, 11, 0.85) 74%, rgba(245, 158, 11, 0.85) 100%)"
-              bestLine.el.style.backgroundColor = ""
-              bestLine.el.style.borderRadius = "999px"
+              try {
+                bestLine.el.style.setProperty(
+                  "background-image",
+                  "linear-gradient(90deg, rgba(34, 197, 94, 0.85) 0%, rgba(34, 197, 94, 0.85) 74%, rgba(245, 158, 11, 0.85) 74%, rgba(245, 158, 11, 0.85) 100%)",
+                  "important"
+                )
+                bestLine.el.style.setProperty("background-color", "transparent", "important")
+                bestLine.el.style.setProperty("border-radius", "999px", "important")
+              } catch (e) {}
             }
           }
 
@@ -1473,10 +1535,15 @@
             lines.sort(function (a, b) { return b.width - a.width })
             var lineEl = lines[0].el
             if (lineEl && lineEl.style) {
-              lineEl.style.backgroundImage =
-                "linear-gradient(90deg, rgba(34, 197, 94, 0.85) 0%, rgba(34, 197, 94, 0.85) 74%, rgba(245, 158, 11, 0.85) 74%, rgba(245, 158, 11, 0.85) 100%)"
-              lineEl.style.backgroundColor = ""
-              lineEl.style.borderRadius = "999px"
+              try {
+                lineEl.style.setProperty(
+                  "background-image",
+                  "linear-gradient(90deg, rgba(34, 197, 94, 0.85) 0%, rgba(34, 197, 94, 0.85) 74%, rgba(245, 158, 11, 0.85) 74%, rgba(245, 158, 11, 0.85) 100%)",
+                  "important"
+                )
+                lineEl.style.setProperty("background-color", "transparent", "important")
+                lineEl.style.setProperty("border-radius", "999px", "important")
+              } catch (e) {}
             }
           }
         }
